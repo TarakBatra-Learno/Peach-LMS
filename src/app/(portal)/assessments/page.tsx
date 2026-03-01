@@ -1,0 +1,577 @@
+"use client";
+
+import { useState, useMemo, useCallback, useEffect } from "react";
+import { useStore } from "@/stores";
+import { PageHeader } from "@/components/shared/page-header";
+import { FilterBar } from "@/components/shared/filter-bar";
+import { StatusBadge } from "@/components/shared/status-badge";
+import { EmptyState } from "@/components/shared/empty-state";
+import { CardGridSkeleton } from "@/components/shared/skeleton-loader";
+import { useMockLoading } from "@/lib/hooks/use-mock-loading";
+import { generateId } from "@/services/mock-service";
+import { Card } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
+import { ClipboardCheck, Plus, Calendar, Users } from "lucide-react";
+import Link from "next/link";
+import { format, parseISO } from "date-fns";
+import { toast } from "sonner";
+import type { GradingMode, Status } from "@/types/common";
+
+const GRADING_MODE_LABELS: Record<GradingMode, string> = {
+  score: "Score",
+  rubric: "Rubric",
+  standards: "Standards",
+  myp_criteria: "MYP Criteria",
+  dp_scale: "DP Scale (1-7)",
+};
+
+const STATUS_OPTIONS: { value: string; label: string }[] = [
+  { value: "all", label: "All statuses" },
+  { value: "draft", label: "Draft" },
+  { value: "published", label: "Published" },
+  { value: "archived", label: "Archived" },
+];
+
+const GRADING_MODE_OPTIONS: { value: string; label: string }[] = [
+  { value: "all", label: "All modes" },
+  ...Object.entries(GRADING_MODE_LABELS).map(([value, label]) => ({
+    value,
+    label,
+  })),
+];
+
+const DUE_OPTIONS: { value: string; label: string }[] = [
+  { value: "all", label: "All dates" },
+  { value: "upcoming", label: "Upcoming" },
+  { value: "past", label: "Past" },
+];
+
+const GOAL_CATEGORY_LABELS: Record<string, string> = {
+  standard: "Standards",
+  atl_skill: "ATL Skills",
+  learner_profile: "Learner Profile",
+};
+
+export default function AssessmentsPage() {
+  const loading = useMockLoading();
+  const classes = useStore((s) => s.classes);
+  const assessments = useStore((s) => s.assessments);
+  const addAssessment = useStore((s) => s.addAssessment);
+  const addCalendarEvent = useStore((s) => s.addCalendarEvent);
+  const getClassById = useStore((s) => s.getClassById);
+  const getStudentsByClassId = useStore((s) => s.getStudentsByClassId);
+  const learningGoals = useStore((s) => s.learningGoals);
+
+  const activeClassId = useStore((s) => s.ui.activeClassId);
+
+  // Filters — sync with global class switcher
+  const [classFilter, setClassFilter] = useState(activeClassId || "all");
+  useEffect(() => {
+    setClassFilter(activeClassId || "all");
+  }, [activeClassId]);
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [gradingModeFilter, setGradingModeFilter] = useState("all");
+  const [dueFilter, setDueFilter] = useState("all");
+  const [search, setSearch] = useState("");
+
+  // Create dialog state
+  const [createOpen, setCreateOpen] = useState(false);
+  const [newTitle, setNewTitle] = useState("");
+  const [newDescription, setNewDescription] = useState("");
+  const [newClassId, setNewClassId] = useState("");
+  const [newGradingMode, setNewGradingMode] = useState<GradingMode>("score");
+  const [newDueDate, setNewDueDate] = useState("");
+  const [newTotalPoints, setNewTotalPoints] = useState("100");
+  const [formGoalIds, setFormGoalIds] = useState<string[]>([]);
+  const [assignedStudentIds, setAssignedStudentIds] = useState<string[]>([]);
+
+  // Students for the selected class in create form
+  const classStudents = useMemo(
+    () => (newClassId ? getStudentsByClassId(newClassId) : []),
+    [newClassId, getStudentsByClassId]
+  );
+
+  // Auto-select all students when class changes
+  useEffect(() => {
+    if (newClassId) {
+      const students = getStudentsByClassId(newClassId);
+      setAssignedStudentIds(students.map((s) => s.id));
+    } else {
+      setAssignedStudentIds([]);
+    }
+  }, [newClassId, getStudentsByClassId]);
+
+  const classOptions = useMemo(
+    () => [
+      { value: "all", label: "All classes" },
+      ...classes.map((c) => ({ value: c.id, label: c.name })),
+    ],
+    [classes]
+  );
+
+  const handleSearch = useCallback((q: string) => setSearch(q), []);
+
+  const filtered = useMemo(() => {
+    let result = assessments;
+    if (classFilter !== "all") {
+      result = result.filter((a) => a.classId === classFilter);
+    }
+    if (statusFilter !== "all") {
+      result = result.filter((a) => a.status === statusFilter);
+    }
+    if (gradingModeFilter !== "all") {
+      result = result.filter((a) => a.gradingMode === gradingModeFilter);
+    }
+    if (dueFilter !== "all") {
+      const now = new Date();
+      result = result.filter((a) => {
+        const due = new Date(a.dueDate);
+        return dueFilter === "upcoming" ? due > now : due <= now;
+      });
+    }
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      result = result.filter(
+        (a) =>
+          a.title.toLowerCase().includes(q) ||
+          a.description.toLowerCase().includes(q)
+      );
+    }
+    return result.sort(
+      (a, b) =>
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    );
+  }, [assessments, classFilter, statusFilter, gradingModeFilter, dueFilter, search]);
+
+  // Group learning goals by category
+  const goalsByCategory = useMemo(() => {
+    const grouped: Record<string, typeof learningGoals> = {};
+    for (const goal of learningGoals) {
+      const cat = goal.category || "standard";
+      if (!grouped[cat]) grouped[cat] = [];
+      grouped[cat].push(goal);
+    }
+    return grouped;
+  }, [learningGoals]);
+
+  const toggleGoalId = (goalId: string) => {
+    setFormGoalIds((prev) =>
+      prev.includes(goalId)
+        ? prev.filter((id) => id !== goalId)
+        : [...prev, goalId]
+    );
+  };
+
+  const resetCreateForm = () => {
+    setNewTitle("");
+    setNewDescription("");
+    setNewClassId("");
+    setNewGradingMode("score");
+    setNewDueDate("");
+    setNewTotalPoints("100");
+    setFormGoalIds([]);
+    setAssignedStudentIds([]);
+  };
+
+  const handleCreate = () => {
+    if (!newTitle.trim() || !newClassId || !newDueDate) {
+      toast.error("Please fill in all required fields");
+      return;
+    }
+
+    const now = new Date().toISOString();
+    const newAssessmentId = generateId("asmt");
+    const selectedClass = getClassById(newClassId);
+
+    addAssessment({
+      id: newAssessmentId,
+      title: newTitle.trim(),
+      description: newDescription.trim(),
+      classId: newClassId,
+      gradingMode: newGradingMode,
+      status: "draft",
+      dueDate: new Date(newDueDate).toISOString(),
+      createdAt: now,
+      totalPoints:
+        newGradingMode === "score" ? parseInt(newTotalPoints) || 100 : undefined,
+      learningGoalIds: formGoalIds,
+      assignedStudentIds:
+        assignedStudentIds.length === classStudents.length
+          ? undefined
+          : assignedStudentIds,
+    });
+
+    addCalendarEvent({
+      id: generateId("cal"),
+      title: `Due: ${newTitle.trim()}`,
+      description: `Assessment deadline for ${selectedClass?.name || "class"}`,
+      type: "deadline",
+      startTime: new Date(newDueDate + "T23:59:00").toISOString(),
+      endTime: new Date(newDueDate + "T23:59:00").toISOString(),
+      isAllDay: true,
+      classId: newClassId,
+      linkedAssessmentId: newAssessmentId,
+    });
+
+    toast.success("Assessment created successfully");
+    setCreateOpen(false);
+    resetCreateForm();
+  };
+
+  if (loading)
+    return (
+      <>
+        <PageHeader title="Assessments" />
+        <CardGridSkeleton count={6} />
+      </>
+    );
+
+  return (
+    <div>
+      <PageHeader
+        title="Assessments"
+        description="Create and manage assessments across your classes"
+        primaryAction={{
+          label: "Create assessment",
+          onClick: () => setCreateOpen(true),
+          icon: Plus,
+        }}
+      />
+
+      <FilterBar
+        filters={[
+          {
+            key: "class",
+            label: "Class",
+            options: classOptions,
+            value: classFilter,
+            onChange: setClassFilter,
+          },
+          {
+            key: "status",
+            label: "Status",
+            options: STATUS_OPTIONS,
+            value: statusFilter,
+            onChange: setStatusFilter,
+          },
+          {
+            key: "gradingMode",
+            label: "Grading mode",
+            options: GRADING_MODE_OPTIONS,
+            value: gradingModeFilter,
+            onChange: setGradingModeFilter,
+          },
+          {
+            key: "due",
+            label: "Due date",
+            options: DUE_OPTIONS,
+            value: dueFilter,
+            onChange: setDueFilter,
+          },
+        ]}
+        onSearch={handleSearch}
+        searchPlaceholder="Search assessments..."
+      />
+
+      {filtered.length === 0 ? (
+        <EmptyState
+          icon={ClipboardCheck}
+          title="No assessments found"
+          description={
+            assessments.length === 0
+              ? "Create your first assessment to get started."
+              : "No assessments match your current filters."
+          }
+          action={
+            assessments.length === 0
+              ? { label: "Create assessment", onClick: () => setCreateOpen(true) }
+              : undefined
+          }
+        />
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {filtered.map((asmt) => {
+            const cls = getClassById(asmt.classId);
+            return (
+              <Link key={asmt.id} href={`/assessments/${asmt.id}`}>
+                <Card className="p-5 gap-0 hover:shadow-[0_1px_2px_rgba(16,24,40,0.06)] hover:border-border/80 transition-all cursor-pointer h-full">
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="min-w-0 flex-1">
+                      <h3 className="text-[14px] font-semibold truncate">
+                        {asmt.title}
+                      </h3>
+                      {asmt.description && (
+                        <p className="text-[13px] text-muted-foreground line-clamp-2 mt-0.5">
+                          {asmt.description}
+                        </p>
+                      )}
+                    </div>
+                    <StatusBadge status={asmt.status} className="ml-2 shrink-0" />
+                  </div>
+
+                  <div className="flex items-center gap-3 text-[12px] text-muted-foreground mb-3">
+                    {cls && (
+                      <span className="flex items-center gap-1">
+                        <Users className="h-3.5 w-3.5" />
+                        {cls.name}
+                      </span>
+                    )}
+                    <span className="flex items-center gap-1">
+                      <Calendar className="h-3.5 w-3.5" />
+                      {format(parseISO(asmt.dueDate), "MMM d, yyyy")}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-1.5">
+                    <Badge
+                      variant="outline"
+                      className="text-[11px] font-medium"
+                    >
+                      {GRADING_MODE_LABELS[asmt.gradingMode]}
+                    </Badge>
+                    {asmt.totalPoints != null && asmt.gradingMode === "score" && (
+                      <Badge
+                        variant="secondary"
+                        className="text-[11px] font-medium"
+                      >
+                        {asmt.totalPoints} pts
+                      </Badge>
+                    )}
+                  </div>
+                </Card>
+              </Link>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Create Assessment Dialog */}
+      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+        <DialogContent className="sm:max-w-[520px] max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Create assessment</DialogTitle>
+            <DialogDescription>
+              Add a new assessment for one of your classes.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <Label className="text-[13px]">Title *</Label>
+              <Input
+                value={newTitle}
+                onChange={(e) => setNewTitle(e.target.value)}
+                placeholder="e.g. Unit 3 Quiz"
+                className="h-9 text-[13px]"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-[13px]">Description</Label>
+              <Textarea
+                value={newDescription}
+                onChange={(e) => setNewDescription(e.target.value)}
+                placeholder="Brief description of this assessment..."
+                className="text-[13px] min-h-[72px]"
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <Label className="text-[13px]">Class *</Label>
+                <Select value={newClassId} onValueChange={setNewClassId}>
+                  <SelectTrigger className="h-9 text-[13px]">
+                    <SelectValue placeholder="Select class" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {classes.map((c) => (
+                      <SelectItem key={c.id} value={c.id}>
+                        {c.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-[13px]">Grading mode *</Label>
+                <Select
+                  value={newGradingMode}
+                  onValueChange={(v) => setNewGradingMode(v as GradingMode)}
+                >
+                  <SelectTrigger className="h-9 text-[13px]">
+                    <SelectValue placeholder="Select mode" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(
+                      Object.entries(GRADING_MODE_LABELS) as [
+                        GradingMode,
+                        string,
+                      ][]
+                    ).map(([value, label]) => (
+                      <SelectItem key={value} value={value}>
+                        {label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <Label className="text-[13px]">Due date *</Label>
+                <Input
+                  type="date"
+                  value={newDueDate}
+                  onChange={(e) => setNewDueDate(e.target.value)}
+                  className="h-9 text-[13px]"
+                />
+              </div>
+
+              {newGradingMode === "score" && (
+                <div className="space-y-1.5">
+                  <Label className="text-[13px]">Total points</Label>
+                  <Input
+                    type="number"
+                    value={newTotalPoints}
+                    onChange={(e) => setNewTotalPoints(e.target.value)}
+                    placeholder="100"
+                    min={1}
+                    className="h-9 text-[13px]"
+                  />
+                </div>
+              )}
+            </div>
+
+            {/* Assign to students */}
+            {newClassId && classStudents.length > 0 && (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label className="text-[13px]">Assign to</Label>
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 text-[11px] px-2"
+                      onClick={() =>
+                        setAssignedStudentIds(classStudents.map((s) => s.id))
+                      }
+                    >
+                      Select all
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 text-[11px] px-2"
+                      onClick={() => setAssignedStudentIds([])}
+                    >
+                      Deselect all
+                    </Button>
+                  </div>
+                </div>
+                <div className="border rounded-md max-h-[140px] overflow-y-auto p-2 space-y-1">
+                  {classStudents.map((student) => (
+                    <label
+                      key={student.id}
+                      className="flex items-center gap-2 py-1 px-1 rounded hover:bg-muted cursor-pointer"
+                    >
+                      <Checkbox
+                        checked={assignedStudentIds.includes(student.id)}
+                        onCheckedChange={(checked) => {
+                          setAssignedStudentIds((prev) =>
+                            checked
+                              ? [...prev, student.id]
+                              : prev.filter((id) => id !== student.id)
+                          );
+                        }}
+                      />
+                      <span className="text-[13px]">
+                        {student.firstName} {student.lastName}
+                      </span>
+                    </label>
+                  ))}
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  {assignedStudentIds.length} of {classStudents.length} students
+                  selected
+                </p>
+              </div>
+            )}
+
+            {/* Learning goals picker */}
+            <div className="space-y-2">
+              <Label className="text-[13px]">Learning goals</Label>
+              {(["standard", "atl_skill", "learner_profile"] as const).map(
+                (category) =>
+                  goalsByCategory[category] &&
+                  goalsByCategory[category].length > 0 && (
+                    <div key={category}>
+                      <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide mb-1">
+                        {GOAL_CATEGORY_LABELS[category]}
+                      </p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {goalsByCategory[category].map((goal) => (
+                          <Badge
+                            key={goal.id}
+                            variant={
+                              formGoalIds.includes(goal.id)
+                                ? "default"
+                                : "outline"
+                            }
+                            className={`text-[11px] cursor-pointer transition-colors ${
+                              formGoalIds.includes(goal.id)
+                                ? "bg-[#c24e3f] text-white hover:bg-[#c24e3f]/90"
+                                : "hover:bg-muted"
+                            }`}
+                            onClick={() => toggleGoalId(goal.id)}
+                          >
+                            {goal.title}
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+                  )
+              )}
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setCreateOpen(false);
+                resetCreateForm();
+              }}
+            >
+              Cancel
+            </Button>
+            <Button onClick={handleCreate}>Create assessment</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}

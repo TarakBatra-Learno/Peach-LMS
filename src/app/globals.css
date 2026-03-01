@@ -1,0 +1,155 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-jakarta);
+  --font-mono: var(--font-geist-mono);
+
+  /* shadcn semantic mapping */
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+
+  /* Radii */
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
+  --radius-3xl: calc(var(--radius) + 12px);
+  --radius-4xl: calc(var(--radius) + 16px);
+
+  /* Peach custom tokens */
+  --color-peach-50: #fff2f0;
+  --color-peach-100: #ffe1dc;
+  --color-peach-200: #ffc1b7;
+  --color-peach-300: #f99a8b;
+  --color-peach-400: #e56f5e;
+  --color-peach-500: #d85a4a;
+  --color-peach-600: #c24e3f;
+  --color-peach-700: #a94336;
+  --color-peach-800: #8a362b;
+  --color-peach-900: #6d2a22;
+
+  --color-success: #16a34a;
+  --color-success-soft: #dcfce7;
+  --color-warning: #f59e0b;
+  --color-warning-soft: #fef3c7;
+  --color-danger: #dc2626;
+  --color-danger-soft: #fee2e2;
+  --color-info: #2563eb;
+  --color-info-soft: #dbeafe;
+
+  --color-text-default: #111827;
+  --color-text-muted: #6b7280;
+  --color-text-subtle: #9ca3af;
+  --color-surface: #ffffff;
+  --color-surface-2: #fbfbfd;
+  --color-bg-subtle: #f7f8fa;
+}
+
+:root {
+  --radius: 0.875rem;
+
+  /* shadcn - Peach-flavored light theme */
+  --background: #ffffff;
+  --foreground: #111827;
+  --card: #ffffff;
+  --card-foreground: #111827;
+  --popover: #ffffff;
+  --popover-foreground: #111827;
+  --primary: #c24e3f;
+  --primary-foreground: #ffffff;
+  --secondary: #f7f8fa;
+  --secondary-foreground: #111827;
+  --muted: #f7f8fa;
+  --muted-foreground: #6b7280;
+  --accent: #fff2f0;
+  --accent-foreground: #6d2a22;
+  --destructive: #dc2626;
+  --border: #e6e8ee;
+  --input: #e6e8ee;
+  --ring: rgba(194, 78, 63, 0.25);
+
+  /* Charts - Peach-anchored palette */
+  --chart-1: #c24e3f;
+  --chart-2: #2563eb;
+  --chart-3: #16a34a;
+  --chart-4: #f59e0b;
+  --chart-5: #8b5cf6;
+
+  /* Sidebar */
+  --sidebar: #ffffff;
+  --sidebar-foreground: #111827;
+  --sidebar-primary: #c24e3f;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #fff2f0;
+  --sidebar-accent-foreground: #6d2a22;
+  --sidebar-border: #e6e8ee;
+  --sidebar-ring: rgba(194, 78, 63, 0.25);
+
+  /* Peach design system tokens */
+  --shadow-1: 0 1px 2px rgba(16, 24, 40, 0.06);
+  --shadow-2: 0 10px 30px rgba(16, 24, 40, 0.10);
+  --focus-ring: 0 0 0 3px rgba(194, 78, 63, 0.25);
+  --row-h: 36px;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+}
+
+/* Peach utility classes */
+@layer utilities {
+  .focus-ring {
+    box-shadow: var(--focus-ring);
+  }
+  .shadow-1 {
+    box-shadow: var(--shadow-1);
+  }
+  .shadow-2 {
+    box-shadow: var(--shadow-2);
+  }
+}
+
+/* Smooth transitions */
+.transition-shell {
+  transition-timing-function: cubic-bezier(0.2, 0, 0, 1);
+}
