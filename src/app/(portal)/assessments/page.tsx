@@ -36,6 +36,7 @@ import Link from "next/link";
 import { format, parseISO } from "date-fns";
 import { toast } from "sonner";
 import type { GradingMode, Status } from "@/types/common";
+import { RUBRIC_TEMPLATES } from "@/lib/constants";
 
 const GRADING_MODE_LABELS: Record<GradingMode, string> = {
   score: "Score",
@@ -43,6 +44,14 @@ const GRADING_MODE_LABELS: Record<GradingMode, string> = {
   standards: "Standards",
   myp_criteria: "MYP Criteria",
   dp_scale: "DP Scale (1-7)",
+};
+
+const GRADING_MODE_DESCRIPTIONS: Record<GradingMode, string> = {
+  score: "Numerical points out of a total (e.g. 85/100)",
+  rubric: "Criterion-based scoring with multiple rubric rows",
+  standards: "Mastery levels mapped to learning standards",
+  myp_criteria: "IB MYP criteria A-D, levels 1-8 per criterion",
+  dp_scale: "IB DP 1-7 scale for final grades",
 };
 
 const STATUS_OPTIONS: { value: string; label: string }[] = [
@@ -104,6 +113,7 @@ export default function AssessmentsPage() {
   const [newTotalPoints, setNewTotalPoints] = useState("100");
   const [formGoalIds, setFormGoalIds] = useState<string[]>([]);
   const [assignedStudentIds, setAssignedStudentIds] = useState<string[]>([]);
+  const [selectedRubricTemplateId, setSelectedRubricTemplateId] = useState("custom");
 
   // Students for the selected class in create form
   const classStudents = useMemo(
@@ -191,6 +201,7 @@ export default function AssessmentsPage() {
     setNewTotalPoints("100");
     setFormGoalIds([]);
     setAssignedStudentIds([]);
+    setSelectedRubricTemplateId("custom");
   };
 
   const handleCreate = () => {
@@ -202,6 +213,12 @@ export default function AssessmentsPage() {
     const now = new Date().toISOString();
     const newAssessmentId = generateId("asmt");
     const selectedClass = getClassById(newClassId);
+
+    // Resolve rubric template if rubric mode is selected
+    const rubricTemplate =
+      newGradingMode === "rubric" && selectedRubricTemplateId !== "custom"
+        ? RUBRIC_TEMPLATES.find((t) => t.id === selectedRubricTemplateId)
+        : undefined;
 
     addAssessment({
       id: newAssessmentId,
@@ -219,6 +236,8 @@ export default function AssessmentsPage() {
         assignedStudentIds.length === classStudents.length
           ? undefined
           : assignedStudentIds,
+      rubricCriteria: rubricTemplate?.rubricCriteria,
+      rubric: rubricTemplate?.rubric,
     });
 
     addCalendarEvent({
@@ -430,7 +449,12 @@ export default function AssessmentsPage() {
                       ][]
                     ).map(([value, label]) => (
                       <SelectItem key={value} value={value}>
-                        {label}
+                        <div>
+                          <span>{label}</span>
+                          <span className="block text-[11px] text-muted-foreground font-normal">
+                            {GRADING_MODE_DESCRIPTIONS[value]}
+                          </span>
+                        </div>
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -463,6 +487,64 @@ export default function AssessmentsPage() {
                 </div>
               )}
             </div>
+
+            {/* Rubric template selector */}
+            {newGradingMode === "rubric" && (
+              <div className="space-y-1.5">
+                <Label className="text-[13px]">Rubric template</Label>
+                <Select
+                  value={selectedRubricTemplateId}
+                  onValueChange={setSelectedRubricTemplateId}
+                >
+                  <SelectTrigger className="h-9 text-[13px]">
+                    <SelectValue placeholder="Select a template" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {RUBRIC_TEMPLATES.map((t) => (
+                      <SelectItem key={t.id} value={t.id}>
+                        <div>
+                          <span>{t.label}</span>
+                          <span className="block text-[11px] text-muted-foreground font-normal">
+                            {t.description}
+                          </span>
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {selectedRubricTemplateId !== "custom" && (
+                  <div className="text-[12px] text-muted-foreground bg-muted/50 rounded-md p-3 mt-1">
+                    <p className="font-medium mb-1.5">Criteria preview:</p>
+                    <div className="space-y-1">
+                      {RUBRIC_TEMPLATES.find(
+                        (t) => t.id === selectedRubricTemplateId
+                      )?.rubricCriteria.map((c) => (
+                        <p key={c.id} className="flex items-center gap-2">
+                          <span className="h-1.5 w-1.5 rounded-full bg-[#c24e3f] shrink-0" />
+                          {c.name}{" "}
+                          <span className="text-[11px] text-muted-foreground/70">
+                            (max {c.maxScore} pts)
+                          </span>
+                        </p>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {selectedRubricTemplateId === "custom" && (
+                  <p className="text-[11px] text-muted-foreground">
+                    You can configure rubric criteria on the assessment detail
+                    page after creation.
+                  </p>
+                )}
+              </div>
+            )}
+
+            {newGradingMode === "standards" && (
+              <p className="text-[12px] text-muted-foreground bg-muted/50 rounded-md p-3">
+                Configure standards mapping on the assessment detail page after
+                creation.
+              </p>
+            )}
 
             {/* Assign to students */}
             {newClassId && classStudents.length > 0 && (

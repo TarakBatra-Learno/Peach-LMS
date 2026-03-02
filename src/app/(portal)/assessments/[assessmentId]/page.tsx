@@ -90,9 +90,9 @@ function getGradeDisplay(grade: GradeRecord): string {
   if (grade.score != null) return `${grade.score}%`;
   if (grade.dpGrade != null) return `${grade.dpGrade}/7`;
   if (grade.mypCriteriaScores?.length) {
-    const avg =
-      grade.mypCriteriaScores.reduce((s, c) => s + c.level, 0) /
-      grade.mypCriteriaScores.length;
+    const assessed = grade.mypCriteriaScores.filter((c) => c.level > 0);
+    if (assessed.length === 0) return "N/A";
+    const avg = assessed.reduce((s, c) => s + c.level, 0) / assessed.length;
     return `${Math.round(avg)}/8`;
   }
   return "-";

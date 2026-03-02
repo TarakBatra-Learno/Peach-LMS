@@ -95,10 +95,23 @@ function getGradeCellDisplay(
   }
   if (assessment.gradingMode === "myp_criteria") {
     if (grade.mypCriteriaScores?.length) {
-      const avg =
-        grade.mypCriteriaScores.reduce((s, c) => s + c.level, 0) /
-        grade.mypCriteriaScores.length;
+      const assessed = grade.mypCriteriaScores.filter((c) => c.level > 0);
+      if (assessed.length === 0) return "N/A";
+      const avg = assessed.reduce((s, c) => s + c.level, 0) / assessed.length;
       return `${avg.toFixed(1)}`;
+    }
+    return "-";
+  }
+  if (assessment.gradingMode === "rubric") {
+    if (grade.rubricScores?.length) {
+      const total = grade.rubricScores.reduce((s, r) => s + r.points, 0);
+      return `${total}`;
+    }
+    return "-";
+  }
+  if (assessment.gradingMode === "standards") {
+    if (grade.standardsMastery?.length) {
+      return "✓";
     }
     return "-";
   }
@@ -124,10 +137,16 @@ function getGradePercentage(
     assessment.gradingMode === "myp_criteria" &&
     grade.mypCriteriaScores?.length
   ) {
-    const avg =
-      grade.mypCriteriaScores.reduce((s, c) => s + c.level, 0) /
-      grade.mypCriteriaScores.length;
+    const assessed = grade.mypCriteriaScores.filter((c) => c.level > 0);
+    if (assessed.length === 0) return null;
+    const avg = assessed.reduce((s, c) => s + c.level, 0) / assessed.length;
     return Math.round((avg / 8) * 100);
+  }
+  if (assessment.gradingMode === "rubric" && grade.rubricScores?.length) {
+    const total = grade.rubricScores.reduce((s, r) => s + r.points, 0);
+    const maxTotal = (assessment.rubricCriteria || []).reduce((s, c) => s + c.maxScore, 0);
+    if (maxTotal === 0) return null;
+    return Math.round((total / maxTotal) * 100);
   }
   return null;
 }
@@ -301,10 +320,19 @@ export default function GradebookPage() {
           const avg = Math.round(
             percentages.reduce((s, v) => s + v, 0) / percentages.length
           );
+          const isDP = selectedClass?.programme === "DP";
           let level = "Beginning";
-          if (avg >= 85) level = "Exceeding";
-          else if (avg >= 65) level = "Meeting";
-          else if (avg >= 45) level = "Approaching";
+          if (isDP) {
+            // DP thresholds: 86%+ Exceeding, 57%+ Meeting, 43%+ Approaching
+            if (avg >= 86) level = "Exceeding";
+            else if (avg >= 57) level = "Meeting";
+            else if (avg >= 43) level = "Approaching";
+          } else {
+            // MYP thresholds
+            if (avg >= 85) level = "Exceeding";
+            else if (avg >= 65) level = "Meeting";
+            else if (avg >= 45) level = "Approaching";
+          }
           studentMap.set(student.id, { avg, level });
         }
       }

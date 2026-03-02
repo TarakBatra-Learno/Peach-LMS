@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { useStore } from "@/stores";
 import {
   Sheet,
@@ -8,6 +9,7 @@ import {
   SheetHeader,
   SheetTitle,
   SheetDescription,
+  SheetClose,
 } from "@/components/ui/sheet";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
@@ -27,6 +29,7 @@ interface Notification {
   description: string;
   timestamp: string;
   type: "deadline" | "portfolio" | "incident" | "report";
+  entityUrl: string;
 }
 
 interface NotificationsDrawerProps {
@@ -83,6 +86,7 @@ const iconClasses: Record<string, string> = {
 };
 
 export function NotificationsDrawer({ open, onOpenChange }: NotificationsDrawerProps) {
+  const router = useRouter();
   const assessments = useStore((s) => s.assessments);
   const artifacts = useStore((s) => s.artifacts);
   const incidents = useStore((s) => s.incidents);
@@ -104,6 +108,7 @@ export function NotificationsDrawer({ open, onOpenChange }: NotificationsDrawerP
           description: formatDueTime(asmt.dueDate),
           timestamp: asmt.dueDate,
           type: "deadline",
+          entityUrl: `/assessments/${asmt.id}`,
         });
       }
     });
@@ -122,6 +127,7 @@ export function NotificationsDrawer({ open, onOpenChange }: NotificationsDrawerP
           description: `"${artifact.title}" by ${studentName} needs review`,
           timestamp: artifact.updatedAt || artifact.createdAt,
           type: "portfolio",
+          entityUrl: "/portfolio",
         });
       }
     });
@@ -140,6 +146,7 @@ export function NotificationsDrawer({ open, onOpenChange }: NotificationsDrawerP
           description: `${studentName} - ${incident.severity} severity`,
           timestamp: incident.reportedAt,
           type: "incident",
+          entityUrl: "/support",
         });
       }
     });
@@ -158,6 +165,7 @@ export function NotificationsDrawer({ open, onOpenChange }: NotificationsDrawerP
           description: `Report for ${studentName} is still in draft`,
           timestamp: new Date().toISOString(),
           type: "report",
+          entityUrl: `/reports/${report.id}`,
         });
       }
     });
@@ -181,7 +189,7 @@ export function NotificationsDrawer({ open, onOpenChange }: NotificationsDrawerP
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="w-[400px] sm:max-w-[400px] p-0 flex flex-col">
+      <SheetContent side="right" className="w-[400px] sm:max-w-[400px] p-0 flex flex-col" showCloseButton={false}>
         <SheetHeader className="border-b px-4 py-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
@@ -192,16 +200,23 @@ export function NotificationsDrawer({ open, onOpenChange }: NotificationsDrawerP
                 </Badge>
               )}
             </div>
-            {unreadCount > 0 && (
-              <Button
-                variant="ghost"
-                size="xs"
-                onClick={handleDismissAll}
-                className="text-muted-foreground text-[12px]"
-              >
-                Dismiss all
-              </Button>
-            )}
+            <div className="flex items-center gap-1">
+              {unreadCount > 0 && (
+                <Button
+                  variant="ghost"
+                  size="xs"
+                  onClick={handleDismissAll}
+                  className="text-muted-foreground text-[12px]"
+                >
+                  Dismiss all
+                </Button>
+              )}
+              <SheetClose asChild>
+                <Button variant="ghost" size="icon-xs" aria-label="Close notifications">
+                  <X className="h-4 w-4" />
+                </Button>
+              </SheetClose>
+            </div>
           </div>
           <SheetDescription className="sr-only">
             View and manage your notifications
@@ -224,7 +239,11 @@ export function NotificationsDrawer({ open, onOpenChange }: NotificationsDrawerP
               {visibleNotifications.map((notification) => (
                 <div
                   key={notification.id}
-                  className="flex items-start gap-3 px-4 py-3 hover:bg-muted/50 transition-colors group"
+                  className="flex items-start gap-3 px-4 py-3 hover:bg-muted/50 transition-colors group cursor-pointer"
+                  onClick={() => {
+                    router.push(notification.entityUrl);
+                    onOpenChange(false);
+                  }}
                 >
                   <div
                     className={`mt-0.5 shrink-0 ${iconClasses[notification.type] ?? "text-muted-foreground"}`}

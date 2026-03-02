@@ -2,9 +2,9 @@
 
 import { useMemo, useState } from "react";
 import { useStore } from "@/stores";
-import { usePathname } from "next/navigation";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
+import { OperationsTabs } from "@/components/shared/operations-tabs";
 import { PageHeader } from "@/components/shared/page-header";
 import { EmptyState } from "@/components/shared/empty-state";
 import { useMockLoading } from "@/lib/hooks/use-mock-loading";
@@ -19,7 +19,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { OPERATIONS_TABS } from "@/lib/constants";
 import {
   Clock,
   BookOpen,
@@ -27,41 +26,20 @@ import {
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
-import { format, startOfWeek, addDays, isSameDay, parseISO } from "date-fns";
+import { format, startOfWeek, addDays, isSameDay, parseISO, getDay } from "date-fns";
 
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"] as const;
 const PERIODS = [
+  { label: "Homeroom", start: "08:00", end: "08:30" },
   { label: "Period 1", start: "08:30", end: "09:20" },
-  { label: "Period 2", start: "09:25", end: "10:15" },
-  { label: "Break", start: "10:15", end: "10:35" },
-  { label: "Period 3", start: "10:35", end: "11:25" },
-  { label: "Period 4", start: "11:30", end: "12:20" },
-  { label: "Lunch", start: "12:20", end: "13:10" },
-  { label: "Period 5", start: "13:10", end: "14:00" },
-  { label: "Period 6", start: "14:05", end: "14:55" },
+  { label: "Period 2", start: "09:20", end: "10:10" },
+  { label: "Break", start: "10:10", end: "10:30" },
+  { label: "Period 3", start: "10:15", end: "11:45" },
+  { label: "Period 4", start: "11:50", end: "12:40" },
+  { label: "Lunch", start: "12:40", end: "13:30" },
+  { label: "Period 5", start: "13:30", end: "14:20" },
+  { label: "Period 6", start: "14:25", end: "15:15" },
 ] as const;
-
-function OperationsTabs() {
-  const pathname = usePathname();
-  return (
-    <div className="flex gap-1 mb-6 border-b border-border">
-      {OPERATIONS_TABS.map((t) => (
-        <Link
-          key={t.href}
-          href={t.href}
-          className={cn(
-            "px-4 py-2 text-[13px] font-medium border-b-2 -mb-px transition-colors",
-            pathname === t.href
-              ? "border-[#c24e3f] text-[#c24e3f]"
-              : "border-transparent text-muted-foreground hover:text-foreground"
-          )}
-        >
-          {t.label}
-        </Link>
-      ))}
-    </div>
-  );
-}
 
 export default function TimetablePage() {
   const loading = useMockLoading();
@@ -102,8 +80,11 @@ export default function TimetablePage() {
 
       // Check if event falls on one of this week's days
       weekDays.forEach((dayDate, dayIndex) => {
-        const isOnDay = isSameDay(eventDate, dayDate) || event.recurrence === "weekly";
-        if (!isOnDay && !isSameDay(eventDate, dayDate)) return;
+        // For weekly recurring events, match by day-of-week; otherwise match exact date
+        const isOnDay =
+          isSameDay(eventDate, dayDate) ||
+          (event.recurrence === "weekly" && getDay(eventDate) === getDay(dayDate));
+        if (!isOnDay) return;
 
         // Match to a period by start time
         for (const period of PERIODS) {
@@ -237,12 +218,13 @@ export default function TimetablePage() {
                               const cls = event.classId
                                 ? getClassById(event.classId)
                                 : null;
+                              const dayDate = weekDays[dayIdx];
                               return (
                                 <Link
                                   key={event.id}
                                   href={
                                     event.classId
-                                      ? `/operations/attendance`
+                                      ? `/operations/attendance?classId=${event.classId}&date=${format(dayDate, "yyyy-MM-dd")}`
                                       : `/operations/calendar`
                                   }
                                 >

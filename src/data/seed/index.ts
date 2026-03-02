@@ -698,6 +698,60 @@ export function generateSeedData() {
   // -----------------------------------------------------------------------
   const transcripts: Record<string, TranscriptYear[]> = {};
   for (const student of students) {
+    // Derive grades from actual GradeRecord data
+    const deriveGradeForClass = (classId: string): string => {
+      const cls = classes.find(c => c.id === classId);
+      if (!cls) return "-";
+      const classGrades = grades.filter(g => g.studentId === student.id && g.classId === classId && !g.isMissing);
+      if (classGrades.length === 0) return "-";
+
+      if (cls.programme === "DP") {
+        const dpGrades = classGrades.filter(g => g.dpGrade != null);
+        if (dpGrades.length > 0) {
+          const avg = dpGrades.reduce((s, g) => s + (g.dpGrade || 0), 0) / dpGrades.length;
+          return `${Math.round(avg)}`;
+        }
+        const scoreGrades = classGrades.filter(g => g.score != null);
+        if (scoreGrades.length > 0) {
+          const asmts = assessments.filter(a => a.classId === classId);
+          const pcts = scoreGrades.map(g => {
+            const a = asmts.find(a2 => a2.id === g.assessmentId);
+            return a?.totalPoints ? (g.score! / a.totalPoints) * 7 : g.score! / 100 * 7;
+          });
+          return `${Math.round(pcts.reduce((a, b) => a + b, 0) / pcts.length)}`;
+        }
+        return "-";
+      }
+
+      // MYP: derive descriptor from criteria averages
+      const mypGrades = classGrades.filter(g => g.mypCriteriaScores?.length);
+      if (mypGrades.length > 0) {
+        const allAssessed = mypGrades.flatMap(g => (g.mypCriteriaScores || []).filter(c => c.level > 0));
+        if (allAssessed.length === 0) return "-";
+        const avg = allAssessed.reduce((s, c) => s + c.level, 0) / allAssessed.length;
+        if (avg >= 7) return "Exceeding";
+        if (avg >= 5) return "Meeting";
+        if (avg >= 3) return "Approaching";
+        return "Beginning";
+      }
+
+      const scoreGrades = classGrades.filter(g => g.score != null);
+      if (scoreGrades.length > 0) {
+        const asmts = assessments.filter(a => a.classId === classId);
+        const pcts = scoreGrades.map(g => {
+          const a = asmts.find(a2 => a2.id === g.assessmentId);
+          return a?.totalPoints ? (g.score! / a.totalPoints) * 100 : g.score!;
+        });
+        const avg = pcts.reduce((a, b) => a + b, 0) / pcts.length;
+        if (avg >= 85) return "Exceeding";
+        if (avg >= 65) return "Meeting";
+        if (avg >= 45) return "Approaching";
+        return "Beginning";
+      }
+      return "-";
+    };
+
+    const studentNum = parseInt(student.id.replace("stu_", ""));
     const years: TranscriptYear[] = [
       {
         academicYear: "2025-2026",
@@ -708,11 +762,23 @@ export function generateSeedData() {
               const cls = classes.find(c => c.id === cid)!;
               return {
                 subject: cls.subject,
-                grade: cls.programme === "DP" ? `${3 + (parseInt(student.id.replace("stu_", "")) % 5)}` : ["Exceeding", "Meeting", "Approaching"][parseInt(student.id.replace("stu_", "")) % 3],
-                comments: teacherComments[parseInt(student.id.replace("stu_", "")) % teacherComments.length],
+                grade: deriveGradeForClass(cid),
+                comments: teacherComments[studentNum % teacherComments.length],
               };
             }),
-            attendance: { present: 26 + (parseInt(student.id.replace("stu_", "")) % 4), absent: parseInt(student.id.replace("stu_", "")) % 3, late: parseInt(student.id.replace("stu_", "")) % 2, total: 30 },
+            attendance: { present: 26 + (studentNum % 4), absent: studentNum % 3, late: studentNum % 2, total: 30 },
+          },
+          {
+            term: "Term 2",
+            subjects: student.classIds.map(cid => {
+              const cls = classes.find(c => c.id === cid)!;
+              return {
+                subject: cls.subject,
+                grade: deriveGradeForClass(cid),
+                comments: teacherComments[(studentNum + 1) % teacherComments.length],
+              };
+            }),
+            attendance: { present: 24 + (studentNum % 5), absent: 1 + (studentNum % 3), late: studentNum % 2, total: 28 },
           },
         ],
       },

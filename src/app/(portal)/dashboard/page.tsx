@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo } from "react";
 import { useStore } from "@/stores";
 import { PageHeader } from "@/components/shared/page-header";
 import { StatCard } from "@/components/shared/stat-card";
@@ -8,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { useMockLoading } from "@/lib/hooks/use-mock-loading";
 import { DashboardSkeleton } from "@/components/shared/skeleton-loader";
+import { TEACHER } from "@/lib/constants";
 import {
   ClipboardCheck,
   Users,
@@ -38,10 +40,22 @@ export default function DashboardPage() {
   const reportCycles = useStore((s) => s.reportCycles);
   const reports = useStore((s) => s.reports);
 
+  const activeClassId = useStore((s) => s.ui.activeClassId);
+
+  // Build set of student IDs for the active class (or all students)
+  const classStudentIds = useMemo(() => {
+    if (!activeClassId) return null; // null means "all"
+    const cls = classes.find((c) => c.id === activeClassId);
+    return cls ? new Set(cls.studentIds) : null;
+  }, [activeClassId, classes]);
+
   if (loading) return <DashboardSkeleton />;
 
-  // Compute dashboard data
-  const publishedAssessments = assessments.filter((a) => a.status === "published");
+  // Compute dashboard data — filtered by active class when set
+  const filteredAssessments = activeClassId
+    ? assessments.filter((a) => a.classId === activeClassId)
+    : assessments;
+  const publishedAssessments = filteredAssessments.filter((a) => a.status === "published");
   const ungradedCount = publishedAssessments.reduce((count, asmt) => {
     const classObj = classes.find((c) => c.id === asmt.classId);
     if (!classObj) return count;
@@ -50,8 +64,14 @@ export default function DashboardPage() {
     return count + Math.max(0, studentCount - gradedCount);
   }, 0);
 
-  const pendingArtifacts = artifacts.filter((a) => a.approvalStatus === "pending");
-  const openIncidents = incidents.filter((i) => i.status !== "resolved");
+  const filteredArtifacts = classStudentIds
+    ? artifacts.filter((a) => classStudentIds.has(a.studentId))
+    : artifacts;
+  const pendingArtifacts = filteredArtifacts.filter((a) => a.approvalStatus === "pending");
+  const filteredIncidents = classStudentIds
+    ? incidents.filter((i) => classStudentIds.has(i.studentId))
+    : incidents;
+  const openIncidents = filteredIncidents.filter((i) => i.status !== "resolved");
 
   const today = new Date();
   const todayStr = format(today, "yyyy-MM-dd");
@@ -69,6 +89,7 @@ export default function DashboardPage() {
   recentSessions.forEach((session) => {
     session.records.forEach((r) => {
       if (r.status !== "present") {
+        if (classStudentIds && !classStudentIds.has(r.studentId)) return;
         attendanceExceptions.push({
           studentId: r.studentId,
           status: r.status,
@@ -86,7 +107,7 @@ export default function DashboardPage() {
 
   return (
     <div>
-      <PageHeader title="Dashboard" description="Welcome back, Ms. Mitchell" />
+      <PageHeader title="Dashboard" description={`Welcome back, ${TEACHER.name}`} />
 
       {/* Stats row */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
@@ -96,7 +117,7 @@ export default function DashboardPage() {
           icon={ClipboardCheck}
           trend={ungradedCount > 10 ? { direction: "up", label: "Needs attention" } : undefined}
         />
-        <StatCard label="Students" value={students.length} icon={Users} />
+        <StatCard label="Students" value={classStudentIds ? classStudentIds.size : students.length} icon={Users} />
         <StatCard
           label="Pending reviews"
           value={pendingArtifacts.length}

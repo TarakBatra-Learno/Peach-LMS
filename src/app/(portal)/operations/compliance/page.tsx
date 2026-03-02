@@ -2,9 +2,7 @@
 
 import { useState, useMemo } from "react";
 import { useStore } from "@/stores";
-import { usePathname } from "next/navigation";
-import Link from "next/link";
-import { cn } from "@/lib/utils";
+import { OperationsTabs } from "@/components/shared/operations-tabs";
 import { PageHeader } from "@/components/shared/page-header";
 import { EmptyState } from "@/components/shared/empty-state";
 import { useMockLoading } from "@/lib/hooks/use-mock-loading";
@@ -31,32 +29,6 @@ import {
   FileSpreadsheet,
   ShieldCheck,
 } from "lucide-react";
-
-function OperationsTabs() {
-  const pathname = usePathname();
-  return (
-    <div className="flex gap-1 mb-6 border-b border-border">
-      {[
-        { label: "Attendance", href: "/operations/attendance" },
-        { label: "Calendar", href: "/operations/calendar" },
-        { label: "Compliance", href: "/operations/compliance" },
-      ].map((t) => (
-        <Link
-          key={t.href}
-          href={t.href}
-          className={cn(
-            "px-4 py-2 text-[13px] font-medium border-b-2 -mb-px transition-colors",
-            pathname === t.href
-              ? "border-[#c24e3f] text-[#c24e3f]"
-              : "border-transparent text-muted-foreground hover:text-foreground"
-          )}
-        >
-          {t.label}
-        </Link>
-      ))}
-    </div>
-  );
-}
 
 function escapeCsvField(field: string): string {
   if (field.includes(",") || field.includes('"') || field.includes("\n")) {

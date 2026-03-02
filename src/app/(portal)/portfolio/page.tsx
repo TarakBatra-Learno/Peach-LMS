@@ -93,6 +93,7 @@ export default function PortfolioPage() {
   const learningGoals = useStore((s) => s.learningGoals);
   const addArtifact = useStore((s) => s.addArtifact);
   const updateArtifact = useStore((s) => s.updateArtifact);
+  const updateStudent = useStore((s) => s.updateStudent);
   const getPendingArtifacts = useStore((s) => s.getPendingArtifacts);
 
   // Dialog & sheet state
@@ -246,10 +247,10 @@ export default function PortfolioPage() {
   };
 
   const handleRequestRevision = (id: string) => {
-    updateArtifact(id, { approvalStatus: "needs_revision", updatedAt: new Date().toISOString() });
-    toast.info("Revision requested");
+    updateArtifact(id, { approvalStatus: "needs_revision", familyShareStatus: "not_shared", updatedAt: new Date().toISOString() });
+    toast.info("Revision requested — family share revoked");
     if (detailArtifact?.id === id) {
-      setDetailArtifact({ ...detailArtifact, approvalStatus: "needs_revision" });
+      setDetailArtifact({ ...detailArtifact, approvalStatus: "needs_revision", familyShareStatus: "not_shared" });
     }
   };
 
@@ -293,9 +294,28 @@ export default function PortfolioPage() {
 
   const handleToggleFamilyShare = (checked: boolean) => {
     if (!detailArtifact) return;
+    const now = new Date().toISOString();
     const status = checked ? "shared" : "not_shared";
-    updateArtifact(detailArtifact.id, { familyShareStatus: status, updatedAt: new Date().toISOString() });
+    updateArtifact(detailArtifact.id, { familyShareStatus: status, updatedAt: now });
     setDetailArtifact({ ...detailArtifact, familyShareStatus: status });
+
+    // Create a FamilyShareRecord on the student when sharing
+    if (checked) {
+      const student = students.find((s) => s.id === detailArtifact.studentId);
+      if (student) {
+        const record = {
+          id: generateId("fsr"),
+          type: "portfolio" as const,
+          referenceId: detailArtifact.id,
+          sharedAt: now,
+          status: "shared" as const,
+        };
+        updateStudent(student.id, {
+          familyShareHistory: [...(student.familyShareHistory || []), record],
+        });
+      }
+    }
+
     toast.success(checked ? "Shared with family" : "Family sharing removed");
   };
 
@@ -797,6 +817,7 @@ export default function PortfolioPage() {
                   />
                   <Button
                     size="sm"
+                    variant="outline"
                     className="mt-2 h-7 text-[12px]"
                     onClick={handleSaveStudentReflection}
                     disabled={!studentReflectionText.trim()}
@@ -816,6 +837,7 @@ export default function PortfolioPage() {
                   />
                   <Button
                     size="sm"
+                    variant="outline"
                     className="mt-2 h-7 text-[12px]"
                     onClick={handleSaveTeacherComment}
                     disabled={!teacherComment.trim()}
@@ -947,9 +969,9 @@ export default function PortfolioPage() {
                       size="sm"
                       variant="outline"
                       onClick={() => {
-                        updateArtifact(detailArtifact.id, { approvalStatus: "pending", updatedAt: new Date().toISOString() });
-                        setDetailArtifact({ ...detailArtifact, approvalStatus: "pending" });
-                        toast.info("Status reset to pending");
+                        updateArtifact(detailArtifact.id, { approvalStatus: "pending", familyShareStatus: "not_shared", updatedAt: new Date().toISOString() });
+                        setDetailArtifact({ ...detailArtifact, approvalStatus: "pending", familyShareStatus: "not_shared" });
+                        toast.info("Status reset to pending — family share revoked");
                       }}
                     >
                       Reset to pending

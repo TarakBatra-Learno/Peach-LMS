@@ -1,13 +1,14 @@
 "use client";
 
-import { useState } from "react";
-import { useParams } from "next/navigation";
+import { useState, useEffect } from "react";
+import { useParams, useRouter } from "next/navigation";
 import { useStore } from "@/stores";
 import { PageHeader } from "@/components/shared/page-header";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { StatCard } from "@/components/shared/stat-card";
 import { EmptyState } from "@/components/shared/empty-state";
 import { IncidentDialog } from "@/components/shared/incident-dialog";
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -32,8 +33,17 @@ export default function ClassHubPage() {
   const params = useParams();
   const classId = params.classId as string;
   const loading = useMockLoading([classId]);
+  const router = useRouter();
 
+  const activeClassId = useStore((s) => s.ui.activeClassId);
   const getClassById = useStore((s) => s.getClassById);
+
+  // When the global class switcher changes, navigate to the new class
+  useEffect(() => {
+    if (activeClassId && activeClassId !== classId) {
+      router.push(`/classes/${activeClassId}`);
+    }
+  }, [activeClassId, classId, router]);
   const getStudentsByClassId = useStore((s) => s.getStudentsByClassId);
   const getAssessmentsByClassId = useStore((s) => s.getAssessmentsByClassId);
   const grades = useStore((s) => s.grades);
@@ -55,9 +65,27 @@ export default function ClassHubPage() {
 
   const publishedAssessments = assessments.filter((a) => a.status === "published");
   const avgGrade = (() => {
-    const classGrades = grades.filter((g) => g.classId === classId && g.score != null && !g.isMissing);
-    if (classGrades.length === 0) return "N/A";
-    const avg = classGrades.reduce((sum, g) => sum + (g.score || 0), 0) / classGrades.length;
+    const classGrades = grades.filter((g) => g.classId === classId && !g.isMissing);
+    const percentages: number[] = [];
+    classGrades.forEach((g) => {
+      const asmt = assessments.find((a) => a.id === g.assessmentId);
+      if (!asmt) return;
+      if (asmt.gradingMode === "score" && g.score != null && asmt.totalPoints) {
+        percentages.push((g.score / asmt.totalPoints) * 100);
+      } else if (asmt.gradingMode === "dp_scale" && g.dpGrade != null) {
+        percentages.push((g.dpGrade / 7) * 100);
+      } else if (asmt.gradingMode === "myp_criteria" && g.mypCriteriaScores?.length) {
+        const assessed = g.mypCriteriaScores.filter((c) => c.level > 0);
+        if (assessed.length > 0) {
+          const avg = assessed.reduce((s, c) => s + c.level, 0) / assessed.length;
+          percentages.push((avg / 8) * 100);
+        }
+      } else if (g.score != null) {
+        percentages.push(g.score);
+      }
+    });
+    if (percentages.length === 0) return "N/A";
+    const avg = percentages.reduce((a, b) => a + b, 0) / percentages.length;
     return `${Math.round(avg)}%`;
   })();
 
@@ -117,15 +145,18 @@ export default function ClassHubPage() {
               </Button>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-              {students.slice(0, 24).map((student) => (
+              {students.map((student) => (
                 <Link
                   key={student.id}
                   href={`/students/${student.id}`}
                   className="flex items-center gap-2 py-2 px-3 rounded-lg hover:bg-muted transition-colors"
                 >
-                  <div className="h-7 w-7 rounded-full bg-[#c24e3f]/10 flex items-center justify-center text-[11px] font-semibold text-[#c24e3f]">
-                    {student.firstName[0]}{student.lastName[0]}
-                  </div>
+                  <Avatar className="h-7 w-7">
+                    {student.avatarUrl && <AvatarImage src={student.avatarUrl} alt={`${student.firstName} ${student.lastName}`} />}
+                    <AvatarFallback className="text-[11px] font-semibold bg-[#c24e3f]/10 text-[#c24e3f]">
+                      {student.firstName[0]}{student.lastName[0]}
+                    </AvatarFallback>
+                  </Avatar>
                   <span className="text-[13px] font-medium truncate">
                     {student.firstName} {student.lastName}
                   </span>

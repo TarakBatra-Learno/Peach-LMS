@@ -12,6 +12,8 @@ import {
   BreadcrumbPage,
 } from "@/components/ui/breadcrumb";
 
+const OPERATIONS_SUBPAGES = new Set(["attendance", "calendar", "timetable", "compliance"]);
+
 function capitalize(str: string): string {
   return str.charAt(0).toUpperCase() + str.slice(1);
 }
@@ -48,6 +50,11 @@ export function BreadcrumbNav() {
     // Handle operations sub-pages: /operations/attendance, /operations/calendar, /operations/compliance
     if (segment === "operations") {
       entries.push({ label: "Operations", href: "/operations/attendance" });
+      continue;
+    }
+
+    // Skip operations sub-page slug — OperationsTabs already shows which sub-page is active
+    if (prevSegment === "operations" && OPERATIONS_SUBPAGES.has(segment)) {
       continue;
     }
 

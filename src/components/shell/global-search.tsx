@@ -17,6 +17,7 @@ import {
   GraduationCap,
   FolderOpen,
   ShieldAlert,
+  FileText,
 } from "lucide-react";
 
 const MAX_RESULTS_PER_GROUP = 5;
@@ -35,6 +36,8 @@ export function GlobalSearch({ open, onOpenChange }: GlobalSearchProps) {
   const classes = useStore((s) => s.classes);
   const artifacts = useStore((s) => s.artifacts);
   const incidents = useStore((s) => s.incidents);
+  const reports = useStore((s) => s.reports);
+  const reportCycles = useStore((s) => s.reportCycles);
 
   const lowerQuery = query.toLowerCase().trim();
 
@@ -75,12 +78,32 @@ export function GlobalSearch({ open, onOpenChange }: GlobalSearchProps) {
       .slice(0, MAX_RESULTS_PER_GROUP);
   }, [incidents, lowerQuery]);
 
+  const filteredReports = useMemo(() => {
+    if (!lowerQuery) return [];
+    return reports
+      .filter((r) => {
+        const student = students.find((s) => s.id === r.studentId);
+        const studentName = student ? `${student.firstName} ${student.lastName}` : "";
+        return studentName.toLowerCase().includes(lowerQuery) || "report".includes(lowerQuery);
+      })
+      .slice(0, MAX_RESULTS_PER_GROUP);
+  }, [reports, students, lowerQuery]);
+
+  const filteredReportCycles = useMemo(() => {
+    if (!lowerQuery) return [];
+    return reportCycles
+      .filter((c) => c.name.toLowerCase().includes(lowerQuery))
+      .slice(0, MAX_RESULTS_PER_GROUP);
+  }, [reportCycles, lowerQuery]);
+
   const hasResults =
     filteredStudents.length > 0 ||
     filteredAssessments.length > 0 ||
     filteredClasses.length > 0 ||
     filteredArtifacts.length > 0 ||
-    filteredIncidents.length > 0;
+    filteredIncidents.length > 0 ||
+    filteredReports.length > 0 ||
+    filteredReportCycles.length > 0;
 
   const navigate = useCallback(
     (path: string) => {
@@ -187,6 +210,7 @@ export function GlobalSearch({ open, onOpenChange }: GlobalSearchProps) {
               <CommandItem
                 key={artifact.id}
                 value={`artifact-${artifact.id}-${artifact.title}`}
+                onSelect={() => navigate("/portfolio")}
               >
                 <FolderOpen className="h-4 w-4 text-muted-foreground" />
                 <span>{artifact.title}</span>
@@ -213,6 +237,48 @@ export function GlobalSearch({ open, onOpenChange }: GlobalSearchProps) {
                 </span>
               </CommandItem>
             ))}
+          </CommandGroup>
+        )}
+
+        {filteredReportCycles.length > 0 && (
+          <CommandGroup heading="Report Cycles">
+            {filteredReportCycles.map((cycle) => (
+              <CommandItem
+                key={cycle.id}
+                value={`cycle-${cycle.id}-${cycle.name}`}
+                onSelect={() => navigate(`/reports/cycles/${cycle.id}`)}
+              >
+                <FileText className="h-4 w-4 text-muted-foreground" />
+                <span>{cycle.name}</span>
+                <span className="ml-auto text-xs text-muted-foreground">
+                  {cycle.status}
+                </span>
+              </CommandItem>
+            ))}
+          </CommandGroup>
+        )}
+
+        {filteredReports.length > 0 && (
+          <CommandGroup heading="Reports">
+            {filteredReports.map((report) => {
+              const student = students.find((s) => s.id === report.studentId);
+              const studentName = student
+                ? `${student.firstName} ${student.lastName}`
+                : "Unknown";
+              return (
+                <CommandItem
+                  key={report.id}
+                  value={`report-${report.id}-${studentName}`}
+                  onSelect={() => navigate(`/reports/${report.id}`)}
+                >
+                  <FileText className="h-4 w-4 text-muted-foreground" />
+                  <span>Report: {studentName}</span>
+                  <span className="ml-auto text-xs text-muted-foreground">
+                    {report.publishState}
+                  </span>
+                </CommandItem>
+              );
+            })}
           </CommandGroup>
         )}
       </CommandList>

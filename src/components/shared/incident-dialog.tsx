@@ -38,7 +38,7 @@ const SEVERITY_OPTIONS = [
   { value: "high", label: "High" },
 ] as const;
 
-const CATEGORY_OPTIONS = [
+const DEFAULT_CATEGORY_OPTIONS = [
   { value: "academic", label: "Academic" },
   { value: "behavioral", label: "Behavioural" },
   { value: "attendance", label: "Attendance" },
@@ -54,6 +54,12 @@ export function IncidentDialog({
   const addIncident = useStore((s) => s.addIncident);
   const students = useStore((s) => s.students);
   const getStudentsByClassId = useStore((s) => s.getStudentsByClassId);
+  const taxonomy = useStore((s) => s.taxonomy);
+
+  // Use taxonomy categories from store, fallback to hardcoded defaults
+  const categoryOptions = taxonomy.categories.length > 0
+    ? taxonomy.categories.map((c) => ({ value: c.toLowerCase(), label: c }))
+    : DEFAULT_CATEGORY_OPTIONS;
 
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -172,7 +178,7 @@ export function IncidentDialog({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {CATEGORY_OPTIONS.map((opt) => (
+                  {categoryOptions.map((opt) => (
                     <SelectItem key={opt.value} value={opt.value} className="text-[13px]">
                       {opt.label}
                     </SelectItem>

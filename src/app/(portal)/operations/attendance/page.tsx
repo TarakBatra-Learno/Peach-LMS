@@ -1,10 +1,11 @@
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import { useStore } from "@/stores";
-import { usePathname } from "next/navigation";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
+import { OperationsTabs } from "@/components/shared/operations-tabs";
 import { PageHeader } from "@/components/shared/page-header";
 import { StatCard } from "@/components/shared/stat-card";
 import { EmptyState } from "@/components/shared/empty-state";
@@ -59,32 +60,6 @@ import {
 import type { AttendanceRecord } from "@/types/attendance";
 import type { AttendanceStatus } from "@/types/common";
 
-function OperationsTabs() {
-  const pathname = usePathname();
-  return (
-    <div className="flex gap-1 mb-6 border-b border-border">
-      {[
-        { label: "Attendance", href: "/operations/attendance" },
-        { label: "Calendar", href: "/operations/calendar" },
-        { label: "Compliance", href: "/operations/compliance" },
-      ].map((t) => (
-        <Link
-          key={t.href}
-          href={t.href}
-          className={cn(
-            "px-4 py-2 text-[13px] font-medium border-b-2 -mb-px transition-colors",
-            pathname === t.href
-              ? "border-[#c24e3f] text-[#c24e3f]"
-              : "border-transparent text-muted-foreground hover:text-foreground"
-          )}
-        >
-          {t.label}
-        </Link>
-      ))}
-    </div>
-  );
-}
-
 const STATUS_OPTIONS: { value: AttendanceStatus; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
   { value: "present", label: "Present", icon: CheckCircle2 },
   { value: "absent", label: "Absent", icon: XCircle },
@@ -94,6 +69,7 @@ const STATUS_OPTIONS: { value: AttendanceStatus; label: string; icon: React.Comp
 
 export default function AttendancePage() {
   const loading = useMockLoading();
+  const searchParams = useSearchParams();
   const classes = useStore((s) => s.classes);
   const students = useStore((s) => s.students);
   const attendanceSessions = useStore((s) => s.attendanceSessions);
@@ -103,14 +79,19 @@ export default function AttendancePage() {
 
   const activeClassId = useStore((s) => s.ui.activeClassId);
 
+  // Read URL params for timetable deep-link
+  const urlClassId = searchParams.get("classId");
+  const urlDate = searchParams.get("date");
+
   const [dialogOpen, setDialogOpen] = useState(false);
   const [activeTab, setActiveTab] = useState("register");
 
-  // Register form state — sync with global class switcher
-  const [selectedClassId, setSelectedClassId] = useState<string>(activeClassId || "");
-  const [selectedDate, setSelectedDate] = useState(format(new Date(), "yyyy-MM-dd"));
+  // Register form state — sync with global class switcher or URL params
+  const [selectedClassId, setSelectedClassId] = useState<string>(urlClassId || activeClassId || "");
+  const [selectedDate, setSelectedDate] = useState(urlDate || format(new Date(), "yyyy-MM-dd"));
   const [records, setRecords] = useState<Record<string, AttendanceStatus>>({});
   const [notes, setNotes] = useState<Record<string, string>>({});
+  const [isDirty, setIsDirty] = useState(false);
 
   const classStudents = useMemo(() => {
     if (!selectedClassId) return [];
@@ -119,6 +100,10 @@ export default function AttendancePage() {
 
   // Initialize records when class changes
   const handleClassChange = (classId: string) => {
+    if (isDirty) {
+      const confirmed = window.confirm("You have unsaved attendance changes. Discard them?");
+      if (!confirmed) return;
+    }
     setSelectedClassId(classId);
     const studs = getStudentsByClassId(classId);
     const defaultRecords: Record<string, AttendanceStatus> = {};
@@ -127,6 +112,7 @@ export default function AttendancePage() {
     });
     setRecords(defaultRecords);
     setNotes({});
+    setIsDirty(false);
   };
 
   // Sync with global class switcher
@@ -139,6 +125,7 @@ export default function AttendancePage() {
 
   const handleStatusChange = (studentId: string, status: AttendanceStatus) => {
     setRecords((prev) => ({ ...prev, [studentId]: status }));
+    setIsDirty(true);
   };
 
   const handleCompleteSession = () => {
@@ -171,6 +158,7 @@ export default function AttendancePage() {
     setSelectedClassId("");
     setRecords({});
     setNotes({});
+    setIsDirty(false);
   };
 
   // Analytics calculations
@@ -315,12 +303,17 @@ export default function AttendancePage() {
                 <Label className="text-[12px] font-medium text-muted-foreground uppercase tracking-wide mb-1.5 block">
                   Date
                 </Label>
-                <Input
-                  type="date"
-                  value={selectedDate}
-                  onChange={(e) => setSelectedDate(e.target.value)}
-                  className="h-9 text-[13px]"
-                />
+                <div className="flex items-center gap-2">
+                  <Input
+                    type="date"
+                    value={selectedDate}
+                    onChange={(e) => setSelectedDate(e.target.value)}
+                    className="h-9 text-[13px]"
+                  />
+                  {selectedDate === format(new Date(), "yyyy-MM-dd") && (
+                    <Badge variant="default" className="text-[10px] shrink-0">Today</Badge>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -374,7 +367,7 @@ export default function AttendancePage() {
                         <div className="ml-11 mt-1.5">
                           <Input
                             value={notes[student.id] || ""}
-                            onChange={(e) => setNotes((prev) => ({ ...prev, [student.id]: e.target.value }))}
+                            onChange={(e) => { setNotes((prev) => ({ ...prev, [student.id]: e.target.value })); setIsDirty(true); }}
                             placeholder={`Reason for ${currentStatus}...`}
                             className="h-7 text-[12px] max-w-[320px]"
                           />
@@ -466,7 +459,7 @@ export default function AttendancePage() {
                   return (
                     <Card
                       key={session.id}
-                      className="p-4 gap-0 flex items-center justify-between"
+                      className="p-4 gap-0 flex flex-row items-center justify-between"
                     >
                       <div className="flex items-center gap-4 min-w-0">
                         <div className="rounded-lg bg-muted p-2 shrink-0">
@@ -601,32 +594,37 @@ export default function AttendancePage() {
 
           {analytics.totalRecords > 0 && (
             <Card className="p-5 gap-0">
-              <h3 className="text-[14px] font-semibold mb-4">Status breakdown</h3>
+              <h3 className="text-[14px] font-semibold mb-1">Status breakdown</h3>
+              <p className="text-[12px] text-muted-foreground mb-4">
+                Across {analytics.totalSessions} session{analytics.totalSessions !== 1 ? "s" : ""}{" "}
+                with {analytics.classesTracked} class{analytics.classesTracked !== 1 ? "es" : ""}{" "}
+                ({analytics.totalRecords} total records)
+              </p>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <div className="text-center p-4 rounded-lg bg-[#dcfce7]/50">
-                  <div className="text-[24px] font-semibold text-[#16a34a]">
-                    {analytics.presentCount}
-                  </div>
-                  <div className="text-[12px] text-muted-foreground mt-1">Present</div>
-                </div>
-                <div className="text-center p-4 rounded-lg bg-[#fee2e2]/50">
-                  <div className="text-[24px] font-semibold text-[#dc2626]">
-                    {analytics.absentCount}
-                  </div>
-                  <div className="text-[12px] text-muted-foreground mt-1">Absent</div>
-                </div>
-                <div className="text-center p-4 rounded-lg bg-[#fef3c7]/50">
-                  <div className="text-[24px] font-semibold text-[#b45309]">
-                    {analytics.lateCount}
-                  </div>
-                  <div className="text-[12px] text-muted-foreground mt-1">Late</div>
-                </div>
-                <div className="text-center p-4 rounded-lg bg-[#dbeafe]/50">
-                  <div className="text-[24px] font-semibold text-[#2563eb]">
-                    {analytics.excusedCount}
-                  </div>
-                  <div className="text-[12px] text-muted-foreground mt-1">Excused</div>
-                </div>
+                {[
+                  { label: "Present", count: analytics.presentCount, bg: "bg-[#dcfce7]/50", color: "text-[#16a34a]", Icon: CheckCircle2 },
+                  { label: "Absent", count: analytics.absentCount, bg: "bg-[#fee2e2]/50", color: "text-[#dc2626]", Icon: XCircle },
+                  { label: "Late", count: analytics.lateCount, bg: "bg-[#fef3c7]/50", color: "text-[#b45309]", Icon: Clock },
+                  { label: "Excused", count: analytics.excusedCount, bg: "bg-[#dbeafe]/50", color: "text-[#2563eb]", Icon: ShieldCheck },
+                ].map((item) => {
+                  const pct = analytics.totalRecords > 0
+                    ? Math.round((item.count / analytics.totalRecords) * 100)
+                    : 0;
+                  return (
+                    <div key={item.label} className={`p-4 rounded-lg ${item.bg}`}>
+                      <div className="flex items-center gap-2 mb-1">
+                        <item.Icon className={`h-4 w-4 ${item.color}`} />
+                        <span className="text-[12px] text-muted-foreground">{item.label}</span>
+                      </div>
+                      <div className={`text-[20px] font-semibold ${item.color}`}>
+                        {item.count}
+                      </div>
+                      <div className="text-[11px] text-muted-foreground mt-0.5">
+                        {pct}% of all records
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </Card>
           )}
@@ -768,7 +766,7 @@ export default function AttendancePage() {
                       <div className="mt-1.5 ml-0">
                         <Input
                           value={notes[student.id] || ""}
-                          onChange={(e) => setNotes((prev) => ({ ...prev, [student.id]: e.target.value }))}
+                          onChange={(e) => { setNotes((prev) => ({ ...prev, [student.id]: e.target.value })); setIsDirty(true); }}
                           placeholder={`Reason for ${dlgStatus}...`}
                           className="h-7 text-[11px]"
                         />

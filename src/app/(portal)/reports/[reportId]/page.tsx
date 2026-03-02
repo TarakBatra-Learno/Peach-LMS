@@ -150,7 +150,9 @@ export default function ReportDetailPage() {
   // Filter artifacts for this student
   const studentArtifacts = useMemo(() => {
     if (!report) return [];
-    return artifacts.filter((a) => a.studentId === report.studentId);
+    return artifacts.filter(
+      (a) => a.studentId === report.studentId && a.classId === report.classId
+    );
   }, [report, artifacts]);
 
   const getAssessmentName = (assessmentId: string) => {
@@ -353,7 +355,7 @@ export default function ReportDetailPage() {
       text += `--- ${section.label} ---\n`;
 
       if (section.type === "teacher_comment") {
-        text += `${(section.content.comment as string) || "No comment provided."}\n`;
+        text += `${(section.content.comment as string) || (section.content.text as string) || "No comment provided."}\n`;
       } else if (section.type === "attendance") {
         text += `Present: ${attendanceSummary.present}\n`;
         text += `Absent: ${attendanceSummary.absent}\n`;
@@ -540,6 +542,7 @@ export default function ReportDetailPage() {
         const currentComment =
           commentDrafts[section.configId] ??
           (section.content.comment as string) ??
+          (section.content.text as string) ??
           "";
         return (
           <div className="space-y-3">
@@ -880,24 +883,28 @@ export default function ReportDetailPage() {
         }}
         secondaryActions={[
           {
-            label: "Family Preview",
-            onClick: () => setFamilyPreviewOpen(true),
-            icon: Eye,
-          },
-          {
             label: "Download PDF",
             onClick: handleDownloadPdf,
             icon: Download,
           },
         ]}
       >
-        <div className="flex gap-2 mt-2">
+        <div className="flex items-center gap-2 mt-2">
           <StatusBadge status={report.publishState} />
           {template && (
             <Badge variant="outline" className="text-[11px]">
               {template.name}
             </Badge>
           )}
+          <Button
+            variant="outline"
+            size="sm"
+            className="ml-auto text-[13px]"
+            onClick={() => setFamilyPreviewOpen(true)}
+          >
+            <Eye className="h-3.5 w-3.5 mr-1.5" />
+            Family Preview
+          </Button>
         </div>
       </PageHeader>
 

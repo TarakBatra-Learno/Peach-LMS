@@ -8,6 +8,7 @@ import { StatusBadge } from "@/components/shared/status-badge";
 import { StatCard } from "@/components/shared/stat-card";
 import { EmptyState } from "@/components/shared/empty-state";
 import { IncidentDialog } from "@/components/shared/incident-dialog";
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -72,12 +73,27 @@ export default function StudentProfilePage() {
 
   // Calculate stats
   const avgGrade = (() => {
-    const scored = studentGrades.filter(
-      (g) => g.score != null && !g.isMissing
-    );
-    if (scored.length === 0) return "N/A";
-    const avg =
-      scored.reduce((sum, g) => sum + (g.score || 0), 0) / scored.length;
+    const percentages: number[] = [];
+    studentGrades.forEach((g) => {
+      if (g.isMissing) return;
+      const asmt = assessments.find((a) => a.id === g.assessmentId);
+      if (!asmt) return;
+      if (asmt.gradingMode === "score" && g.score != null && asmt.totalPoints) {
+        percentages.push((g.score / asmt.totalPoints) * 100);
+      } else if (asmt.gradingMode === "dp_scale" && g.dpGrade != null) {
+        percentages.push((g.dpGrade / 7) * 100);
+      } else if (asmt.gradingMode === "myp_criteria" && g.mypCriteriaScores?.length) {
+        const assessed = g.mypCriteriaScores.filter((c) => c.level > 0);
+        if (assessed.length > 0) {
+          const avg = assessed.reduce((s, c) => s + c.level, 0) / assessed.length;
+          percentages.push((avg / 8) * 100);
+        }
+      } else if (g.score != null) {
+        percentages.push(g.score);
+      }
+    });
+    if (percentages.length === 0) return "N/A";
+    const avg = percentages.reduce((a, b) => a + b, 0) / percentages.length;
     return `${Math.round(avg)}%`;
   })();
 
@@ -100,6 +116,14 @@ export default function StudentProfilePage() {
 
   return (
     <div>
+      <div className="flex items-center gap-3 mb-2">
+        <Avatar className="h-12 w-12">
+          {student.avatarUrl && <AvatarImage src={student.avatarUrl} alt={`${student.firstName} ${student.lastName}`} />}
+          <AvatarFallback className="text-[16px] font-semibold bg-[#c24e3f]/10 text-[#c24e3f]">
+            {student.firstName[0]}{student.lastName[0]}
+          </AvatarFallback>
+        </Avatar>
+      </div>
       <PageHeader
         title={`${student.firstName} ${student.lastName}`}
         description={student.gradeLevel}
@@ -307,7 +331,8 @@ export default function StudentProfilePage() {
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {artifacts.map((artifact) => (
-                <Card key={artifact.id} className="p-4 gap-0">
+                <Link key={artifact.id} href="/portfolio">
+                <Card className="p-4 gap-0 hover:bg-muted/50 transition-colors cursor-pointer">
                   <div className="flex items-start justify-between mb-2">
                     <p className="text-[14px] font-medium truncate flex-1">
                       {artifact.title}
@@ -335,6 +360,7 @@ export default function StudentProfilePage() {
                     </div>
                   )}
                 </Card>
+                </Link>
               ))}
             </div>
           )}

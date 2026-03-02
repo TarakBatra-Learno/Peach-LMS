@@ -118,8 +118,7 @@ export default function SupportPage() {
   const [followUpDate, setFollowUpDate] = useState("");
   const [followUpTime, setFollowUpTime] = useState("09:00");
 
-  // Share with counselor (per-incident, local state map)
-  const [counselorShared, setCounselorShared] = useState<Record<string, boolean>>({});
+  // Share with counselor — now persisted on Incident via store
 
   // Taxonomy editor
   const [taxonomyDialogOpen, setTaxonomyDialogOpen] = useState(false);
@@ -1026,13 +1025,11 @@ export default function SupportPage() {
                   </p>
                 </div>
                 <Switch
-                  checked={counselorShared[selectedIncident.id] ?? false}
-                  onCheckedChange={(checked) =>
-                    setCounselorShared((prev) => ({
-                      ...prev,
-                      [selectedIncident.id]: checked,
-                    }))
-                  }
+                  checked={selectedIncident.sharedWithCounselor ?? false}
+                  onCheckedChange={(checked) => {
+                    updateIncident(selectedIncident.id, { sharedWithCounselor: checked });
+                    setSelectedIncident({ ...selectedIncident, sharedWithCounselor: checked });
+                  }}
                 />
               </div>
 

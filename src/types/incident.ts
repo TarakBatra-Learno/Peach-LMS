@@ -14,6 +14,7 @@ export interface Incident {
   collaboratorNames: string[];
   followUps: FollowUp[];
   status: FollowUpStatus;
+  sharedWithCounselor?: boolean;
 }
 
 export interface FollowUp {
