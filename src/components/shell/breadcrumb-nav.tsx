@@ -1,6 +1,6 @@
 "use client";
 
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useStore } from "@/stores";
 import {
@@ -25,6 +25,7 @@ interface BreadcrumbEntry {
 
 export function BreadcrumbNav() {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
 
   const classes = useStore((s) => s.classes);
   const assessments = useStore((s) => s.assessments);
@@ -117,8 +118,41 @@ export function BreadcrumbNav() {
       continue;
     }
 
+    // Skip the "students" segment — it has no index route (/students 404s).
+    // The student name is handled above when prevSegment === "students".
+    if (segment === "students") {
+      continue;
+    }
+
     // Default: capitalize the segment name
     entries.push({ label: capitalize(segment), href });
+  }
+
+  // On student profile pages, inject class hierarchy when ?classId is present
+  // Result: Home > Classes > ClassName > StudentName
+  const contextClassId = searchParams.get("classId");
+  if (pathname.startsWith("/students/") && contextClassId) {
+    const cls = classes.find((c) => c.id === contextClassId);
+    const studentIdx = entries.findIndex((e) => e.href.startsWith("/students/"));
+    if (studentIdx !== -1) {
+      entries.splice(studentIdx, 0,
+        { label: "Classes", href: "/classes" },
+        { label: cls?.name ?? contextClassId, href: `/classes/${contextClassId}` },
+      );
+    }
+  }
+
+  // Inject student context breadcrumb when navigating from a student profile
+  // via query params (e.g., /assessments/abc?studentId=stu_01 or /portfolio?studentId=stu_01)
+  const contextStudentId = searchParams.get("studentId");
+  if (contextStudentId) {
+    const student = students.find((s) => s.id === contextStudentId);
+    if (student) {
+      entries.unshift({
+        label: `${student.firstName} ${student.lastName}`,
+        href: `/students/${contextStudentId}`,
+      });
+    }
   }
 
   if (entries.length === 0) {

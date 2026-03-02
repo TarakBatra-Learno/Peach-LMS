@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useMemo, useCallback, useEffect } from "react";
+import { useState, useMemo, useCallback, useEffect, useRef } from "react";
+import { useSearchParams } from "next/navigation";
 import { useStore } from "@/stores";
 import { PageHeader } from "@/components/shared/page-header";
 import { StatusBadge } from "@/components/shared/status-badge";
@@ -331,6 +332,31 @@ export default function PortfolioPage() {
     setTeacherComment(artifact.reflection?.teacherComment || "");
     setStudentReflectionText(artifact.reflection?.text || "");
   };
+
+  // Auto-filter and auto-open when arriving from a student profile or class detail
+  const searchParams = useSearchParams();
+  const urlStudentId = searchParams.get("studentId");
+  const urlArtifactId = searchParams.get("artifactId");
+  const autoOpenedRef = useRef(false);
+
+  useEffect(() => {
+    if (autoOpenedRef.current) return;
+    // Filter to the student
+    if (urlStudentId && students.length > 0) {
+      const student = students.find((s) => s.id === urlStudentId);
+      if (student) {
+        setSearchQuery(`${student.firstName} ${student.lastName}`);
+      }
+    }
+    // Auto-open the artifact detail Sheet
+    if (urlArtifactId && artifacts.length > 0) {
+      const artifact = artifacts.find((a) => a.id === urlArtifactId);
+      if (artifact) {
+        autoOpenedRef.current = true;
+        openDetail(artifact);
+      }
+    }
+  }, [urlStudentId, urlArtifactId, students.length, artifacts.length]);
 
   // Filter configs
   const classFilterOptions = [
@@ -738,7 +764,7 @@ export default function PortfolioPage() {
 
       {/* Artifact detail sheet */}
       <Sheet open={!!detailArtifact} onOpenChange={(open) => { if (!open) setDetailArtifact(null); }}>
-        <SheetContent className="w-full sm:max-w-[480px] overflow-y-auto">
+        <SheetContent className="w-full sm:max-w-[480px]">
           {detailArtifact && (
             <>
               <SheetHeader>

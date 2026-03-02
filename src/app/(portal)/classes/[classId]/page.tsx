@@ -13,6 +13,14 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card } from "@/components/ui/card";
+import { Separator } from "@/components/ui/separator";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetDescription,
+} from "@/components/ui/sheet";
 import { useMockLoading } from "@/lib/hooks/use-mock-loading";
 import { DetailSkeleton } from "@/components/shared/skeleton-loader";
 import {
@@ -25,9 +33,12 @@ import {
   Calendar,
   AlertCircle,
   ShieldAlert,
+  ArrowRight,
 } from "lucide-react";
+import type { PortfolioArtifact } from "@/types/portfolio";
 import Link from "next/link";
 import { format, parseISO } from "date-fns";
+import { getGradeCellDisplay, getGradePercentage, GRADING_MODE_LABELS } from "@/lib/grade-helpers";
 
 export default function ClassHubPage() {
   const params = useParams();
@@ -50,6 +61,7 @@ export default function ClassHubPage() {
   const getArtifactsByClass = useStore((s) => s.getArtifactsByClass);
   const getSessionsByClass = useStore((s) => s.getSessionsByClass);
   const getAnnouncementsByClass = useStore((s) => s.getAnnouncementsByClass);
+  const learningGoals = useStore((s) => s.learningGoals);
 
   const cls = getClassById(classId);
   const students = getStudentsByClassId(classId);
@@ -59,6 +71,7 @@ export default function ClassHubPage() {
   const announcements = getAnnouncementsByClass(classId);
 
   const [incidentDialogOpen, setIncidentDialogOpen] = useState(false);
+  const [detailArtifact, setDetailArtifact] = useState<PortfolioArtifact | null>(null);
 
   if (loading) return <DetailSkeleton />;
   if (!cls) return <EmptyState icon={AlertCircle} title="Class not found" description="This class doesn't exist." />;
@@ -70,19 +83,8 @@ export default function ClassHubPage() {
     classGrades.forEach((g) => {
       const asmt = assessments.find((a) => a.id === g.assessmentId);
       if (!asmt) return;
-      if (asmt.gradingMode === "score" && g.score != null && asmt.totalPoints) {
-        percentages.push((g.score / asmt.totalPoints) * 100);
-      } else if (asmt.gradingMode === "dp_scale" && g.dpGrade != null) {
-        percentages.push((g.dpGrade / 7) * 100);
-      } else if (asmt.gradingMode === "myp_criteria" && g.mypCriteriaScores?.length) {
-        const assessed = g.mypCriteriaScores.filter((c) => c.level > 0);
-        if (assessed.length > 0) {
-          const avg = assessed.reduce((s, c) => s + c.level, 0) / assessed.length;
-          percentages.push((avg / 8) * 100);
-        }
-      } else if (g.score != null) {
-        percentages.push(g.score);
-      }
+      const pct = getGradePercentage(g, asmt);
+      if (pct !== null) percentages.push(pct);
     });
     if (percentages.length === 0) return "N/A";
     const avg = percentages.reduce((a, b) => a + b, 0) / percentages.length;
@@ -148,7 +150,7 @@ export default function ClassHubPage() {
               {students.map((student) => (
                 <Link
                   key={student.id}
-                  href={`/students/${student.id}`}
+                  href={`/students/${student.id}?classId=${classId}`}
                   className="flex items-center gap-2 py-2 px-3 rounded-lg hover:bg-muted transition-colors"
                 >
                   <Avatar className="h-7 w-7">
@@ -192,55 +194,86 @@ export default function ClassHubPage() {
 
         <TabsContent value="grades">
           <Card className="p-5 gap-0">
-            <p className="text-[13px] text-muted-foreground mb-4">Grade snapshot for {cls.name}</p>
+            <div className="flex items-center justify-between mb-4">
+              <p className="text-[13px] text-muted-foreground">Grade snapshot for {cls.name}</p>
+              <Link href="/gradebook" className="text-[13px] font-medium text-[#c24e3f] hover:underline">
+                Open gradebook →
+              </Link>
+            </div>
             <div className="overflow-x-auto">
               <table className="w-full text-[13px]">
                 <thead>
                   <tr className="border-b border-border">
                     <th className="text-left py-2 pr-4 font-medium text-muted-foreground">Student</th>
-                    {publishedAssessments.slice(0, 6).map((a) => (
-                      <th key={a.id} className="text-center py-2 px-2 font-medium text-muted-foreground max-w-[80px] truncate" title={a.title}>
-                        {a.title.slice(0, 12)}
+                    {publishedAssessments.map((a) => (
+                      <th key={a.id} className="text-center py-2 px-2 font-medium text-muted-foreground max-w-[100px]" title={a.title}>
+                        <Link href={`/assessments/${a.id}`} className="hover:text-[#c24e3f] transition-colors">
+                          {a.title.length > 14 ? `${a.title.slice(0, 14)}...` : a.title}
+                        </Link>
+                        <div className="text-[10px] font-normal mt-0.5">
+                          {GRADING_MODE_LABELS[a.gradingMode] ?? a.gradingMode}
+                        </div>
                       </th>
                     ))}
+                    <th className="text-center py-2 px-2 font-medium text-muted-foreground">Avg</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {students.slice(0, 15).map((student) => (
-                    <tr key={student.id} className="border-b border-border/50 hover:bg-muted/30">
-                      <td className="py-2 pr-4">
-                        <Link href={`/students/${student.id}`} className="text-[13px] font-medium hover:text-[#c24e3f]">
-                          {student.firstName} {student.lastName}
-                        </Link>
-                      </td>
-                      {publishedAssessments.slice(0, 6).map((asmt) => {
+                  {students.map((student) => {
+                    const studentPcts = publishedAssessments
+                      .map((asmt) => {
                         const grade = grades.find(
                           (g) => g.assessmentId === asmt.id && g.studentId === student.id
                         );
-                        return (
-                          <td key={asmt.id} className="text-center py-2 px-2">
-                            {grade ? (
-                              grade.isMissing ? (
-                                <span className="text-[#dc2626] text-[12px] font-medium">Missing</span>
-                              ) : grade.score != null ? (
-                                <span className="text-[12px]">{grade.score}%</span>
-                              ) : grade.dpGrade != null ? (
-                                <span className="text-[12px]">{grade.dpGrade}/7</span>
-                              ) : grade.mypCriteriaScores?.length ? (
-                                <span className="text-[12px]">
-                                  {Math.round(grade.mypCriteriaScores.reduce((s, c) => s + c.level, 0) / grade.mypCriteriaScores.length)}/8
-                                </span>
-                              ) : (
-                                <span className="text-muted-foreground text-[12px]">-</span>
-                              )
-                            ) : (
-                              <span className="text-muted-foreground text-[12px]">-</span>
-                            )}
-                          </td>
-                        );
-                      })}
-                    </tr>
-                  ))}
+                        return getGradePercentage(grade, asmt);
+                      })
+                      .filter((v): v is number => v !== null);
+                    const studentAvg = studentPcts.length > 0
+                      ? Math.round(studentPcts.reduce((s, v) => s + v, 0) / studentPcts.length)
+                      : null;
+
+                    return (
+                      <tr key={student.id} className="border-b border-border/50 hover:bg-muted/30">
+                        <td className="py-2 pr-4">
+                          <Link href={`/students/${student.id}?classId=${classId}`} className="text-[13px] font-medium hover:text-[#c24e3f]">
+                            {student.firstName} {student.lastName}
+                          </Link>
+                        </td>
+                        {publishedAssessments.map((asmt) => {
+                          const grade = grades.find(
+                            (g) => g.assessmentId === asmt.id && g.studentId === student.id
+                          );
+                          const display = getGradeCellDisplay(grade, asmt);
+                          return (
+                            <td key={asmt.id} className="text-center py-2 px-2">
+                              <span className={`text-[12px] font-medium ${
+                                grade?.isMissing
+                                  ? "text-[#dc2626]"
+                                  : grade
+                                    ? "text-foreground"
+                                    : "text-muted-foreground"
+                              }`}>
+                                {display}
+                              </span>
+                            </td>
+                          );
+                        })}
+                        <td className="text-center py-2 px-2">
+                          <span className={`text-[12px] font-semibold ${
+                            studentAvg !== null
+                              ? studentAvg >= 70
+                                ? "text-[#16a34a]"
+                                : studentAvg >= 50
+                                  ? "text-[#b45309]"
+                                  : "text-[#dc2626]"
+                              : "text-muted-foreground"
+                          }`}>
+                            {studentAvg !== null ? `${studentAvg}%` : "-"}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -282,7 +315,11 @@ export default function ClassHubPage() {
               {artifacts.slice(0, 12).map((artifact) => {
                 const student = students.find((s) => s.id === artifact.studentId);
                 return (
-                  <Card key={artifact.id} className="p-4 gap-0">
+                  <Card
+                    key={artifact.id}
+                    className="p-4 gap-0 hover:bg-muted/50 transition-colors cursor-pointer"
+                    onClick={() => setDetailArtifact(artifact)}
+                  >
                     <div className="flex items-start justify-between mb-2">
                       <p className="text-[14px] font-medium truncate flex-1">{artifact.title}</p>
                       <StatusBadge status={artifact.approvalStatus} />
@@ -357,6 +394,102 @@ export default function ClassHubPage() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* ── Portfolio artifact detail Sheet ── */}
+      <Sheet open={!!detailArtifact} onOpenChange={(open) => { if (!open) setDetailArtifact(null); }}>
+        <SheetContent className="w-full sm:max-w-[480px]">
+          {detailArtifact && (() => {
+            const artifactStudent = students.find((s) => s.id === detailArtifact.studentId);
+            return (
+              <>
+                <SheetHeader>
+                  <SheetTitle className="text-[16px]">{detailArtifact.title}</SheetTitle>
+                  <SheetDescription className="text-[13px]">
+                    {artifactStudent ? `${artifactStudent.firstName} ${artifactStudent.lastName}` : "Unknown"} &middot; {cls.name}
+                  </SheetDescription>
+                </SheetHeader>
+
+                <div className="space-y-5 mt-6">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <StatusBadge status={detailArtifact.approvalStatus} />
+                    <Badge variant="outline" className="text-[11px]">{detailArtifact.mediaType}</Badge>
+                    <StatusBadge status={detailArtifact.familyShareStatus} />
+                  </div>
+
+                  {detailArtifact.description && (
+                    <div>
+                      <h4 className="text-[12px] font-medium text-muted-foreground uppercase tracking-wide mb-1">Description</h4>
+                      <p className="text-[13px] text-foreground">{detailArtifact.description}</p>
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <h4 className="text-[12px] font-medium text-muted-foreground uppercase tracking-wide mb-0.5">Created</h4>
+                      <p className="text-[13px]">{format(parseISO(detailArtifact.createdAt), "MMM d, yyyy 'at' h:mm a")}</p>
+                    </div>
+                    <div>
+                      <h4 className="text-[12px] font-medium text-muted-foreground uppercase tracking-wide mb-0.5">Created by</h4>
+                      <p className="text-[13px] capitalize">{detailArtifact.createdBy}</p>
+                    </div>
+                  </div>
+
+                  {detailArtifact.learningGoalIds.length > 0 && (
+                    <div>
+                      <h4 className="text-[12px] font-medium text-muted-foreground uppercase tracking-wide mb-1.5">Learning goals</h4>
+                      <div className="flex flex-wrap gap-1.5">
+                        {detailArtifact.learningGoalIds.map((goalId) => {
+                          const goal = learningGoals.find((g) => g.id === goalId);
+                          return (
+                            <Badge key={goalId} variant="outline" className="text-[11px]">
+                              {goal?.title || goalId}
+                            </Badge>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  <Separator />
+
+                  {detailArtifact.reflection?.text && (
+                    <div>
+                      <h4 className="text-[12px] font-medium text-muted-foreground uppercase tracking-wide mb-1.5">Student reflection</h4>
+                      {detailArtifact.reflection.submittedAt && (
+                        <p className="text-[11px] text-muted-foreground mb-1.5">
+                          Submitted {format(parseISO(detailArtifact.reflection.submittedAt), "MMM d, yyyy")}
+                        </p>
+                      )}
+                      <p className="text-[13px] text-foreground bg-muted/50 rounded-lg p-3">
+                        {detailArtifact.reflection.text}
+                      </p>
+                    </div>
+                  )}
+
+                  {detailArtifact.reflection?.teacherComment && (
+                    <div>
+                      <h4 className="text-[12px] font-medium text-muted-foreground uppercase tracking-wide mb-1.5">Teacher comment</h4>
+                      <p className="text-[13px] text-foreground bg-muted/50 rounded-lg p-3">
+                        {detailArtifact.reflection.teacherComment}
+                      </p>
+                    </div>
+                  )}
+
+                  <Separator />
+
+                  <Link
+                    href={`/portfolio?studentId=${detailArtifact.studentId}&artifactId=${detailArtifact.id}`}
+                    className="flex items-center gap-2 text-[13px] font-medium text-[#c24e3f] hover:underline"
+                  >
+                    Open in Portfolio
+                    <ArrowRight className="h-3.5 w-3.5" />
+                  </Link>
+                </div>
+              </>
+            );
+          })()}
+        </SheetContent>
+      </Sheet>
 
       <IncidentDialog
         open={incidentDialogOpen}

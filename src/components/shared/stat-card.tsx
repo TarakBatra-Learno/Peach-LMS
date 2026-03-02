@@ -17,7 +17,7 @@ export function StatCard({ label, value, trend, icon: Icon, className }: StatCar
   return (
     <Card className={cn("p-4 gap-0", className)}>
       <div className="flex items-center justify-between mb-2">
-        <span className="text-[12px] font-medium text-muted-foreground uppercase tracking-wide">
+        <span className="text-[12px] font-medium text-muted-foreground tracking-wide">
           {label}
         </span>
         {Icon && (

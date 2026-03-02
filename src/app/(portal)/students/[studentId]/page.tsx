@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams, useRouter } from "next/navigation";
 import { useStore } from "@/stores";
 import { PageHeader } from "@/components/shared/page-header";
 import { StatusBadge } from "@/components/shared/status-badge";
@@ -13,6 +13,14 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card } from "@/components/ui/card";
+import { Separator } from "@/components/ui/separator";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetDescription,
+} from "@/components/ui/sheet";
 import { useMockLoading } from "@/lib/hooks/use-mock-loading";
 import { DetailSkeleton } from "@/components/shared/skeleton-loader";
 import {
@@ -27,13 +35,27 @@ import {
   Users,
   Mail,
   ExternalLink,
+  ArrowRight,
 } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import Link from "next/link";
 import { format, parseISO } from "date-fns";
+import type { PortfolioArtifact } from "@/types/portfolio";
+import type { GradeRecord } from "@/types/gradebook";
+import { getGradePercentage, getGradeCellDisplay } from "@/lib/grade-helpers";
 
 export default function StudentProfilePage() {
   const params = useParams();
+  const searchParams = useSearchParams();
+  const router = useRouter();
   const studentId = params.studentId as string;
+  const urlClassId = searchParams.get("classId");
   const loading = useMockLoading([studentId]);
 
   const getStudentById = useStore((s) => s.getStudentById);
@@ -55,7 +77,12 @@ export default function StudentProfilePage() {
   const incidents = getIncidentsByStudent(studentId);
   const supportPlans = getSupportPlansByStudent(studentId);
 
+  const learningGoals = useStore((s) => s.learningGoals);
+
   const [incidentDialogOpen, setIncidentDialogOpen] = useState(false);
+  const [detailArtifact, setDetailArtifact] = useState<PortfolioArtifact | null>(null);
+  const [detailGrade, setDetailGrade] = useState<GradeRecord | null>(null);
+  const [classFilter, setClassFilter] = useState<string | null>(urlClassId);
 
   if (loading) return <DetailSkeleton />;
   if (!student)
@@ -71,26 +98,42 @@ export default function StudentProfilePage() {
     student.classIds.includes(c.id)
   );
 
-  // Calculate stats
+  // Validate classFilter against the student's actual classes
+  const validClassFilter = classFilter && student.classIds.includes(classFilter) ? classFilter : null;
+
+  const handleClassFilterChange = (value: string) => {
+    const newClassId = value === "all" ? null : value;
+    setClassFilter(newClassId);
+    const newParams = new URLSearchParams(searchParams.toString());
+    if (newClassId) {
+      newParams.set("classId", newClassId);
+    } else {
+      newParams.delete("classId");
+    }
+    const qs = newParams.toString();
+    router.replace(`/students/${studentId}${qs ? `?${qs}` : ""}`, { scroll: false });
+  };
+
+  // Filtered data for class-scoped tabs
+  const filteredGrades = validClassFilter
+    ? studentGrades.filter((g) => g.classId === validClassFilter)
+    : studentGrades;
+  const filteredArtifacts = validClassFilter
+    ? artifacts.filter((a) => a.classId === validClassFilter)
+    : artifacts;
+  const filteredSessions = validClassFilter
+    ? sessions.filter((s) => s.classId === validClassFilter)
+    : sessions;
+
+  // Calculate stats (using filtered data)
   const avgGrade = (() => {
     const percentages: number[] = [];
-    studentGrades.forEach((g) => {
+    filteredGrades.forEach((g) => {
       if (g.isMissing) return;
       const asmt = assessments.find((a) => a.id === g.assessmentId);
       if (!asmt) return;
-      if (asmt.gradingMode === "score" && g.score != null && asmt.totalPoints) {
-        percentages.push((g.score / asmt.totalPoints) * 100);
-      } else if (asmt.gradingMode === "dp_scale" && g.dpGrade != null) {
-        percentages.push((g.dpGrade / 7) * 100);
-      } else if (asmt.gradingMode === "myp_criteria" && g.mypCriteriaScores?.length) {
-        const assessed = g.mypCriteriaScores.filter((c) => c.level > 0);
-        if (assessed.length > 0) {
-          const avg = assessed.reduce((s, c) => s + c.level, 0) / assessed.length;
-          percentages.push((avg / 8) * 100);
-        }
-      } else if (g.score != null) {
-        percentages.push(g.score);
-      }
+      const pct = getGradePercentage(g, asmt);
+      if (pct !== null) percentages.push(pct);
     });
     if (percentages.length === 0) return "N/A";
     const avg = percentages.reduce((a, b) => a + b, 0) / percentages.length;
@@ -100,7 +143,7 @@ export default function StudentProfilePage() {
   const attendanceRate = (() => {
     let present = 0;
     let total = 0;
-    sessions.forEach((s) => {
+    filteredSessions.forEach((s) => {
       const record = s.records.find((r) => r.studentId === studentId);
       if (record) {
         total++;
@@ -139,6 +182,23 @@ export default function StudentProfilePage() {
         </div>
       </PageHeader>
 
+      {studentClasses.length > 1 && (
+        <div className="flex items-center gap-2 mb-4">
+          <span className="text-[13px] text-muted-foreground">Viewing:</span>
+          <Select value={validClassFilter || "all"} onValueChange={handleClassFilterChange}>
+            <SelectTrigger className="w-[240px] h-8 text-[13px]">
+              <SelectValue placeholder="All classes" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All classes</SelectItem>
+              {studentClasses.map((cls) => (
+                <SelectItem key={cls.id} value={cls.id}>{cls.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+
       <Tabs defaultValue="overview" className="w-full">
         <TabsList className="mb-6">
           <TabsTrigger value="overview">Overview</TabsTrigger>
@@ -161,7 +221,7 @@ export default function StudentProfilePage() {
             />
             <StatCard
               label="Portfolio items"
-              value={artifacts.length}
+              value={filteredArtifacts.length}
               icon={FolderOpen}
             />
             <StatCard
@@ -221,7 +281,7 @@ export default function StudentProfilePage() {
 
         {/* ── Grades ── */}
         <TabsContent value="grades">
-          {studentGrades.length === 0 ? (
+          {filteredGrades.length === 0 ? (
             <EmptyState
               icon={ClipboardCheck}
               title="No grades yet"
@@ -230,7 +290,9 @@ export default function StudentProfilePage() {
           ) : (
             <Card className="p-5 gap-0">
               <p className="text-[13px] text-muted-foreground mb-4">
-                All grades for {student.firstName}
+                {validClassFilter
+                  ? `Grades in ${studentClasses.find((c) => c.id === validClassFilter)?.name ?? "class"}`
+                  : `All grades for ${student.firstName}`}
               </p>
               <div className="overflow-x-auto">
                 <table className="w-full text-[13px]">
@@ -239,9 +301,11 @@ export default function StudentProfilePage() {
                       <th className="text-left py-2 pr-4 font-medium text-muted-foreground">
                         Assessment
                       </th>
-                      <th className="text-left py-2 px-2 font-medium text-muted-foreground">
-                        Class
-                      </th>
+                      {!validClassFilter && (
+                        <th className="text-left py-2 px-2 font-medium text-muted-foreground">
+                          Class
+                        </th>
+                      )}
                       <th className="text-center py-2 px-2 font-medium text-muted-foreground">
                         Score
                       </th>
@@ -251,60 +315,43 @@ export default function StudentProfilePage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {studentGrades.map((grade) => {
+                    {filteredGrades.map((grade) => {
                       const asmt = assessments.find(
                         (a) => a.id === grade.assessmentId
                       );
                       const cls = classes.find(
                         (c) => c.id === grade.classId
                       );
+                      const display = asmt ? getGradeCellDisplay(grade, asmt) : "—";
                       return (
                         <tr
                           key={grade.id}
                           className="border-b border-border/50 hover:bg-muted/30"
                         >
                           <td className="py-2 pr-4">
-                            <Link
-                              href={`/assessments/${grade.assessmentId}`}
-                              className="text-[13px] font-medium hover:text-[#c24e3f]"
+                            <button
+                              onClick={() => setDetailGrade(grade)}
+                              className="text-[13px] font-medium hover:text-[#c24e3f] text-left"
                             >
                               {asmt?.title || "Unknown"}
-                            </Link>
+                            </button>
                           </td>
-                          <td className="py-2 px-2 text-muted-foreground">
-                            {cls?.name || "—"}
-                          </td>
+                          {!validClassFilter && (
+                            <td className="py-2 px-2 text-muted-foreground">
+                              {cls?.name || "—"}
+                            </td>
+                          )}
                           <td className="text-center py-2 px-2">
-                            {grade.isMissing ? (
-                              <span className="text-[#dc2626] font-medium">
-                                Missing
-                              </span>
-                            ) : grade.score != null ? (
-                              <span>{grade.score}%</span>
-                            ) : grade.dpGrade != null ? (
-                              <span>{grade.dpGrade}/7</span>
-                            ) : grade.mypCriteriaScores?.length ? (
-                              <span>
-                                {Math.round(
-                                  grade.mypCriteriaScores.reduce(
-                                    (s, c) => s + c.level,
-                                    0
-                                  ) / grade.mypCriteriaScores.length
-                                )}
-                                /8
-                              </span>
-                            ) : (
-                              <span className="text-muted-foreground">—</span>
-                            )}
+                            <span className={`font-medium ${grade.isMissing ? "text-[#dc2626]" : "text-foreground"}`}>
+                              {display}
+                            </span>
                           </td>
                           <td className="text-center py-2 px-2">
                             <StatusBadge
                               status={
                                 grade.isMissing
                                   ? "missing"
-                                  : grade.score != null ||
-                                    grade.dpGrade != null ||
-                                    grade.mypCriteriaScores?.length
+                                  : display !== "-"
                                   ? "graded"
                                   : "pending"
                               }
@@ -322,7 +369,7 @@ export default function StudentProfilePage() {
 
         {/* ── Portfolio ── */}
         <TabsContent value="portfolio">
-          {artifacts.length === 0 ? (
+          {filteredArtifacts.length === 0 ? (
             <EmptyState
               icon={FolderOpen}
               title="No portfolio items"
@@ -330,9 +377,12 @@ export default function StudentProfilePage() {
             />
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {artifacts.map((artifact) => (
-                <Link key={artifact.id} href="/portfolio">
-                <Card className="p-4 gap-0 hover:bg-muted/50 transition-colors cursor-pointer">
+              {filteredArtifacts.map((artifact) => (
+                <Card
+                  key={artifact.id}
+                  className="p-4 gap-0 hover:bg-muted/50 transition-colors cursor-pointer"
+                  onClick={() => setDetailArtifact(artifact)}
+                >
                   <div className="flex items-start justify-between mb-2">
                     <p className="text-[14px] font-medium truncate flex-1">
                       {artifact.title}
@@ -360,7 +410,6 @@ export default function StudentProfilePage() {
                     </div>
                   )}
                 </Card>
-                </Link>
               ))}
             </div>
           )}
@@ -368,7 +417,7 @@ export default function StudentProfilePage() {
 
         {/* ── Attendance ── */}
         <TabsContent value="attendance">
-          {sessions.length === 0 ? (
+          {filteredSessions.length === 0 ? (
             <EmptyState
               icon={Clock}
               title="No attendance records"
@@ -382,7 +431,7 @@ export default function StudentProfilePage() {
                 </p>
               </div>
               <div className="space-y-1">
-                {sessions
+                {filteredSessions
                   .slice(-20)
                   .reverse()
                   .map((session) => {
@@ -578,6 +627,218 @@ export default function StudentProfilePage() {
         onOpenChange={setIncidentDialogOpen}
         studentId={studentId}
       />
+
+      {/* ── Portfolio artifact detail Sheet ── */}
+      <Sheet open={!!detailArtifact} onOpenChange={(open) => { if (!open) setDetailArtifact(null); }}>
+        <SheetContent className="w-full sm:max-w-[480px]">
+          {detailArtifact && (() => {
+            const cls = classes.find((c) => c.id === detailArtifact.classId);
+            return (
+              <>
+                <SheetHeader>
+                  <SheetTitle className="text-[16px]">{detailArtifact.title}</SheetTitle>
+                  <SheetDescription className="text-[13px]">
+                    {student.firstName} {student.lastName} &middot; {cls?.name || "Unknown class"}
+                  </SheetDescription>
+                </SheetHeader>
+
+                <div className="space-y-5 mt-6">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <StatusBadge status={detailArtifact.approvalStatus} />
+                    <Badge variant="outline" className="text-[11px]">{detailArtifact.mediaType}</Badge>
+                    <StatusBadge status={detailArtifact.familyShareStatus} />
+                  </div>
+
+                  {detailArtifact.description && (
+                    <div>
+                      <h4 className="text-[12px] font-medium text-muted-foreground uppercase tracking-wide mb-1">Description</h4>
+                      <p className="text-[13px] text-foreground">{detailArtifact.description}</p>
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <h4 className="text-[12px] font-medium text-muted-foreground uppercase tracking-wide mb-0.5">Created</h4>
+                      <p className="text-[13px]">{format(parseISO(detailArtifact.createdAt), "MMM d, yyyy 'at' h:mm a")}</p>
+                    </div>
+                    <div>
+                      <h4 className="text-[12px] font-medium text-muted-foreground uppercase tracking-wide mb-0.5">Created by</h4>
+                      <p className="text-[13px] capitalize">{detailArtifact.createdBy}</p>
+                    </div>
+                  </div>
+
+                  {detailArtifact.learningGoalIds.length > 0 && (
+                    <div>
+                      <h4 className="text-[12px] font-medium text-muted-foreground uppercase tracking-wide mb-1.5">Learning goals</h4>
+                      <div className="flex flex-wrap gap-1.5">
+                        {detailArtifact.learningGoalIds.map((goalId) => {
+                          const goal = learningGoals.find((g) => g.id === goalId);
+                          return (
+                            <Badge key={goalId} variant="outline" className="text-[11px]">
+                              {goal?.title || goalId}
+                            </Badge>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  <Separator />
+
+                  {detailArtifact.reflection?.text && (
+                    <div>
+                      <h4 className="text-[12px] font-medium text-muted-foreground uppercase tracking-wide mb-1.5">Student reflection</h4>
+                      {detailArtifact.reflection.submittedAt && (
+                        <p className="text-[11px] text-muted-foreground mb-1.5">
+                          Submitted {format(parseISO(detailArtifact.reflection.submittedAt), "MMM d, yyyy")}
+                        </p>
+                      )}
+                      <p className="text-[13px] text-foreground bg-muted/50 rounded-lg p-3">
+                        {detailArtifact.reflection.text}
+                      </p>
+                    </div>
+                  )}
+
+                  {detailArtifact.reflection?.teacherComment && (
+                    <div>
+                      <h4 className="text-[12px] font-medium text-muted-foreground uppercase tracking-wide mb-1.5">Teacher comment</h4>
+                      <p className="text-[13px] text-foreground bg-muted/50 rounded-lg p-3">
+                        {detailArtifact.reflection.teacherComment}
+                      </p>
+                    </div>
+                  )}
+
+                  <Separator />
+
+                  <Link
+                    href={`/portfolio?studentId=${studentId}&artifactId=${detailArtifact.id}`}
+                    className="flex items-center gap-2 text-[13px] font-medium text-[#c24e3f] hover:underline"
+                  >
+                    Open in Portfolio
+                    <ArrowRight className="h-3.5 w-3.5" />
+                  </Link>
+                </div>
+              </>
+            );
+          })()}
+        </SheetContent>
+      </Sheet>
+
+      {/* ── Assessment grade detail Sheet ── */}
+      <Sheet open={!!detailGrade} onOpenChange={(open) => { if (!open) setDetailGrade(null); }}>
+        <SheetContent className="w-full sm:max-w-[480px]">
+          {detailGrade && (() => {
+            const asmt = assessments.find((a) => a.id === detailGrade.assessmentId);
+            const cls = classes.find((c) => c.id === detailGrade.classId);
+            return (
+              <>
+                <SheetHeader>
+                  <SheetTitle className="text-[16px]">{asmt?.title || "Assessment"}</SheetTitle>
+                  <SheetDescription className="text-[13px]">
+                    {student.firstName} {student.lastName} &middot; {cls?.name || "Unknown class"}
+                  </SheetDescription>
+                </SheetHeader>
+
+                <div className="space-y-5 mt-6">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <StatusBadge
+                      status={
+                        detailGrade.isMissing
+                          ? "missing"
+                          : detailGrade.score != null || detailGrade.dpGrade != null || detailGrade.mypCriteriaScores?.length
+                          ? "graded"
+                          : "pending"
+                      }
+                    />
+                    {asmt && (
+                      <Badge variant="outline" className="text-[11px]">
+                        {asmt.gradingMode.replace("_", " ")}
+                      </Badge>
+                    )}
+                    {asmt && (
+                      <span className="text-[12px] text-muted-foreground">
+                        Due {format(parseISO(asmt.dueDate), "MMM d, yyyy")}
+                      </span>
+                    )}
+                  </div>
+
+                  <Separator />
+
+                  {detailGrade.isMissing ? (
+                    <div className="rounded-lg bg-[#fee2e2] p-4">
+                      <p className="text-[14px] font-semibold text-[#dc2626]">Missing</p>
+                      <p className="text-[12px] text-[#dc2626]/80">This assessment was not submitted.</p>
+                    </div>
+                  ) : (
+                    <div>
+                      <h4 className="text-[12px] font-medium text-muted-foreground uppercase tracking-wide mb-2">Grade</h4>
+                      {detailGrade.score != null && (
+                        <div className="rounded-lg bg-muted/50 p-4">
+                          <p className="text-[24px] font-bold">{detailGrade.score}%</p>
+                          {detailGrade.totalPoints != null && (
+                            <p className="text-[12px] text-muted-foreground">{detailGrade.score} / {detailGrade.totalPoints} points</p>
+                          )}
+                        </div>
+                      )}
+                      {detailGrade.dpGrade != null && (
+                        <div className="rounded-lg bg-muted/50 p-4">
+                          <p className="text-[24px] font-bold">{detailGrade.dpGrade}<span className="text-[14px] text-muted-foreground font-normal">/7</span></p>
+                        </div>
+                      )}
+                      {detailGrade.mypCriteriaScores && detailGrade.mypCriteriaScores.length > 0 && (
+                        <div className="space-y-2">
+                          {detailGrade.mypCriteriaScores.map((c) => (
+                            <div key={c.criterion} className="flex items-center justify-between rounded-lg bg-muted/50 px-4 py-2.5">
+                              <span className="text-[13px] font-medium">Criterion {c.criterion}</span>
+                              <span className="text-[14px] font-bold">{c.level}<span className="text-[12px] text-muted-foreground font-normal">/8</span></span>
+                            </div>
+                          ))}
+                          {(() => {
+                            const assessed = detailGrade.mypCriteriaScores.filter((c) => c.level > 0);
+                            if (assessed.length === 0) return null;
+                            const avg = assessed.reduce((s, c) => s + c.level, 0) / assessed.length;
+                            return (
+                              <div className="flex items-center justify-between pt-1">
+                                <span className="text-[12px] text-muted-foreground">Average</span>
+                                <span className="text-[13px] font-semibold">{avg.toFixed(1)}/8</span>
+                              </div>
+                            );
+                          })()}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {detailGrade.feedback && (
+                    <div>
+                      <h4 className="text-[12px] font-medium text-muted-foreground uppercase tracking-wide mb-1.5">Teacher feedback</h4>
+                      <p className="text-[13px] text-foreground bg-muted/50 rounded-lg p-3">
+                        {detailGrade.feedback}
+                      </p>
+                    </div>
+                  )}
+
+                  {detailGrade.gradedAt && (
+                    <p className="text-[12px] text-muted-foreground">
+                      Graded {format(parseISO(detailGrade.gradedAt), "MMM d, yyyy 'at' h:mm a")}
+                    </p>
+                  )}
+
+                  <Separator />
+
+                  <Link
+                    href={`/assessments/${detailGrade.assessmentId}?studentId=${studentId}`}
+                    className="flex items-center gap-2 text-[13px] font-medium text-[#c24e3f] hover:underline"
+                  >
+                    Open in Assessments
+                    <ArrowRight className="h-3.5 w-3.5" />
+                  </Link>
+                </div>
+              </>
+            );
+          })()}
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }

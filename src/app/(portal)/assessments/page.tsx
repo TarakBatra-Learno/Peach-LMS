@@ -361,7 +361,7 @@ export default function AssessmentsPage() {
                     </span>
                   </div>
 
-                  <div className="flex items-center gap-1.5">
+                  <div className="flex items-center gap-1.5 mt-auto">
                     <Badge
                       variant="outline"
                       className="text-[11px] font-medium"

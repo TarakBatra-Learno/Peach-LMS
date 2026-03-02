@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo, useCallback } from "react";
+import Link from "next/link";
 import { useStore } from "@/stores";
 import { PageHeader } from "@/components/shared/page-header";
 import { StatusBadge } from "@/components/shared/status-badge";
@@ -62,11 +63,14 @@ import {
   XCircle,
   Trash2,
   Settings2,
+  ExternalLink,
 } from "lucide-react";
 import { format, parseISO, subDays, startOfWeek } from "date-fns";
 import { toast } from "sonner";
 import { generateId } from "@/services/mock-service";
 import type { Incident, SupportPlan } from "@/types/incident";
+import { ConfirmDialog } from "@/components/shared/confirm-dialog";
+import { Checkbox } from "@/components/ui/checkbox";
 
 export default function SupportPage() {
   const loading = useMockLoading();
@@ -119,6 +123,9 @@ export default function SupportPage() {
   const [followUpTime, setFollowUpTime] = useState("09:00");
 
   // Share with counselor — now persisted on Incident via store
+
+  // Escalation confirm
+  const [escalateConfirmOpen, setEscalateConfirmOpen] = useState(false);
 
   // Taxonomy editor
   const [taxonomyDialogOpen, setTaxonomyDialogOpen] = useState(false);
@@ -338,6 +345,10 @@ export default function SupportPage() {
   };
 
   const handleEscalateIncident = () => {
+    setEscalateConfirmOpen(true);
+  };
+
+  const confirmEscalateIncident = () => {
     if (!selectedIncident) return;
     updateIncident(selectedIncident.id, {
       severity: "high",
@@ -382,7 +393,7 @@ export default function SupportPage() {
         title="Student Support"
         description="Manage incidents, support plans, and student wellbeing"
         primaryAction={{
-          label: "Log Incident",
+          label: "Log incident",
           onClick: () => setLogDialogOpen(true),
           icon: Plus,
         }}
@@ -485,7 +496,7 @@ export default function SupportPage() {
               title="No incidents"
               description="No incidents match your current filters."
               action={{
-                label: "Log Incident",
+                label: "Log incident",
                 onClick: () => setLogDialogOpen(true),
               }}
             />
@@ -641,7 +652,7 @@ export default function SupportPage() {
         <TabsContent value="analytics">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
             <StatCard
-              label="Total Incidents"
+              label="Total incidents"
               value={analytics.total}
               icon={Shield}
             />
@@ -656,7 +667,7 @@ export default function SupportPage() {
               icon={CheckCircle2}
             />
             <StatCard
-              label="High Severity"
+              label="High severity"
               value={analytics.bySeverity.high}
               icon={AlertTriangle}
             />
@@ -665,7 +676,7 @@ export default function SupportPage() {
           {/* Incidents over time trend chart */}
           {analytics.trendData.length > 0 && (
             <Card className="p-5 gap-0 mb-6">
-              <h3 className="text-[16px] font-semibold mb-4">Incidents Over Time</h3>
+              <h3 className="text-[16px] font-semibold mb-4">Incidents over time</h3>
               <div className="h-[250px]">
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart data={analytics.trendData}>
@@ -690,7 +701,7 @@ export default function SupportPage() {
           {/* Severity breakdown */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <Card className="p-5 gap-0">
-              <h3 className="text-[16px] font-semibold mb-4">By Severity</h3>
+              <h3 className="text-[16px] font-semibold mb-4">By severity</h3>
               <div className="space-y-3">
                 {(["low", "medium", "high"] as const).map((sev) => {
                   const count = analytics.bySeverity[sev];
@@ -728,7 +739,7 @@ export default function SupportPage() {
             </Card>
 
             <Card className="p-5 gap-0">
-              <h3 className="text-[16px] font-semibold mb-4">By Category</h3>
+              <h3 className="text-[16px] font-semibold mb-4">By category</h3>
               {Object.keys(analytics.byCategory).length === 0 ? (
                 <p className="text-[13px] text-muted-foreground">
                   No category data available.
@@ -755,11 +766,11 @@ export default function SupportPage() {
         </TabsContent>
       </Tabs>
 
-      {/* ── Log Incident Dialog ── */}
+      {/* ── Log incident Dialog ── */}
       <Dialog open={logDialogOpen} onOpenChange={setLogDialogOpen}>
         <DialogContent className="sm:max-w-[520px]">
           <DialogHeader>
-            <DialogTitle>Log Incident</DialogTitle>
+            <DialogTitle>Log incident</DialogTitle>
             <DialogDescription>
               Record a new student incident
             </DialogDescription>
@@ -912,14 +923,14 @@ export default function SupportPage() {
             <Button variant="outline" onClick={() => setLogDialogOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={handleLogIncident}>Log Incident</Button>
+            <Button onClick={handleLogIncident}>Log incident</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
       {/* ── Incident Detail Sheet ── */}
       <Sheet open={incidentSheetOpen} onOpenChange={setIncidentSheetOpen}>
-        <SheetContent className="w-full sm:max-w-lg overflow-y-auto">
+        <SheetContent className="w-full sm:max-w-lg">
           <SheetHeader>
             <SheetTitle>{selectedIncident?.title || "Incident"}</SheetTitle>
             <SheetDescription>
@@ -1058,12 +1069,16 @@ export default function SupportPage() {
                             "MMM d, yyyy 'at' h:mm a"
                           )}
                           {fu.linkedCalendarEventId && (
-                            <span className="ml-2 inline-flex items-center gap-0.5">
+                            <Link
+                              href="/operations/calendar"
+                              className="ml-2 inline-flex items-center gap-0.5 text-[#2563eb] hover:underline"
+                            >
                               <Calendar className="h-3 w-3" />
                               {(fu as { scheduledDate?: string }).scheduledDate
                                 ? `Meeting: ${format(parseISO((fu as { scheduledDate?: string }).scheduledDate!), "MMM d, yyyy 'at' h:mm a")}`
                                 : "Calendar event linked"}
-                            </span>
+                              <ExternalLink className="h-2.5 w-2.5" />
+                            </Link>
                           )}
                         </p>
                       </div>
@@ -1080,11 +1095,9 @@ export default function SupportPage() {
                     className="min-h-[60px] text-[13px]"
                   />
                   <label className="flex items-center gap-2 text-[12px] text-muted-foreground cursor-pointer">
-                    <input
-                      type="checkbox"
+                    <Checkbox
                       checked={followUpCalendar}
-                      onChange={(e) => setFollowUpCalendar(e.target.checked)}
-                      className="rounded border-border"
+                      onCheckedChange={(checked) => setFollowUpCalendar(checked === true)}
                     />
                     <Calendar className="h-3.5 w-3.5" />
                     Schedule follow-up meeting
@@ -1236,7 +1249,7 @@ export default function SupportPage() {
 
       {/* ── Support Plan Edit Sheet ── */}
       <Sheet open={planSheetOpen} onOpenChange={setPlanSheetOpen}>
-        <SheetContent className="w-full sm:max-w-lg overflow-y-auto">
+        <SheetContent className="w-full sm:max-w-lg">
           <SheetHeader>
             <SheetTitle>{selectedPlan?.title || "Support Plan"}</SheetTitle>
             <SheetDescription>
@@ -1415,6 +1428,17 @@ export default function SupportPage() {
           )}
         </SheetContent>
       </Sheet>
+
+      {/* Confirm escalation */}
+      <ConfirmDialog
+        open={escalateConfirmOpen}
+        onOpenChange={setEscalateConfirmOpen}
+        title="Escalate incident?"
+        description="This will raise the severity to high and notify relevant staff. This action is difficult to reverse."
+        confirmLabel="Escalate"
+        onConfirm={confirmEscalateIncident}
+        destructive
+      />
     </div>
   );
 }

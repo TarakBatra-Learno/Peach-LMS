@@ -99,7 +99,7 @@ export default function ReportCycleDetailPage() {
 
       {/* Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        <StatCard label="Total Reports" value={totalReports} icon={FileText} />
+        <StatCard label="Total reports" value={totalReports} icon={FileText} />
         <StatCard label="Drafts" value={drafts} icon={ClipboardCheck} />
         <StatCard label="Published" value={published} icon={Eye} />
         <StatCard label="Distributed" value={distributed} icon={Send} />

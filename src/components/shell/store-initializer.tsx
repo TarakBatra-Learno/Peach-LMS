@@ -20,6 +20,16 @@ export function StoreInitializer({ children }: { children: React.ReactNode }) {
       resetAllData(seed);
     }
 
+    // Auto-detect current term from report cycle dates
+    const reportCycles = useStore.getState().reportCycles;
+    const today = new Date().toISOString().slice(0, 10);
+    const currentCycle = reportCycles.find(
+      (rc) => rc.startDate <= today && today <= rc.endDate
+    );
+    if (currentCycle) {
+      useStore.getState().setActiveTerm(currentCycle.term);
+    }
+
     setReady(true);
   }, [hasHydrated, classes.length, resetAllData]);
 

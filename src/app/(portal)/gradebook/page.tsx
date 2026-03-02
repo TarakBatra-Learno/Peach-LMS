@@ -67,89 +67,13 @@ import type { GradeRecord } from "@/types/gradebook";
 import type { Assessment } from "@/types/assessment";
 import type { LearningGoal } from "@/types/assessment";
 import type { Student } from "@/types/student";
-
-const GRADING_MODE_LABELS: Record<string, string> = {
-  score: "Score",
-  rubric: "Rubric",
-  standards: "Standards",
-  myp_criteria: "MYP Criteria",
-  dp_scale: "DP Scale (1-7)",
-};
+import {
+  GRADING_MODE_LABELS,
+  getGradeCellDisplay,
+  getGradePercentage,
+} from "@/lib/grade-helpers";
 
 const MYP_CRITERIA_LABELS = ["A", "B", "C", "D"] as const;
-
-function getGradeCellDisplay(
-  grade: GradeRecord | undefined,
-  assessment: Assessment
-): string {
-  if (!grade) return "-";
-  if (grade.isMissing) return "M";
-  if (assessment.gradingMode === "score") {
-    if (grade.score != null && assessment.totalPoints)
-      return `${grade.score}/${assessment.totalPoints}`;
-    if (grade.score != null) return `${grade.score}`;
-    return "-";
-  }
-  if (assessment.gradingMode === "dp_scale") {
-    return grade.dpGrade != null ? `${grade.dpGrade}` : "-";
-  }
-  if (assessment.gradingMode === "myp_criteria") {
-    if (grade.mypCriteriaScores?.length) {
-      const assessed = grade.mypCriteriaScores.filter((c) => c.level > 0);
-      if (assessed.length === 0) return "N/A";
-      const avg = assessed.reduce((s, c) => s + c.level, 0) / assessed.length;
-      return `${avg.toFixed(1)}`;
-    }
-    return "-";
-  }
-  if (assessment.gradingMode === "rubric") {
-    if (grade.rubricScores?.length) {
-      const total = grade.rubricScores.reduce((s, r) => s + r.points, 0);
-      return `${total}`;
-    }
-    return "-";
-  }
-  if (assessment.gradingMode === "standards") {
-    if (grade.standardsMastery?.length) {
-      return "✓";
-    }
-    return "-";
-  }
-  return "-";
-}
-
-function getGradePercentage(
-  grade: GradeRecord | undefined,
-  assessment: Assessment
-): number | null {
-  if (!grade || grade.isMissing) return null;
-  if (
-    assessment.gradingMode === "score" &&
-    grade.score != null &&
-    assessment.totalPoints
-  ) {
-    return Math.round((grade.score / assessment.totalPoints) * 100);
-  }
-  if (assessment.gradingMode === "dp_scale" && grade.dpGrade != null) {
-    return Math.round((grade.dpGrade / 7) * 100);
-  }
-  if (
-    assessment.gradingMode === "myp_criteria" &&
-    grade.mypCriteriaScores?.length
-  ) {
-    const assessed = grade.mypCriteriaScores.filter((c) => c.level > 0);
-    if (assessed.length === 0) return null;
-    const avg = assessed.reduce((s, c) => s + c.level, 0) / assessed.length;
-    return Math.round((avg / 8) * 100);
-  }
-  if (assessment.gradingMode === "rubric" && grade.rubricScores?.length) {
-    const total = grade.rubricScores.reduce((s, r) => s + r.points, 0);
-    const maxTotal = (assessment.rubricCriteria || []).reduce((s, c) => s + c.maxScore, 0);
-    if (maxTotal === 0) return null;
-    return Math.round((total / maxTotal) * 100);
-  }
-  return null;
-}
 
 export default function GradebookPage() {
   const loading = useMockLoading();
@@ -562,7 +486,7 @@ export default function GradebookPage() {
               description="This class has no published assessments to show in the gradebook."
             />
           ) : (
-            <Card className="p-0 gap-0 overflow-hidden">
+            <Card className="p-0 gap-0">
               <div className="overflow-x-auto">
                 <Table>
                   <TableHeader>
@@ -578,7 +502,7 @@ export default function GradebookPage() {
                           <Link
                             href={`/assessments/${asmt.id}`}
                             className="hover:text-[#c24e3f] transition-colors"
-                            title={asmt.title}
+                            title={`${asmt.title}\nDue: ${asmt.dueDate ? format(parseISO(asmt.dueDate), "MMM d, yyyy") : "No date"}\nMode: ${GRADING_MODE_LABELS[asmt.gradingMode]}`}
                           >
                             {asmt.title.length > 14
                               ? `${asmt.title.slice(0, 14)}...`
@@ -624,7 +548,7 @@ export default function GradebookPage() {
                                 {student.lastName[0]}
                               </div>
                               <Link
-                                href={`/students/${student.id}`}
+                                href={`/students/${student.id}?classId=${selectedClassId}`}
                                 className="text-[13px] font-medium hover:text-[#c24e3f] transition-colors"
                               >
                                 {student.firstName} {student.lastName}
@@ -738,7 +662,7 @@ export default function GradebookPage() {
                 </div>
               )}
 
-              <Card className="p-0 gap-0 overflow-hidden">
+              <Card className="p-0 gap-0">
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -837,7 +761,7 @@ export default function GradebookPage() {
                 description="No published assessments in this class are linked to learning goals."
               />
             ) : (
-              <Card className="p-0 gap-0 overflow-hidden">
+              <Card className="p-0 gap-0">
                 <div className="overflow-x-auto">
                   <Table>
                     <TableHeader>
@@ -851,7 +775,7 @@ export default function GradebookPage() {
                             className="text-[12px] font-medium text-center min-w-[100px]"
                           >
                             <Link
-                              href={`/students/${student.id}`}
+                              href={`/students/${student.id}?classId=${selectedClassId}`}
                               className="hover:text-[#c24e3f] transition-colors"
                             >
                               {student.firstName} {student.lastName.charAt(0)}.
@@ -1302,7 +1226,7 @@ export default function GradebookPage() {
 
       {/* Grading Sheet (shared across tabs) */}
       <Sheet open={gradingOpen} onOpenChange={setGradingOpen}>
-        <SheetContent className="w-[420px] sm:max-w-[420px] overflow-y-auto">
+        <SheetContent className="w-[420px] sm:max-w-[420px]">
           <SheetHeader>
             <SheetTitle className="text-[16px]">
               Grade: {gradingStudentObj?.firstName}{" "}

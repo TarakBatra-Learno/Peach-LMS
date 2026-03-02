@@ -48,7 +48,7 @@ export default function ClassesPage() {
 
             return (
               <Link key={cls.id} href={`/classes/${cls.id}`}>
-                <Card className="p-5 gap-0 hover:shadow-[0_1px_2px_rgba(16,24,40,0.06)] hover:border-border/80 transition-all cursor-pointer">
+                <Card className="p-5 gap-0 h-full hover:shadow-[0_1px_2px_rgba(16,24,40,0.06)] hover:border-border/80 transition-all cursor-pointer">
                   <div className="flex items-start justify-between mb-3">
                     <div>
                       <h3 className="text-[16px] font-semibold">{cls.name}</h3>

@@ -922,6 +922,7 @@ export function generateSeedData() {
         endTime: new Date(slotDate.getFullYear(), slotDate.getMonth(), slotDate.getDate(), eh, em).toISOString(),
         isAllDay: false,
         recurrence: "weekly",
+        room: slot.room,
       });
     }
   }

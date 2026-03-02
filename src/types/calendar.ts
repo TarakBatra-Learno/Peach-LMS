@@ -17,5 +17,6 @@ export interface CalendarEvent {
   linkedIncidentId?: ID;
   rsvpStatus?: RsvpStatus;
   recurrence?: "none" | "weekly";
+  room?: string;
   attendees?: string[];
 }

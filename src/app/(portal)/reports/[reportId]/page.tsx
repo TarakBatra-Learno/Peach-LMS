@@ -52,6 +52,8 @@ import {
 import { format, parseISO } from "date-fns";
 import { toast } from "sonner";
 import { generateId } from "@/services/mock-service";
+import { ConfirmDialog } from "@/components/shared/confirm-dialog";
+import Link from "next/link";
 
 // ---------- constants ----------
 
@@ -107,6 +109,8 @@ export default function ReportDetailPage() {
   const [scheduleDialogOpen, setScheduleDialogOpen] = useState(false);
   const [scheduledDate, setScheduledDate] = useState("");
   const [scheduledPublishAt, setScheduledPublishAt] = useState<string | null>(null);
+  const [removeSectionConfirmOpen, setRemoveSectionConfirmOpen] = useState(false);
+  const [sectionToRemove, setSectionToRemove] = useState<string | null>(null);
 
   const report = reports.find((r) => r.id === reportId);
 
@@ -203,11 +207,18 @@ export default function ReportDetailPage() {
   };
 
   const handleRemoveSection = (configId: string) => {
+    setSectionToRemove(configId);
+    setRemoveSectionConfirmOpen(true);
+  };
+
+  const confirmRemoveSection = () => {
+    if (!sectionToRemove) return;
     const updatedSections = report.sections.filter(
-      (s) => s.configId !== configId
+      (s) => s.configId !== sectionToRemove
     );
     updateReport(reportId, { sections: updatedSections });
     toast.success("Section removed");
+    setSectionToRemove(null);
   };
 
   const handleAddSection = (type: (typeof ADDABLE_SECTION_TYPES)[number]) => {
@@ -304,10 +315,11 @@ export default function ReportDetailPage() {
     });
 
     updateReport(reportId, { sections: updatedSections });
-    if (anySkipped) {
-      toast("Some sections already have content. Only empty sections were filled.");
-    }
-    toast.success("Auto-fill complete");
+    toast.success("Auto-fill complete", {
+      description: anySkipped
+        ? "Some sections already had content and were skipped."
+        : undefined,
+    });
   };
 
   // -------- Evidence Picker handler (A6) --------
@@ -484,7 +496,9 @@ export default function ReportDetailPage() {
       }
     }
 
-    toast.success("Report distributed to family");
+    toast.success("Report distributed", {
+      description: `Shared with ${studentName}'s family via the family portal.`,
+    });
   };
 
   const handleSchedulePublish = () => {
@@ -647,7 +661,12 @@ export default function ReportDetailPage() {
                     className="border-b border-border/50"
                   >
                     <td className="py-2 pr-4 text-[13px]">
-                      {getAssessmentName(grade.assessmentId)}
+                      <Link
+                        href={`/assessments/${grade.assessmentId}`}
+                        className="text-[#c24e3f] hover:underline"
+                      >
+                        {getAssessmentName(grade.assessmentId)}
+                      </Link>
                     </td>
                     <td className="text-center py-2 px-2">
                       {grade.isMissing ? (
@@ -890,6 +909,13 @@ export default function ReportDetailPage() {
         ]}
       >
         <div className="flex items-center gap-2 mt-2">
+          <Link
+            href={`/students/${report.studentId}?classId=${report.classId}`}
+            className="text-[13px] text-[#c24e3f] hover:underline"
+          >
+            View student profile →
+          </Link>
+          <Separator orientation="vertical" className="h-4" />
           <StatusBadge status={report.publishState} />
           {template && (
             <Badge variant="outline" className="text-[11px]">
@@ -1436,6 +1462,17 @@ export default function ReportDetailPage() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Confirm section removal */}
+      <ConfirmDialog
+        open={removeSectionConfirmOpen}
+        onOpenChange={setRemoveSectionConfirmOpen}
+        title="Remove section?"
+        description="This section and its content will be permanently removed from the report. This action cannot be undone."
+        confirmLabel="Remove"
+        onConfirm={confirmRemoveSection}
+        destructive
+      />
     </div>
   );
 }

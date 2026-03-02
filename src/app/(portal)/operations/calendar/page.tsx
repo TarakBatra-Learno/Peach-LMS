@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
+import Link from "next/link";
 import { useStore } from "@/stores";
 import { cn } from "@/lib/utils";
 import { OperationsTabs } from "@/components/shared/operations-tabs";
@@ -57,6 +58,7 @@ import {
   addWeeks,
   subWeeks,
 } from "date-fns";
+import { expandEventsForRange, type ExpandedCalendarEvent } from "@/lib/calendar-utils";
 import {
   CalendarPlus,
   ChevronLeft,
@@ -75,6 +77,8 @@ import {
   XCircle,
   List,
   CalendarDays,
+  Shield,
+  ExternalLink,
 } from "lucide-react";
 import type { CalendarEvent, RsvpStatus } from "@/types/calendar";
 
@@ -150,6 +154,7 @@ export default function CalendarPage() {
   const updateCalendarEvent = useStore((s) => s.updateCalendarEvent);
   const deleteCalendarEvent = useStore((s) => s.deleteCalendarEvent);
   const getClassById = useStore((s) => s.getClassById);
+  const incidents = useStore((s) => s.incidents);
 
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
@@ -163,6 +168,7 @@ export default function CalendarPage() {
   const [eventToDelete, setEventToDelete] = useState<string | null>(null);
   const [calView, setCalView] = useState<"month" | "week">("month");
   const [currentWeekStart, setCurrentWeekStart] = useState(() => startOfWeek(new Date()));
+  const [typeFilter, setTypeFilter] = useState<CalendarEvent["type"] | "all">("all");
 
   // Build calendar grid
   const calendarDays = useMemo(() => {
@@ -173,19 +179,36 @@ export default function CalendarPage() {
     return eachDayOfInterval({ start: calStart, end: calEnd });
   }, [currentMonth]);
 
-  // Group events by date
+  // Visible date range for expansion (covers both month and week views)
+  const visibleRange = useMemo(() => {
+    const monthStart = startOfMonth(currentMonth);
+    const monthEnd = endOfMonth(currentMonth);
+    const monthCalStart = startOfWeek(monthStart);
+    const monthCalEnd = endOfWeek(monthEnd);
+    const weekEnd = endOfWeek(currentWeekStart);
+    // Use the broadest range that covers both views
+    const rangeStart = monthCalStart < currentWeekStart ? monthCalStart : currentWeekStart;
+    const rangeEnd = monthCalEnd > weekEnd ? monthCalEnd : weekEnd;
+    return { start: rangeStart, end: rangeEnd };
+  }, [currentMonth, currentWeekStart]);
+
+  // Group events by date (with type filter + recurrence expansion)
   const eventsByDate = useMemo(() => {
-    const map: Record<string, CalendarEvent[]> = {};
-    calendarEvents.forEach((evt) => {
-      const dateKey = format(parseISO(evt.startTime), "yyyy-MM-dd");
+    const filtered = typeFilter === "all"
+      ? calendarEvents
+      : calendarEvents.filter((evt) => evt.type === typeFilter);
+    const expanded = expandEventsForRange(filtered, visibleRange.start, visibleRange.end);
+    const map: Record<string, ExpandedCalendarEvent[]> = {};
+    expanded.forEach((evt) => {
+      const dateKey = evt.materializedDate;
       if (!map[dateKey]) map[dateKey] = [];
       map[dateKey].push(evt);
     });
     return map;
-  }, [calendarEvents]);
+  }, [calendarEvents, typeFilter, visibleRange]);
 
   // Events for selected date
-  const selectedDateEvents = useMemo(() => {
+  const selectedDateEvents = useMemo((): ExpandedCalendarEvent[] => {
     if (!selectedDate) return [];
     const dateKey = format(selectedDate, "yyyy-MM-dd");
     return (eventsByDate[dateKey] || []).sort((a, b) =>
@@ -400,6 +423,37 @@ export default function CalendarPage() {
         </div>
       </div>
 
+      {/* Type filter chips */}
+      <div className="flex items-center gap-1.5 mb-4 flex-wrap">
+        <button
+          type="button"
+          onClick={() => setTypeFilter("all")}
+          className={cn(
+            "px-2.5 py-1 rounded-full text-[11px] font-medium transition-all border",
+            typeFilter === "all"
+              ? "bg-foreground text-background border-foreground"
+              : "bg-background text-muted-foreground border-border hover:bg-muted"
+          )}
+        >
+          All
+        </button>
+        {EVENT_TYPES.map((t) => (
+          <button
+            type="button"
+            key={t.value}
+            onClick={() => setTypeFilter(t.value as CalendarEvent["type"])}
+            className={cn(
+              "px-2.5 py-1 rounded-full text-[11px] font-medium transition-all border",
+              typeFilter === t.value
+                ? cn("border-transparent", EVENT_TYPE_COLORS[t.value as CalendarEvent["type"]])
+                : "bg-background text-muted-foreground border-border hover:bg-muted"
+            )}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
       {/* Month view */}
       {calView === "month" && (<>
       <Card className="p-0 gap-0 overflow-hidden mb-6">
@@ -447,9 +501,9 @@ export default function CalendarPage() {
                 </span>
                 {dayEvents.length > 0 && (
                   <div className="mt-0.5 flex flex-wrap gap-0.5">
-                    {dayEvents.slice(0, 3).map((evt) => (
+                    {dayEvents.slice(0, 3).map((evt, evtIdx) => (
                       <div
-                        key={evt.id}
+                        key={`${evt.id}-${evtIdx}`}
                         className={cn(
                           "h-1.5 w-1.5 rounded-full shrink-0",
                           EVENT_TYPE_DOT_COLORS[evt.type]
@@ -490,7 +544,7 @@ export default function CalendarPage() {
             </Card>
           ) : (
             <div className="space-y-2">
-              {selectedDateEvents.map((evt) => {
+              {selectedDateEvents.map((evt, evtIdx) => {
                 const cls = evt.classId ? getClassById(evt.classId) : undefined;
                 const linkedAssessment = evt.linkedAssessmentId
                   ? assessments.find((a) => a.id === evt.linkedAssessmentId)
@@ -500,7 +554,7 @@ export default function CalendarPage() {
                   : undefined;
                 return (
                   <Card
-                    key={evt.id}
+                    key={`${evt.id}-${evtIdx}`}
                     className="p-4 gap-0 cursor-pointer hover:shadow-[0_1px_2px_rgba(16,24,40,0.06)] hover:border-border/80 transition-all"
                     onClick={() => openEventSheet(evt)}
                   >
@@ -531,6 +585,15 @@ export default function CalendarPage() {
                               {linkedCycle.name}
                             </Badge>
                           )}
+                          {evt.linkedIncidentId && (() => {
+                            const inc = incidents.find((i) => i.id === evt.linkedIncidentId);
+                            return inc ? (
+                              <Badge variant="outline" className="text-[11px] shrink-0 bg-[#fee2e2] text-[#dc2626] border-transparent">
+                                <Shield className="h-3 w-3 mr-1" />
+                                Incident
+                              </Badge>
+                            ) : null;
+                          })()}
                         </div>
                         <div className="flex items-center gap-3 text-[12px] text-muted-foreground">
                           {evt.isAllDay ? (
@@ -618,11 +681,11 @@ export default function CalendarPage() {
                   <p className="text-[12px] text-muted-foreground ml-9 mb-2">No events</p>
                 ) : (
                   <div className="space-y-1.5 ml-9 mb-2">
-                    {dayEvts.map((evt) => {
+                    {dayEvts.map((evt, evtIdx) => {
                       const cls = evt.classId ? getClassById(evt.classId) : undefined;
                       return (
                         <Card
-                          key={evt.id}
+                          key={`${evt.id}-${evtIdx}`}
                           className="p-3 gap-0 cursor-pointer hover:shadow-sm transition-all"
                           onClick={() => openEventSheet(evt)}
                         >
@@ -641,7 +704,7 @@ export default function CalendarPage() {
                                 EVENT_TYPE_COLORS[evt.type]
                               )}
                             >
-                              {evt.type.replace("_", " ")}
+                              {EVENT_TYPES.find((t) => t.value === evt.type)?.label || evt.type}
                             </Badge>
                             {evt.isAllDay ? (
                               <span className="text-[11px] text-muted-foreground">All day</span>
@@ -656,6 +719,15 @@ export default function CalendarPage() {
                                 {cls.name}
                               </span>
                             )}
+                            {evt.linkedIncidentId && (() => {
+                              const inc = incidents.find((i) => i.id === evt.linkedIncidentId);
+                              return inc ? (
+                                <span className="text-[11px] text-[#dc2626] flex items-center gap-1">
+                                  <Shield className="h-3 w-3" />
+                                  Incident linked
+                                </span>
+                              ) : null;
+                            })()}
                           </div>
                         </Card>
                       );
@@ -968,6 +1040,21 @@ export default function CalendarPage() {
                       <div className="flex items-center gap-3 text-[13px]">
                         <Megaphone className="h-4 w-4 text-muted-foreground shrink-0" />
                         <span>Report cycle: {rc.name}</span>
+                      </div>
+                    ) : null;
+                  })()}
+                  {selectedEvent.linkedIncidentId && (() => {
+                    const inc = incidents.find((x) => x.id === selectedEvent.linkedIncidentId);
+                    return inc ? (
+                      <div className="flex items-center gap-3 text-[13px]">
+                        <Shield className="h-4 w-4 text-muted-foreground shrink-0" />
+                        <Link
+                          href="/support"
+                          className="text-[#2563eb] hover:underline inline-flex items-center gap-1"
+                        >
+                          Incident: {inc.title}
+                          <ExternalLink className="h-3 w-3" />
+                        </Link>
                       </div>
                     ) : null;
                   })()}

@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useMemo } from "react";
-import { useParams } from "next/navigation";
+import { useState, useMemo, useEffect, useRef } from "react";
+import { useParams, useSearchParams } from "next/navigation";
 import { useStore } from "@/stores";
 import { PageHeader } from "@/components/shared/page-header";
 import { StatusBadge } from "@/components/shared/status-badge";
@@ -100,6 +100,8 @@ function getGradeDisplay(grade: GradeRecord): string {
 
 export default function AssessmentDetailPage() {
   const params = useParams();
+  const searchParams = useSearchParams();
+  const urlStudentId = searchParams.get("studentId");
   const assessmentId = params.assessmentId as string;
   const loading = useMockLoading([assessmentId]);
 
@@ -258,6 +260,18 @@ export default function AssessmentDetailPage() {
     setGradingOpen(true);
   };
 
+  // Auto-open grading sheet when arriving from a student profile link
+  const autoOpenedRef = useRef(false);
+  useEffect(() => {
+    if (urlStudentId && assessment && students.length > 0 && !autoOpenedRef.current) {
+      const student = students.find((s) => s.id === urlStudentId);
+      if (student) {
+        autoOpenedRef.current = true;
+        openGradingSheet(student);
+      }
+    }
+  }, [urlStudentId, assessment?.id, students.length]);
+
   const handleSaveGrade = () => {
     if (!assessment || !gradingStudent) return;
 
@@ -364,7 +378,9 @@ export default function AssessmentDetailPage() {
       distributedAt: now,
       linkedAnnouncementId: announcementId,
     });
-    toast.success("Assessment published and announcement sent");
+    toast.success("Assessment published", {
+      description: `Announcement sent to ${cls?.name || "class channel"}.${assessment.dueDate ? ` Due: ${format(parseISO(assessment.dueDate), "MMM d, yyyy")}.` : ""}`,
+    });
   };
 
   const handleArchive = () => {
@@ -442,7 +458,7 @@ export default function AssessmentDetailPage() {
         </div>
       </PageHeader>
 
-      <Tabs defaultValue="details" className="w-full">
+      <Tabs defaultValue={urlStudentId ? "students" : "details"} className="w-full">
         <TabsList className="mb-6">
           <TabsTrigger value="details">Details</TabsTrigger>
           <TabsTrigger value="students">
@@ -674,7 +690,7 @@ export default function AssessmentDetailPage() {
                               {student.lastName[0]}
                             </div>
                             <Link
-                              href={`/students/${student.id}`}
+                              href={`/students/${student.id}?classId=${assessment.classId}`}
                               className="text-[13px] font-medium hover:text-[#c24e3f] transition-colors"
                             >
                               {student.firstName} {student.lastName}
@@ -927,7 +943,7 @@ export default function AssessmentDetailPage() {
 
       {/* Grading Sheet */}
       <Sheet open={gradingOpen} onOpenChange={setGradingOpen}>
-        <SheetContent className="w-[420px] sm:max-w-[420px] overflow-y-auto">
+        <SheetContent className="w-[420px] sm:max-w-[420px]">
           <SheetHeader>
             <SheetTitle className="text-[16px]">
               Grade: {gradingStudent?.firstName} {gradingStudent?.lastName}

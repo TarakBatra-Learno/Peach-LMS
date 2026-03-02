@@ -12,6 +12,7 @@ import { EmptyState } from "@/components/shared/empty-state";
 import { useMockLoading } from "@/lib/hooks/use-mock-loading";
 import { CardGridSkeleton } from "@/components/shared/skeleton-loader";
 import { generateId } from "@/services/mock-service";
+import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -92,6 +93,8 @@ export default function AttendancePage() {
   const [records, setRecords] = useState<Record<string, AttendanceStatus>>({});
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [isDirty, setIsDirty] = useState(false);
+  const [discardConfirmOpen, setDiscardConfirmOpen] = useState(false);
+  const [pendingClassId, setPendingClassId] = useState<string | null>(null);
 
   const classStudents = useMemo(() => {
     if (!selectedClassId) return [];
@@ -99,11 +102,7 @@ export default function AttendancePage() {
   }, [selectedClassId, getStudentsByClassId]);
 
   // Initialize records when class changes
-  const handleClassChange = (classId: string) => {
-    if (isDirty) {
-      const confirmed = window.confirm("You have unsaved attendance changes. Discard them?");
-      if (!confirmed) return;
-    }
+  const applyClassChange = (classId: string) => {
     setSelectedClassId(classId);
     const studs = getStudentsByClassId(classId);
     const defaultRecords: Record<string, AttendanceStatus> = {};
@@ -113,6 +112,15 @@ export default function AttendancePage() {
     setRecords(defaultRecords);
     setNotes({});
     setIsDirty(false);
+  };
+
+  const handleClassChange = (classId: string) => {
+    if (isDirty) {
+      setPendingClassId(classId);
+      setDiscardConfirmOpen(true);
+      return;
+    }
+    applyClassChange(classId);
   };
 
   // Sync with global class switcher
@@ -169,11 +177,13 @@ export default function AttendancePage() {
     const late = allRecords.filter((r) => r.status === "late").length;
     const rate = total > 0 ? Math.round(((present + late) / total) * 100) : 0;
     const uniqueClasses = new Set(attendanceSessions.map((s) => s.classId)).size;
+    const uniqueStudents = new Set(allRecords.map((r) => r.studentId)).size;
 
     return {
       rate,
       totalSessions: attendanceSessions.length,
       classesTracked: uniqueClasses,
+      totalStudents: uniqueStudents,
       totalRecords: total,
       presentCount: present,
       absentCount: allRecords.filter((r) => r.status === "absent").length,
@@ -493,7 +503,7 @@ export default function AttendancePage() {
                                 return (
                                   <p key={r.studentId} className="text-[11px] text-muted-foreground italic">
                                     <Link
-                                      href={`/students/${r.studentId}`}
+                                      href={`/students/${r.studentId}?classId=${session.classId}`}
                                       className="text-[#c24e3f] hover:underline not-italic font-medium"
                                     >
                                       {stu ? `${stu.firstName} ${stu.lastName}` : "Student"}
@@ -529,9 +539,9 @@ export default function AttendancePage() {
         </TabsContent>
 
         <TabsContent value="analytics" className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <StatCard
-              label="Attendance Rate"
+              label="Attendance rate"
               value={`${analytics.rate}%`}
               icon={BarChart3}
               trend={
@@ -543,13 +553,18 @@ export default function AttendancePage() {
               }
             />
             <StatCard
-              label="Total Sessions"
+              label="Total sessions"
               value={analytics.totalSessions}
               icon={ClipboardCheck}
             />
             <StatCard
-              label="Classes Tracked"
+              label="Classes tracked"
               value={analytics.classesTracked}
+              icon={Users}
+            />
+            <StatCard
+              label="Students tracked"
+              value={analytics.totalStudents ?? 0}
               icon={Users}
             />
           </div>
@@ -790,6 +805,21 @@ export default function AttendancePage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ConfirmDialog
+        open={discardConfirmOpen}
+        onOpenChange={setDiscardConfirmOpen}
+        title="Discard unsaved changes?"
+        description="You have unsaved attendance changes. Switching classes will discard them."
+        confirmLabel="Discard"
+        onConfirm={() => {
+          if (pendingClassId) {
+            applyClassChange(pendingClassId);
+            setPendingClassId(null);
+          }
+        }}
+        destructive
+      />
     </div>
   );
 }
