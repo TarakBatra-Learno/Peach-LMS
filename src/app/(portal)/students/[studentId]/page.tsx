@@ -14,6 +14,8 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
+import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Sheet,
   SheetContent,
@@ -36,6 +38,8 @@ import {
   Mail,
   ExternalLink,
   ArrowRight,
+  CheckCircle2,
+  MessageCircle,
 } from "lucide-react";
 import {
   Select,
@@ -45,7 +49,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import Link from "next/link";
+import { toast } from "sonner";
 import { format, parseISO } from "date-fns";
+import { generateId } from "@/services/mock-service";
 import type { PortfolioArtifact } from "@/types/portfolio";
 import type { GradeRecord } from "@/types/gradebook";
 import { getGradePercentage, getGradeCellDisplay } from "@/lib/grade-helpers";
@@ -68,6 +74,9 @@ export default function StudentProfilePage() {
   const reportCycles = useStore((s) => s.reportCycles);
   const getIncidentsByStudent = useStore((s) => s.getIncidentsByStudent);
   const getSupportPlansByStudent = useStore((s) => s.getSupportPlansByStudent);
+  const updateArtifact = useStore((s) => s.updateArtifact);
+  const updateStudent = useStore((s) => s.updateStudent);
+  const students = useStore((s) => s.students);
 
   const student = getStudentById(studentId);
   const studentGrades = getGradesByStudent(studentId);
@@ -79,10 +88,15 @@ export default function StudentProfilePage() {
 
   const learningGoals = useStore((s) => s.learningGoals);
 
+  const urlTab = searchParams.get("tab");
+  const [activeTab, setActiveTab] = useState(urlTab || "overview");
+
   const [incidentDialogOpen, setIncidentDialogOpen] = useState(false);
   const [detailArtifact, setDetailArtifact] = useState<PortfolioArtifact | null>(null);
   const [detailGrade, setDetailGrade] = useState<GradeRecord | null>(null);
   const [classFilter, setClassFilter] = useState<string | null>(urlClassId);
+  const [teacherComment, setTeacherComment] = useState("");
+  const [studentReflectionText, setStudentReflectionText] = useState("");
 
   if (loading) return <DetailSkeleton />;
   if (!student)
@@ -157,6 +171,100 @@ export default function StudentProfilePage() {
     (i) => i.status === "open" || i.status === "in_progress"
   ).length;
 
+  // Portfolio action handlers
+  const openArtifactDetail = (artifact: PortfolioArtifact) => {
+    setDetailArtifact(artifact);
+    setTeacherComment(artifact.reflection?.teacherComment || "");
+    setStudentReflectionText(artifact.reflection?.text || "");
+  };
+
+  const handleApprove = (id: string) => {
+    updateArtifact(id, { approvalStatus: "approved", updatedAt: new Date().toISOString() });
+    toast.success("Artifact approved");
+    if (detailArtifact?.id === id) {
+      setDetailArtifact({ ...detailArtifact, approvalStatus: "approved" });
+    }
+  };
+
+  const handleRequestRevision = (id: string) => {
+    updateArtifact(id, { approvalStatus: "needs_revision", familyShareStatus: "not_shared", updatedAt: new Date().toISOString() });
+    toast.info("Revision requested — family share revoked");
+    if (detailArtifact?.id === id) {
+      setDetailArtifact({ ...detailArtifact, approvalStatus: "needs_revision", familyShareStatus: "not_shared" });
+    }
+  };
+
+  const handleSaveTeacherComment = () => {
+    if (!detailArtifact || !teacherComment.trim()) return;
+    const now = new Date().toISOString();
+    updateArtifact(detailArtifact.id, {
+      reflection: {
+        ...(detailArtifact.reflection || { text: "", submittedAt: now }),
+        teacherComment: teacherComment.trim(),
+        teacherCommentAt: now,
+      },
+      updatedAt: now,
+    });
+    toast.success("Comment saved");
+  };
+
+  const handleSaveStudentReflection = () => {
+    if (!detailArtifact) return;
+    const now = new Date().toISOString();
+    updateArtifact(detailArtifact.id, {
+      reflection: {
+        text: studentReflectionText.trim(),
+        submittedAt: detailArtifact.reflection?.submittedAt || now,
+        teacherComment: detailArtifact.reflection?.teacherComment,
+        teacherCommentAt: detailArtifact.reflection?.teacherCommentAt,
+      },
+      updatedAt: now,
+    });
+    setDetailArtifact({
+      ...detailArtifact,
+      reflection: {
+        text: studentReflectionText.trim(),
+        submittedAt: detailArtifact.reflection?.submittedAt || now,
+        teacherComment: detailArtifact.reflection?.teacherComment,
+        teacherCommentAt: detailArtifact.reflection?.teacherCommentAt,
+      },
+    });
+    toast.success("Student reflection saved");
+  };
+
+  const handleToggleFamilyShare = (checked: boolean) => {
+    if (!detailArtifact) return;
+    const now = new Date().toISOString();
+    const status = checked ? "shared" : "not_shared";
+    updateArtifact(detailArtifact.id, { familyShareStatus: status, updatedAt: now });
+    setDetailArtifact({ ...detailArtifact, familyShareStatus: status });
+
+    if (checked) {
+      const stu = students.find((s) => s.id === detailArtifact.studentId);
+      if (stu) {
+        const record = {
+          id: generateId("fsr"),
+          type: "portfolio" as const,
+          referenceId: detailArtifact.id,
+          sharedAt: now,
+          status: "shared" as const,
+        };
+        updateStudent(stu.id, {
+          familyShareHistory: [...(stu.familyShareHistory || []), record],
+        });
+      }
+    }
+
+    toast.success(checked ? "Shared with family" : "Family sharing removed");
+  };
+
+  const handleToggleReportEligible = (checked: boolean) => {
+    if (!detailArtifact) return;
+    updateArtifact(detailArtifact.id, { isReportEligible: checked, updatedAt: new Date().toISOString() });
+    setDetailArtifact({ ...detailArtifact, isReportEligible: checked });
+    toast.success(checked ? "Added to report" : "Removed from report");
+  };
+
   return (
     <div>
       <div className="flex items-center gap-3 mb-2">
@@ -199,7 +307,7 @@ export default function StudentProfilePage() {
         </div>
       )}
 
-      <Tabs defaultValue="overview" className="w-full">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
         <TabsList className="mb-6">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="grades">Grades</TabsTrigger>
@@ -381,7 +489,7 @@ export default function StudentProfilePage() {
                 <Card
                   key={artifact.id}
                   className="p-4 gap-0 hover:bg-muted/50 transition-colors cursor-pointer"
-                  onClick={() => setDetailArtifact(artifact)}
+                  onClick={() => openArtifactDetail(artifact)}
                 >
                   <div className="flex items-start justify-between mb-2">
                     <p className="text-[14px] font-medium truncate flex-1">
@@ -685,26 +793,107 @@ export default function StudentProfilePage() {
 
                   <Separator />
 
-                  {detailArtifact.reflection?.text && (
-                    <div>
-                      <h4 className="text-[12px] font-medium text-muted-foreground uppercase tracking-wide mb-1.5">Student reflection</h4>
-                      {detailArtifact.reflection.submittedAt && (
-                        <p className="text-[11px] text-muted-foreground mb-1.5">
-                          Submitted {format(parseISO(detailArtifact.reflection.submittedAt), "MMM d, yyyy")}
-                        </p>
-                      )}
-                      <p className="text-[13px] text-foreground bg-muted/50 rounded-lg p-3">
-                        {detailArtifact.reflection.text}
+                  {/* Student reflection (editable) */}
+                  <div>
+                    <div className="flex items-center gap-1.5 mb-1.5">
+                      <MessageCircle className="h-3.5 w-3.5 text-muted-foreground" />
+                      <h4 className="text-[12px] font-medium text-muted-foreground uppercase tracking-wide">Student reflection</h4>
+                    </div>
+                    {detailArtifact.reflection?.text && detailArtifact.reflection.submittedAt && (
+                      <p className="text-[11px] text-muted-foreground mb-1.5">
+                        Submitted {format(parseISO(detailArtifact.reflection.submittedAt), "MMM d, yyyy")}
                       </p>
+                    )}
+                    <Textarea
+                      value={studentReflectionText}
+                      onChange={(e) => setStudentReflectionText(e.target.value)}
+                      placeholder="Add or edit student reflection..."
+                      className="text-[13px] min-h-[70px]"
+                    />
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="mt-2 h-7 text-[12px]"
+                      onClick={handleSaveStudentReflection}
+                      disabled={!studentReflectionText.trim()}
+                    >
+                      Save reflection
+                    </Button>
+                  </div>
+
+                  {/* Teacher comment (editable) */}
+                  <div>
+                    <h4 className="text-[12px] font-medium text-muted-foreground uppercase tracking-wide mb-1.5">Teacher comment</h4>
+                    <Textarea
+                      value={teacherComment}
+                      onChange={(e) => setTeacherComment(e.target.value)}
+                      placeholder="Add your feedback for this artifact..."
+                      className="text-[13px] min-h-[80px]"
+                    />
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="mt-2 h-7 text-[12px]"
+                      onClick={handleSaveTeacherComment}
+                      disabled={!teacherComment.trim()}
+                    >
+                      Save comment
+                    </Button>
+                  </div>
+
+                  <Separator />
+
+                  {/* Toggles */}
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-[13px] font-medium">Share with family</p>
+                        <p className="text-[12px] text-muted-foreground">Make this artifact visible to parents</p>
+                      </div>
+                      <Switch
+                        checked={detailArtifact.familyShareStatus !== "not_shared"}
+                        onCheckedChange={handleToggleFamilyShare}
+                      />
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-[13px] font-medium">Add to report</p>
+                        <p className="text-[12px] text-muted-foreground">Include as evidence in student report</p>
+                      </div>
+                      <Switch
+                        checked={detailArtifact.isReportEligible}
+                        onCheckedChange={handleToggleReportEligible}
+                      />
+                    </div>
+                  </div>
+
+                  <Separator />
+
+                  {/* Approval actions */}
+                  {detailArtifact.approvalStatus === "pending" && (
+                    <div className="flex items-center gap-2">
+                      <Button size="sm" onClick={() => handleApprove(detailArtifact.id)}>
+                        <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" />
+                        Approve
+                      </Button>
+                      <Button size="sm" variant="outline" onClick={() => handleRequestRevision(detailArtifact.id)}>
+                        Request revision
+                      </Button>
                     </div>
                   )}
-
-                  {detailArtifact.reflection?.teacherComment && (
-                    <div>
-                      <h4 className="text-[12px] font-medium text-muted-foreground uppercase tracking-wide mb-1.5">Teacher comment</h4>
-                      <p className="text-[13px] text-foreground bg-muted/50 rounded-lg p-3">
-                        {detailArtifact.reflection.teacherComment}
-                      </p>
+                  {detailArtifact.approvalStatus !== "pending" && (
+                    <div className="flex items-center gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          updateArtifact(detailArtifact.id, { approvalStatus: "pending", familyShareStatus: "not_shared", updatedAt: new Date().toISOString() });
+                          setDetailArtifact({ ...detailArtifact, approvalStatus: "pending", familyShareStatus: "not_shared" });
+                          toast.info("Status reset to pending — family share revoked");
+                        }}
+                      >
+                        Reset to pending
+                      </Button>
                     </div>
                   )}
 

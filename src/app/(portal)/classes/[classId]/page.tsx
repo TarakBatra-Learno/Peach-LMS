@@ -360,7 +360,10 @@ export default function ClassHubPage() {
                       <StatusBadge status={artifact.approvalStatus} />
                     </div>
                     <p className="text-[12px] text-muted-foreground mb-2">
-                      {student?.firstName} {student?.lastName} · {artifact.mediaType}
+                      <Link href={`/students/${artifact.studentId}?classId=${classId}`} className="text-[#c24e3f] hover:underline" onClick={(e) => e.stopPropagation()}>
+                        {student?.firstName} {student?.lastName}
+                      </Link>
+                      {" "}· {artifact.mediaType}
                     </p>
                     <p className="text-[12px] text-muted-foreground truncate">{artifact.description}</p>
                   </Card>
@@ -549,7 +552,10 @@ export default function ClassHubPage() {
                 <SheetHeader>
                   <SheetTitle className="text-[16px]">{detailArtifact.title}</SheetTitle>
                   <SheetDescription className="text-[13px]">
-                    {artifactStudent ? `${artifactStudent.firstName} ${artifactStudent.lastName}` : "Unknown"} &middot; {cls.name}
+                    <Link href={`/students/${detailArtifact.studentId}?classId=${classId}`} className="text-[#c24e3f] hover:underline">
+                      {artifactStudent ? `${artifactStudent.firstName} ${artifactStudent.lastName}` : "Unknown"}
+                    </Link>
+                    {" "}&middot; {cls.name}
                   </SheetDescription>
                 </SheetHeader>
 

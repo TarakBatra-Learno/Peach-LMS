@@ -29,11 +29,13 @@ import {
   CalendarDays,
 } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { format, isToday, parseISO, isBefore, addDays, getDay } from "date-fns";
 import { PERIODS } from "@/lib/timetable-constants";
 import { expandEventsForDate, getPeriodStatus, matchEventToPeriod } from "@/lib/calendar-utils";
 
 export default function DashboardPage() {
+  const router = useRouter();
   const loading = useMockLoading();
   const assessments = useStore((s) => s.assessments);
   const grades = useStore((s) => s.grades);
@@ -462,13 +464,17 @@ export default function DashboardPage() {
           ) : (
             <div className="space-y-2">
               {openIncidents.slice(0, 5).map((incident) => (
-                <Link key={incident.id} href="/support" className="flex items-center gap-3 py-2 border-b border-border/50 last:border-0 hover:bg-muted/50 -mx-2 px-2 rounded-lg transition-colors">
+                <div key={incident.id} onClick={() => router.push("/support")} className="flex items-center gap-3 py-2 border-b border-border/50 last:border-0 hover:bg-muted/50 -mx-2 px-2 rounded-lg transition-colors cursor-pointer">
                   <div className="flex-1 min-w-0">
                     <p className="text-[13px] font-medium truncate">{incident.title}</p>
-                    <p className="text-[12px] text-muted-foreground">{getStudentName(incident.studentId)}</p>
+                    <p className="text-[12px] text-muted-foreground">
+                      <Link href={`/students/${incident.studentId}`} className="text-[#c24e3f] hover:underline" onClick={(e) => e.stopPropagation()}>
+                        {getStudentName(incident.studentId)}
+                      </Link>
+                    </p>
                   </div>
                   <StatusBadge status={incident.status} />
-                </Link>
+                </div>
               ))}
             </div>
           )}
@@ -496,13 +502,17 @@ export default function DashboardPage() {
                 .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
                 .slice(0, 5)
                 .map((artifact) => (
-                  <Link key={artifact.id} href="/portfolio" className="flex items-center gap-3 py-2 border-b border-border/50 last:border-0 hover:bg-muted/50 -mx-2 px-2 rounded-lg transition-colors">
+                  <div key={artifact.id} onClick={() => router.push("/portfolio")} className="flex items-center gap-3 py-2 border-b border-border/50 last:border-0 hover:bg-muted/50 -mx-2 px-2 rounded-lg transition-colors cursor-pointer">
                     <div className="flex-1 min-w-0">
                       <p className="text-[13px] font-medium truncate">{artifact.title}</p>
-                      <p className="text-[12px] text-muted-foreground">{getStudentName(artifact.studentId)}</p>
+                      <p className="text-[12px] text-muted-foreground">
+                        <Link href={`/students/${artifact.studentId}`} className="text-[#c24e3f] hover:underline" onClick={(e) => e.stopPropagation()}>
+                          {getStudentName(artifact.studentId)}
+                        </Link>
+                      </p>
                     </div>
                     <StatusBadge status={artifact.approvalStatus} />
-                  </Link>
+                  </div>
                 ))}
             </div>
           )}

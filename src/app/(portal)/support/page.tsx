@@ -519,9 +519,11 @@ export default function SupportPage() {
                           {incident.title}
                         </p>
                         <p className="text-[12px] text-muted-foreground">
-                          {student
-                            ? `${student.firstName} ${student.lastName}`
-                            : "Unknown"}
+                          <Link href={`/students/${incident.studentId}`} className="text-[#c24e3f] hover:underline" onClick={(e) => e.stopPropagation()}>
+                            {student
+                              ? `${student.firstName} ${student.lastName}`
+                              : "Unknown"}
+                          </Link>
                           {earlyWarningStudents.has(incident.studentId) && (
                             <Badge variant="destructive" className="ml-2 text-[10px] px-1.5 py-0">
                               ⚠ Early warning
@@ -596,9 +598,11 @@ export default function SupportPage() {
                           {plan.title}
                         </p>
                         <p className="text-[12px] text-muted-foreground">
-                          {student
-                            ? `${student.firstName} ${student.lastName}`
-                            : "Unknown"}
+                          <Link href={`/students/${plan.studentId}`} className="text-[#c24e3f] hover:underline">
+                            {student
+                              ? `${student.firstName} ${student.lastName}`
+                              : "Unknown"}
+                          </Link>
                         </p>
                       </div>
                       <StatusBadge status={plan.status} />
@@ -970,9 +974,11 @@ export default function SupportPage() {
                   <p className="text-[13px] font-medium">
                     {(() => {
                       const s = getStudentById(selectedIncident.studentId);
-                      return s
-                        ? `${s.firstName} ${s.lastName}`
-                        : "Unknown";
+                      return (
+                        <Link href={`/students/${selectedIncident.studentId}`} className="text-[#c24e3f] hover:underline">
+                          {s ? `${s.firstName} ${s.lastName}` : "Unknown"}
+                        </Link>
+                      );
                     })()}
                   </p>
                 </div>
@@ -1272,9 +1278,11 @@ export default function SupportPage() {
                 <p className="text-[13px] font-medium">
                   {(() => {
                     const s = getStudentById(selectedPlan.studentId);
-                    return s
-                      ? `${s.firstName} ${s.lastName}`
-                      : "Unknown";
+                    return (
+                      <Link href={`/students/${selectedPlan.studentId}`} className="text-[#c24e3f] hover:underline">
+                        {s ? `${s.firstName} ${s.lastName}` : "Unknown"}
+                      </Link>
+                    );
                   })()}
                 </p>
               </div>

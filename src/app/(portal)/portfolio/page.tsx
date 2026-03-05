@@ -58,7 +58,9 @@ import {
   Share2,
   History,
   MessageCircle,
+  ArrowRight,
 } from "lucide-react";
+import NextLink from "next/link";
 import type { PortfolioArtifact } from "@/types/portfolio";
 
 const MEDIA_TYPE_OPTIONS = [
@@ -146,10 +148,16 @@ export default function PortfolioPage() {
     );
   };
 
-  // Stats
-  const pendingArtifacts = useMemo(() => getPendingArtifacts(), [artifacts]); // eslint-disable-line react-hooks/exhaustive-deps
-  const approvedCount = useMemo(() => artifacts.filter((a) => a.approvalStatus === "approved").length, [artifacts]);
-  const sharedCount = useMemo(() => artifacts.filter((a) => a.familyShareStatus === "shared" || a.familyShareStatus === "viewed").length, [artifacts]);
+  // Class-filtered artifacts for stats
+  const classFilteredArtifacts = useMemo(() => {
+    if (classFilter === "all") return artifacts;
+    return artifacts.filter((a) => a.classId === classFilter);
+  }, [artifacts, classFilter]);
+
+  // Stats (respect class filter)
+  const pendingArtifacts = useMemo(() => classFilteredArtifacts.filter((a) => a.approvalStatus === "pending"), [classFilteredArtifacts]);
+  const approvedCount = useMemo(() => classFilteredArtifacts.filter((a) => a.approvalStatus === "approved").length, [classFilteredArtifacts]);
+  const sharedCount = useMemo(() => classFilteredArtifacts.filter((a) => a.familyShareStatus === "shared" || a.familyShareStatus === "viewed").length, [classFilteredArtifacts]);
 
   // Filtered artifacts for "All" tab
   const filteredArtifacts = useMemo(() => {
@@ -389,7 +397,9 @@ export default function PortfolioPage() {
             </div>
             <div className="min-w-0 flex-1">
               <h3 className="text-[13px] font-semibold truncate">{artifact.title}</h3>
-              <p className="text-[12px] text-muted-foreground truncate">{getStudentName(artifact.studentId)}</p>
+              <NextLink href={`/students/${artifact.studentId}`} className="text-[12px] text-[#c24e3f] hover:underline truncate block" onClick={(e) => e.stopPropagation()}>
+                {getStudentName(artifact.studentId)}
+              </NextLink>
             </div>
           </div>
           <StatusBadge status={artifact.approvalStatus} showIcon={false} />
@@ -462,7 +472,7 @@ export default function PortfolioPage() {
 
       {/* Stats row */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        <StatCard label="Total artifacts" value={artifacts.length} icon={FolderOpen} />
+        <StatCard label="Total artifacts" value={classFilteredArtifacts.length} icon={FolderOpen} />
         <StatCard
           label="Pending review"
           value={pendingArtifacts.length}
@@ -770,7 +780,10 @@ export default function PortfolioPage() {
               <SheetHeader>
                 <SheetTitle className="text-[16px]">{detailArtifact.title}</SheetTitle>
                 <SheetDescription className="text-[13px]">
-                  {getStudentName(detailArtifact.studentId)} &middot; {getClassName(detailArtifact.classId)}
+                  <NextLink href={`/students/${detailArtifact.studentId}`} className="text-[#c24e3f] hover:underline">
+                    {getStudentName(detailArtifact.studentId)}
+                  </NextLink>
+                  {" "}&middot; {getClassName(detailArtifact.classId)}
                 </SheetDescription>
               </SheetHeader>
 
@@ -821,6 +834,14 @@ export default function PortfolioPage() {
                     </div>
                   </div>
                 )}
+
+                <NextLink
+                  href={`/students/${detailArtifact.studentId}?tab=portfolio`}
+                  className="flex items-center gap-2 text-[13px] font-medium text-[#c24e3f] hover:underline"
+                >
+                  View student portfolio
+                  <ArrowRight className="h-3.5 w-3.5" />
+                </NextLink>
 
                 <Separator />
 
