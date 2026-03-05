@@ -1341,19 +1341,19 @@ export default function ReportDetailPage() {
         description={`${cls?.name || "Unknown Class"} \u00b7 ${cycle?.name || "Unknown Cycle"} \u00b7 ${cycle?.term || ""}`}
       >
         <div className="flex items-center gap-2 mt-2">
-          <Link
-            href={`/students/${report.studentId}?classId=${report.classId}`}
-            className="text-[13px] text-[#c24e3f] hover:underline"
-          >
-            View student profile →
-          </Link>
-          <Separator orientation="vertical" className="h-4" />
           <StatusBadge status={report.publishState} />
           {template && (
             <Badge variant="outline" className="text-[11px]">
               {template.name}
             </Badge>
           )}
+          <Separator orientation="vertical" className="h-4" />
+          <Link
+            href={`/students/${report.studentId}?classId=${report.classId}`}
+            className="text-[13px] text-[#c24e3f] hover:underline"
+          >
+            View student profile →
+          </Link>
           <div className="flex items-center gap-2 ml-auto">
             <Button
               variant="outline"
