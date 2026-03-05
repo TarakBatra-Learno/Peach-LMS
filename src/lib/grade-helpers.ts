@@ -1,6 +1,29 @@
 import type { GradeRecord } from "@/types/gradebook";
 import type { Assessment } from "@/types/assessment";
 
+// IB MYP boundary-grade table: criteria total (0-32) → boundary grade (1-7)
+const MYP_BOUNDARY_THRESHOLDS: [number, number][] = [
+  [28, 7],
+  [24, 6],
+  [19, 5],
+  [15, 4],
+  [10, 3],
+  [6, 2],
+  [1, 1],
+];
+
+/**
+ * Convert a MYP criteria total (out of 32) into a boundary grade (1–7).
+ * Returns null if total is 0 or negative.
+ */
+export function getMYPBoundaryGrade(criteriaTotal: number): number | null {
+  if (criteriaTotal <= 0) return null;
+  for (const [threshold, grade] of MYP_BOUNDARY_THRESHOLDS) {
+    if (criteriaTotal >= threshold) return grade;
+  }
+  return 1;
+}
+
 export const GRADING_MODE_LABELS: Record<string, string> = {
   score: "Score",
   rubric: "Rubric",

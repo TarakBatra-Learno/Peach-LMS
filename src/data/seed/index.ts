@@ -373,12 +373,67 @@ export function generateSeedData() {
   // -----------------------------------------------------------------------
   const mediaTypes: PortfolioArtifact["mediaType"][] = ["image", "video", "document", "audio", "link"];
   const approvalStatuses: PortfolioArtifact["approvalStatus"][] = ["approved", "approved", "approved", "pending", "needs_revision"];
-  const artifactTitles = [
-    "Lab experiment photo", "Essay draft", "Science poster", "Oral presentation recording",
-    "Research notes", "Creative writing piece", "Graph analysis screenshot", "Field trip reflection",
-    "Peer review document", "Personal project sketch", "Video explanation", "Annotated bibliography",
-    "Concept map", "Data visualization", "Class collaboration photo",
-  ];
+  const artifactTitlesBySubject: Record<string, string[]> = {
+    Sciences: [
+      "Lab experiment: pH of household liquids", "Ecosystem dynamics poster", "Data table: plant growth rates",
+      "Microscope observation photo", "Variables & hypothesis worksheet", "Science fair presentation recording",
+      "Graph: temperature vs solubility", "Field trip soil sample analysis", "Lab safety reflection video",
+      "Experimental design diagram",
+    ],
+    Homeroom: [
+      "Personal project progress log", "Community service reflection", "ATL self-assessment worksheet",
+      "Interdisciplinary unit sketch", "Goal-setting journal entry", "Peer collaboration evidence",
+      "Learning profile mind map", "Advisory group presentation", "Service-as-action photo",
+      "Learner profile reflection",
+    ],
+    English: [
+      "Comparative essay draft: Achebe & Conrad", "Oral commentary recording: poetry analysis",
+      "Annotated bibliography: global issues", "Creative writing: short story excerpt",
+      "Reading journal: Paper 1 practice", "Textual analysis markup", "Peer review feedback document",
+      "Research outline: Extended Essay", "Presentation slides: author study",
+      "Vocabulary & literary terms glossary",
+    ],
+  };
+  const artifactDescBySubject: Record<string, string[]> = {
+    Sciences: [
+      "Photograph of controlled experiment investigating acid-base reactions in the school lab.",
+      "Poster summarising findings on ecosystem food webs, including data from field observations.",
+      "Recorded data from a three-week plant growth investigation, including controlled variables.",
+      "Annotated microscope image showing cell structures labelled during the biology unit.",
+      "Completed hypothesis and variables identification sheet for the chemistry investigation.",
+    ],
+    Homeroom: [
+      "Log entry documenting progress on the MYP Personal Project, including supervisor feedback.",
+      "Written reflection on community-service hours completed during Term 2 service week.",
+      "Self-assessment of ATL communication and collaboration skills with evidence examples.",
+      "Concept sketch linking ideas from Sciences and English for the interdisciplinary unit.",
+      "Journal entry setting academic and personal goals for the remainder of the year.",
+    ],
+    English: [
+      "Draft comparative essay analysing narrative voice in Things Fall Apart and Heart of Darkness.",
+      "Audio recording of a timed oral commentary on Wilfred Owen's 'Dulce et Decorum Est'.",
+      "Annotated bibliography with six sources for the global-issues research essay.",
+      "Original short story exploring identity and belonging, revised after peer feedback.",
+      "Close-reading annotations on an unseen prose passage for Paper 1 practice.",
+    ],
+  };
+  const reflectionsBySubject: Record<string, string[]> = {
+    Sciences: [
+      "I learned how to control variables properly and realised my initial hypothesis was only partially supported by the data.",
+      "Creating the poster helped me synthesise information from multiple sources and present findings visually.",
+      "Recording data over three weeks taught me patience and the importance of consistent measurement technique.",
+    ],
+    Homeroom: [
+      "Reflecting on my service hours made me appreciate how small actions can impact the wider community.",
+      "The self-assessment helped me identify that I need to work on my organisation and time-management skills.",
+      "Setting clear goals gave me a better sense of direction for the rest of the school year.",
+    ],
+    English: [
+      "Comparing the two novels deepened my understanding of how narrative perspective shapes meaning.",
+      "Practising the oral commentary under timed conditions helped me structure my analysis more effectively.",
+      "The peer feedback on my creative writing pushed me to develop more nuanced characters.",
+    ],
+  };
 
   const artifacts: PortfolioArtifact[] = [];
   let artCount = 0;
@@ -398,14 +453,14 @@ export function generateSeedData() {
             id: artifactId(artCount),
             studentId: sIds[si],
             classId: cls.id,
-            title: `${artifactTitles[artCount % artifactTitles.length]} #${artCount}`,
-            description: `Student work sample demonstrating progress in ${cls.subject}.`,
+            title: (artifactTitlesBySubject[cls.subject] || artifactTitlesBySubject.Homeroom)[artCount % (artifactTitlesBySubject[cls.subject] || artifactTitlesBySubject.Homeroom).length],
+            description: (artifactDescBySubject[cls.subject] || artifactDescBySubject.Homeroom)[artCount % (artifactDescBySubject[cls.subject] || artifactDescBySubject.Homeroom).length],
             mediaType: mediaTypes[artCount % mediaTypes.length],
             mediaUrl: `https://storage.example.com/artifacts/${artifactId(artCount)}.${mediaTypes[artCount % mediaTypes.length] === "image" ? "jpg" : "pdf"}`,
             thumbnailUrl: artCount % 4 === 0 ? undefined : `https://storage.example.com/thumbs/${artifactId(artCount)}.jpg`,
             learningGoalIds: [learningGoals[(artCount - 1) % learningGoals.length].id],
             reflection: hasReflection ? {
-              text: "I learned a lot working on this piece. I improved my understanding of the topic and developed new skills.",
+              text: (reflectionsBySubject[cls.subject] || reflectionsBySubject.Homeroom)[artCount % (reflectionsBySubject[cls.subject] || reflectionsBySubject.Homeroom).length],
               submittedAt: isoTime(subDays(TODAY, daysAgo - 1)),
               teacherComment: approvalStatus === "approved" ? "Well done! Your reflection shows good self-awareness." : undefined,
               teacherCommentAt: approvalStatus === "approved" ? isoTime(subDays(TODAY, daysAgo - 2)) : undefined,
@@ -586,6 +641,7 @@ export function generateSeedData() {
         { id: "sec_hr_2", type: "learning_goals", label: "ATL Skills Progress", required: true, order: 2 },
         { id: "sec_hr_3", type: "portfolio", label: "Portfolio Highlights", required: false, order: 3 },
         { id: "sec_hr_4", type: "teacher_comment", label: "Homeroom Teacher Comment", required: true, order: 4 },
+        { id: "sec_hr_5", type: "behavior_incidents", label: "Student Wellbeing & Support", required: false, order: 5 },
       ],
     },
     {

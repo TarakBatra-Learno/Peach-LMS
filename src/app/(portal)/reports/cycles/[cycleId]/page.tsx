@@ -14,6 +14,13 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   FileText,
   Send,
   Eye,
@@ -40,9 +47,20 @@ export default function ReportCycleDetailPage() {
   const reportTemplates = useStore((s) => s.reportTemplates);
 
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [classFilter, setClassFilter] = useState<string>("all");
 
   const cycle = reportCycles.find((c) => c.id === cycleId);
   const cycleReports = getReportsByCycle(cycleId);
+
+  // Get unique classes in this cycle for the filter
+  const cycleClasses = cycle
+    ? cycle.classIds.map((cid) => getClassById(cid)).filter(Boolean)
+    : [];
+
+  // Filter reports by selected class
+  const filteredReports = classFilter === "all"
+    ? cycleReports
+    : cycleReports.filter((r) => r.classId === classFilter);
 
   if (loading) return <DetailSkeleton />;
   if (!cycle)
@@ -54,15 +72,38 @@ export default function ReportCycleDetailPage() {
       />
     );
 
-  // Stats
-  const totalReports = cycleReports.length;
-  const drafts = cycleReports.filter(
+  // Helper: compute completeness of a report
+  const getCompleteness = (report: typeof cycleReports[0]) => {
+    const total = report.sections.length;
+    if (total === 0) return 0;
+    const filled = report.sections.filter((s) => {
+      if (s.type === "teacher_comment") {
+        const text = (s.content?.comment as string) || (s.content?.text as string) || "";
+        return text.trim() !== "";
+      }
+      if (s.type === "attendance") return s.content?.present != null || s.content?.total != null;
+      if (s.type === "portfolio_evidence") return ((s.content?.artifactIds as string[]) || []).length > 0;
+      return s.content && Object.keys(s.content).length > 0;
+    }).length;
+    return Math.round((filled / total) * 100);
+  };
+
+  // Get teacher comment preview
+  const getCommentPreview = (report: typeof cycleReports[0]) => {
+    const commentSection = report.sections.find((s) => s.type === "teacher_comment");
+    const text = (commentSection?.content?.comment as string) || (commentSection?.content?.text as string) || "";
+    return text.length > 80 ? text.slice(0, 80) + "..." : text || "-";
+  };
+
+  // Stats (use filtered reports)
+  const totalReports = filteredReports.length;
+  const drafts = filteredReports.filter(
     (r) => r.publishState === "draft"
   ).length;
-  const published = cycleReports.filter(
+  const published = filteredReports.filter(
     (r) => r.publishState === "published" || r.publishState === "ready"
   ).length;
-  const distributed = cycleReports.filter(
+  const distributed = filteredReports.filter(
     (r) => r.publishState === "distributed"
   ).length;
 
@@ -105,8 +146,30 @@ export default function ReportCycleDetailPage() {
         <StatCard label="Distributed" value={distributed} icon={Send} />
       </div>
 
-      {/* Report list */}
-      {cycleReports.length === 0 ? (
+      {/* Class filter (#1 partial) */}
+      {cycleClasses.length > 1 && (
+        <div className="mb-4 flex items-center gap-3">
+          <span className="text-[13px] text-muted-foreground">Filter by class:</span>
+          <Select value={classFilter} onValueChange={setClassFilter}>
+            <SelectTrigger className="w-[260px] h-9 text-[13px]">
+              <SelectValue placeholder="All classes" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All classes ({cycleReports.length})</SelectItem>
+              {cycleClasses.map((cls) =>
+                cls ? (
+                  <SelectItem key={cls.id} value={cls.id}>
+                    {cls.name} ({cycleReports.filter((r) => r.classId === cls.id).length})
+                  </SelectItem>
+                ) : null
+              )}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+
+      {/* Report list with batch review (#12) */}
+      {filteredReports.length === 0 ? (
         <EmptyState
           icon={FileText}
           title="No reports"
@@ -114,9 +177,11 @@ export default function ReportCycleDetailPage() {
         />
       ) : (
         <Card className="p-5 gap-0">
-          <p className="text-[13px] text-muted-foreground mb-4">
-            Student reports in this cycle
-          </p>
+          <div className="flex items-center justify-between mb-4">
+            <p className="text-[13px] text-muted-foreground">
+              {totalReports} report{totalReports !== 1 ? "s" : ""} &middot; {drafts} draft{drafts !== 1 ? "s" : ""} &middot; {published} published &middot; {distributed} distributed
+            </p>
+          </div>
           <div className="overflow-x-auto">
             <table className="w-full text-[13px]">
               <thead>
@@ -127,21 +192,25 @@ export default function ReportCycleDetailPage() {
                   <th className="text-left py-2 px-2 font-medium text-muted-foreground">
                     Class
                   </th>
+                  <th className="text-center py-2 px-2 font-medium text-muted-foreground">
+                    Complete
+                  </th>
                   <th className="text-left py-2 px-2 font-medium text-muted-foreground">
-                    Template
+                    Comment preview
                   </th>
                   <th className="text-center py-2 px-2 font-medium text-muted-foreground">
                     Status
                   </th>
+                  <th className="text-right py-2 pl-2 font-medium text-muted-foreground">
+                    Action
+                  </th>
                 </tr>
               </thead>
               <tbody>
-                {cycleReports.map((report) => {
+                {filteredReports.map((report) => {
                   const student = getStudentById(report.studentId);
                   const cls = getClassById(report.classId);
-                  const template = reportTemplates.find(
-                    (t) => t.id === report.templateId
-                  );
+                  const completeness = getCompleteness(report);
                   return (
                     <tr
                       key={report.id}
@@ -158,13 +227,35 @@ export default function ReportCycleDetailPage() {
                         </Link>
                       </td>
                       <td className="py-2 px-2 text-muted-foreground">
-                        {cls?.name || "\u2014"}
+                        <Badge variant="outline" className="text-[11px]">
+                          {cls?.name || "\u2014"}
+                        </Badge>
                       </td>
-                      <td className="py-2 px-2 text-muted-foreground">
-                        {template?.name || "\u2014"}
+                      <td className="text-center py-2 px-2">
+                        <div className="flex items-center justify-center gap-1.5">
+                          <div className="w-12 h-1.5 bg-muted rounded-full overflow-hidden">
+                            <div
+                              className={`h-full rounded-full transition-all ${completeness === 100 ? "bg-green-500" : completeness > 50 ? "bg-amber-500" : "bg-red-400"}`}
+                              style={{ width: `${completeness}%` }}
+                            />
+                          </div>
+                          <span className="text-[11px] text-muted-foreground">{completeness}%</span>
+                        </div>
+                      </td>
+                      <td className="py-2 px-2">
+                        <span className="text-[12px] text-muted-foreground truncate max-w-[200px] block">
+                          {getCommentPreview(report)}
+                        </span>
                       </td>
                       <td className="text-center py-2 px-2">
                         <StatusBadge status={report.publishState} />
+                      </td>
+                      <td className="text-right py-2 pl-2">
+                        <Link href={`/reports/${report.id}`}>
+                          <Button variant="outline" size="sm" className="h-7 text-[12px]">
+                            Edit
+                          </Button>
+                        </Link>
                       </td>
                     </tr>
                   );

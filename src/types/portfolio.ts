@@ -18,6 +18,7 @@ export interface PortfolioArtifact {
   updatedAt: string;
   isReportEligible: boolean;
   linkedReportId?: ID;
+  flaggedForReport?: boolean;
 }
 
 export interface Reflection {

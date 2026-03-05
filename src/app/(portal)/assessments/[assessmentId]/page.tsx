@@ -9,6 +9,13 @@ import { StatCard } from "@/components/shared/stat-card";
 import { EmptyState } from "@/components/shared/empty-state";
 import { DetailSkeleton } from "@/components/shared/skeleton-loader";
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 import { useMockLoading } from "@/lib/hooks/use-mock-loading";
 import { generateId } from "@/services/mock-service";
 import { Card } from "@/components/ui/card";
@@ -66,6 +73,7 @@ import Link from "next/link";
 import type { GradeRecord } from "@/types/gradebook";
 import type { Student } from "@/types/student";
 import type { SimpleCriterion } from "@/types/assessment";
+import { MYP_LEVEL_DESCRIPTORS } from "@/lib/myp-descriptors";
 
 const GRADING_MODE_LABELS: Record<string, string> = {
   score: "Score",
@@ -92,10 +100,19 @@ function getGradeDisplay(grade: GradeRecord): string {
   if (grade.mypCriteriaScores?.length) {
     const assessed = grade.mypCriteriaScores.filter((c) => c.level > 0);
     if (assessed.length === 0) return "N/A";
-    const avg = assessed.reduce((s, c) => s + c.level, 0) / assessed.length;
-    return `${Math.round(avg)}/8`;
+    // Show per-criterion breakdown instead of averaged score (#18)
+    return assessed.map((c) => `${c.criterion}:${c.level}`).join(" ");
   }
   return "-";
+}
+
+function getGradeTotal(grade: GradeRecord): string | null {
+  if (!grade.mypCriteriaScores?.length) return null;
+  const assessed = grade.mypCriteriaScores.filter((c) => c.level > 0);
+  if (assessed.length === 0) return null;
+  const total = assessed.reduce((s, c) => s + c.level, 0);
+  const max = assessed.length * 8;
+  return `= ${total}/${max}`;
 }
 
 export default function AssessmentDetailPage() {
@@ -108,6 +125,9 @@ export default function AssessmentDetailPage() {
   const assessments = useStore((s) => s.assessments);
   const updateAssessment = useStore((s) => s.updateAssessment);
   const deleteAssessment = useStore((s) => s.deleteAssessment);
+  const addAssessment = useStore((s) => s.addAssessment);
+  const reports = useStore((s) => s.reports);
+  const reportCycles = useStore((s) => s.reportCycles);
   const getClassById = useStore((s) => s.getClassById);
   const getStudentsByClassId = useStore((s) => s.getStudentsByClassId);
   const getGradesByAssessment = useStore((s) => s.getGradesByAssessment);
@@ -163,6 +183,19 @@ export default function AssessmentDetailPage() {
   const [archiveConfirm, setArchiveConfirm] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
 
+  // Edit & Duplicate (#15)
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [editTitle, setEditTitle] = useState("");
+  const [editDescription, setEditDescription] = useState("");
+  const [editDueDate, setEditDueDate] = useState("");
+
+  // Announcement preview (#17)
+  const [announcePreviewOpen, setAnnouncePreviewOpen] = useState(false);
+  const [announceDraft, setAnnounceDraft] = useState("");
+
+  // Grading filter (#8)
+  const [gradingFilter, setGradingFilter] = useState<"all" | "pending" | "completed" | "missing">("all");
+
   // Rubric criteria builder state
   const [rubricCriteria, setRubricCriteria] = useState<SimpleCriterion[]>(
     () => assessment?.rubricCriteria ?? []
@@ -171,7 +204,12 @@ export default function AssessmentDetailPage() {
   const addCriterion = () => {
     setRubricCriteria((prev) => [
       ...prev,
-      { id: generateId("crit"), name: "", description: "", maxScore: 10 },
+      {
+        id: generateId("crit"),
+        name: "",
+        description: "",
+        maxScore: assessment?.gradingMode === "myp_criteria" ? 8 : 10,
+      },
     ]);
   };
 
@@ -324,14 +362,134 @@ export default function AssessmentDetailPage() {
     setGradingStudent(null);
   };
 
+  // Save & Next (#7) — saves grade and advances to next student
+  const handleSaveAndNext = () => {
+    if (!assessment || !gradingStudent) return;
+    const sortedStudents = [...students].sort((a, b) =>
+      `${a.lastName} ${a.firstName}`.localeCompare(`${b.lastName} ${b.firstName}`)
+    );
+    const currentIdx = sortedStudents.findIndex((s) => s.id === gradingStudent.id);
+
+    // Save current grade first (reuse handleSaveGrade logic inline)
+    const existingGrade = grades.find((g) => g.studentId === gradingStudent.id);
+    const now = new Date().toISOString();
+    const baseGrade: Partial<GradeRecord> = {
+      assessmentId: assessment.id,
+      studentId: gradingStudent.id,
+      classId: assessment.classId,
+      gradingMode: assessment.gradingMode,
+      feedback: gradingFeedback.trim() || undefined,
+      isMissing: gradingIsMissing,
+      gradedAt: now,
+    };
+    if (!gradingIsMissing) {
+      if (assessment.gradingMode === "score") {
+        baseGrade.score = parseInt(gradingScore) || 0;
+        baseGrade.totalPoints = assessment.totalPoints;
+      } else if (assessment.gradingMode === "dp_scale") {
+        baseGrade.dpGrade = parseInt(gradingDpGrade) || 4;
+      } else if (assessment.gradingMode === "myp_criteria") {
+        baseGrade.mypCriteriaScores = MYP_CRITERIA_LABELS.map((c) => ({
+          criterionId: `crit_${c}`,
+          criterion: c,
+          level: gradingMypScores[c] ?? 0,
+        }));
+      }
+    }
+    if (existingGrade) {
+      updateGrade(existingGrade.id, { ...baseGrade, updatedAt: now });
+    } else {
+      addGrade({ id: generateId("grade"), ...baseGrade } as GradeRecord);
+    }
+    toast.success(`Grade saved for ${gradingStudent.firstName} ${gradingStudent.lastName}`);
+
+    // Advance to next student
+    if (currentIdx < sortedStudents.length - 1) {
+      openGradingSheet(sortedStudents[currentIdx + 1]);
+    } else {
+      setGradingOpen(false);
+      setGradingStudent(null);
+      toast.success("All students graded!");
+    }
+  };
+
+  // Navigate to prev/next student in grading panel (#7)
+  const navigateGrading = (direction: "prev" | "next") => {
+    if (!gradingStudent) return;
+    const sortedStudents = [...students].sort((a, b) =>
+      `${a.lastName} ${a.firstName}`.localeCompare(`${b.lastName} ${b.firstName}`)
+    );
+    const currentIdx = sortedStudents.findIndex((s) => s.id === gradingStudent.id);
+    const newIdx = direction === "prev" ? currentIdx - 1 : currentIdx + 1;
+    if (newIdx >= 0 && newIdx < sortedStudents.length) {
+      openGradingSheet(sortedStudents[newIdx]);
+    }
+  };
+
+  // Edit details handler (#15)
+  const handleOpenEdit = () => {
+    if (!assessment) return;
+    setEditTitle(assessment.title);
+    setEditDescription(assessment.description);
+    setEditDueDate(assessment.dueDate.split("T")[0]);
+    setEditDialogOpen(true);
+  };
+
+  const handleSaveEdit = () => {
+    if (!editTitle.trim()) return;
+    updateAssessment(assessmentId, {
+      title: editTitle.trim(),
+      description: editDescription.trim(),
+      dueDate: new Date(editDueDate).toISOString(),
+    });
+    setEditDialogOpen(false);
+    toast.success("Assessment updated");
+  };
+
+  // Duplicate handler (#15)
+  const handleDuplicate = () => {
+    if (!assessment) return;
+    const newId = generateId("asmt");
+    addAssessment({
+      ...assessment,
+      id: newId,
+      title: `Copy of ${assessment.title}`,
+      status: "draft",
+      createdAt: new Date().toISOString(),
+      distributedAt: undefined,
+      linkedAnnouncementId: undefined,
+    });
+    toast.success("Assessment duplicated", {
+      description: `"Copy of ${assessment.title}" created as draft.`,
+    });
+  };
+
+  // Find student's report for this class in current open cycle (for "View in report" link)
+  const openCycle = reportCycles.find((c) => c.status === "open");
+  const getStudentReportId = (studentId: string): string | null => {
+    if (!openCycle || !assessment) return null;
+    const report = reports.find(
+      (r) => r.studentId === studentId && r.classId === assessment.classId && r.cycleId === openCycle.id
+    );
+    return report?.id ?? null;
+  };
+
+  // Publish with announcement preview (#17)
   const handlePublish = () => {
+    if (!assessment || !cls) return;
+    const draft = `A new assessment "${assessment.title}" has been published for ${cls.name}. Due date: ${format(parseISO(assessment.dueDate), "MMMM d, yyyy")}.${assessment.description ? ` Description: ${assessment.description}` : ""}`;
+    setAnnounceDraft(draft);
+    setAnnouncePreviewOpen(true);
+  };
+
+  const confirmPublishWithAnnouncement = () => {
     if (!assessment || !cls) return;
     const now = new Date().toISOString();
 
-    // Create a linked announcement
+    // Create a linked announcement with the (possibly edited) text
     const announcementId = generateId("ann");
     const assignmentChannel = channels.find(
-      (ch) => ch.classId === cls.id && ch.type === "assignments"
+      (ch) => ch.classId === cls.id && ch.type === "announcements"
     );
 
     addAnnouncement({
@@ -339,7 +497,7 @@ export default function AssessmentDetailPage() {
       channelId: assignmentChannel?.id ?? "",
       classId: cls.id,
       title: `New assessment: ${assessment.title}`,
-      body: `A new assessment "${assessment.title}" has been published for ${cls.name}. Due date: ${format(parseISO(assessment.dueDate), "MMMM d, yyyy")}.${assessment.description ? ` Description: ${assessment.description}` : ""}`,
+      body: announceDraft,
       attachments: [
         {
           id: generateId("attach"),
@@ -378,8 +536,9 @@ export default function AssessmentDetailPage() {
       distributedAt: now,
       linkedAnnouncementId: announcementId,
     });
+    setAnnouncePreviewOpen(false);
     toast.success("Assessment published", {
-      description: `Announcement sent to ${cls?.name || "class channel"}.${assessment.dueDate ? ` Due: ${format(parseISO(assessment.dueDate), "MMM d, yyyy")}.` : ""}`,
+      description: `Announcement sent to ${cls?.name || "class channel"}.`,
     });
   };
 
@@ -421,11 +580,20 @@ export default function AssessmentDetailPage() {
         secondaryActions={
           assessment.status !== "archived"
             ? [
+                {
+                  label: "Edit details",
+                  onClick: handleOpenEdit,
+                  icon: FileText,
+                },
+                {
+                  label: "Duplicate",
+                  onClick: handleDuplicate,
+                },
                 ...(assessment.status === "draft"
                   ? [
                       {
                         label: "Publish",
-                        onClick: () => setPublishConfirm(true),
+                        onClick: handlePublish,
                         icon: Send,
                       },
                     ]
@@ -619,7 +787,7 @@ export default function AssessmentDetailPage() {
                 <div className="flex gap-2">
                   <Button
                     size="sm"
-                    onClick={() => setPublishConfirm(true)}
+                    onClick={handlePublish}
                   >
                     <Send className="h-4 w-4 mr-1.5" />
                     Publish assessment
@@ -655,106 +823,167 @@ export default function AssessmentDetailPage() {
               description="No students are enrolled in this class."
             />
           ) : (
-            <Card className="p-0 gap-0 overflow-hidden">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="text-[12px] font-medium">
-                      Student
-                    </TableHead>
-                    <TableHead className="text-[12px] font-medium">
-                      Grade
-                    </TableHead>
-                    <TableHead className="text-[12px] font-medium">
-                      Status
-                    </TableHead>
-                    <TableHead className="text-[12px] font-medium">
-                      Feedback
-                    </TableHead>
-                    <TableHead className="text-[12px] font-medium text-right">
-                      Action
-                    </TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {students.map((student) => {
-                    const grade = grades.find(
-                      (g) => g.studentId === student.id
-                    );
-                    return (
-                      <TableRow key={student.id}>
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            <div className="h-7 w-7 rounded-full bg-[#c24e3f]/10 flex items-center justify-center text-[11px] font-semibold text-[#c24e3f]">
-                              {student.firstName[0]}
-                              {student.lastName[0]}
+            <div className="space-y-4">
+              {/* Progress indicator (#8) */}
+              <Card className="p-4 gap-0">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-[13px] font-medium">
+                    {gradedCount} of {students.length} graded ({Math.round((gradedCount / students.length) * 100)}%)
+                  </span>
+                  <span className="text-[12px] text-muted-foreground">
+                    {missingCount > 0 && `${missingCount} missing · `}
+                    {students.length - gradedCount - missingCount} pending
+                  </span>
+                </div>
+                <div className="h-2 bg-muted rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-[#c24e3f] rounded-full transition-all"
+                    style={{ width: `${(gradedCount / students.length) * 100}%` }}
+                  />
+                </div>
+                {/* Filter tabs */}
+                <div className="flex gap-1 mt-3">
+                  {(["all", "pending", "completed", "missing"] as const).map((filter) => (
+                    <Button
+                      key={filter}
+                      variant={gradingFilter === filter ? "default" : "outline"}
+                      size="sm"
+                      className="h-7 text-[11px] capitalize"
+                      onClick={() => setGradingFilter(filter)}
+                    >
+                      {filter}
+                    </Button>
+                  ))}
+                </div>
+              </Card>
+
+              <Card className="p-0 gap-0 overflow-hidden">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="text-[12px] font-medium">
+                        Student
+                      </TableHead>
+                      <TableHead className="text-[12px] font-medium">
+                        Grade
+                      </TableHead>
+                      <TableHead className="text-[12px] font-medium">
+                        Status
+                      </TableHead>
+                      <TableHead className="text-[12px] font-medium">
+                        Feedback
+                      </TableHead>
+                      <TableHead className="text-[12px] font-medium text-right">
+                        Action
+                      </TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {students
+                      .filter((student) => {
+                        if (gradingFilter === "all") return true;
+                        const grade = grades.find((g) => g.studentId === student.id);
+                        if (gradingFilter === "pending") return !grade;
+                        if (gradingFilter === "completed") return grade && !grade.isMissing;
+                        if (gradingFilter === "missing") return grade?.isMissing;
+                        return true;
+                      })
+                      .map((student) => {
+                      const grade = grades.find(
+                        (g) => g.studentId === student.id
+                      );
+                      const reportId = getStudentReportId(student.id);
+                      return (
+                        <TableRow key={student.id}>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              <div className="h-7 w-7 rounded-full bg-[#c24e3f]/10 flex items-center justify-center text-[11px] font-semibold text-[#c24e3f]">
+                                {student.firstName[0]}
+                                {student.lastName[0]}
+                              </div>
+                              <div>
+                                <Link
+                                  href={`/students/${student.id}?classId=${assessment.classId}`}
+                                  className="text-[13px] font-medium hover:text-[#c24e3f] transition-colors block"
+                                >
+                                  {student.firstName} {student.lastName}
+                                </Link>
+                                {/* "View in report" link (#1) */}
+                                {grade && reportId && (
+                                  <Link
+                                    href={`/reports/${reportId}`}
+                                    className="text-[11px] text-[#c24e3f] hover:underline"
+                                  >
+                                    View in report &rarr;
+                                  </Link>
+                                )}
+                              </div>
                             </div>
-                            <Link
-                              href={`/students/${student.id}?classId=${assessment.classId}`}
-                              className="text-[13px] font-medium hover:text-[#c24e3f] transition-colors"
-                            >
-                              {student.firstName} {student.lastName}
-                            </Link>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-1.5">
-                            <span
-                              className={`text-[13px] font-medium ${
-                                grade?.isMissing
-                                  ? "text-[#dc2626]"
-                                  : grade
-                                    ? "text-foreground"
-                                    : "text-muted-foreground"
-                              }`}
-                            >
-                              {grade ? getGradeDisplay(grade) : "Not graded"}
-                            </span>
-                            {grade?.updatedAt && (
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex flex-col gap-0.5">
                               <span
-                                className="flex items-center gap-0.5 text-[11px] text-muted-foreground"
-                                title={`Updated ${format(parseISO(grade.updatedAt), "MMM d, yyyy h:mm a")}`}
+                                className={`text-[13px] font-medium ${
+                                  grade?.isMissing
+                                    ? "text-[#dc2626]"
+                                    : grade
+                                      ? "text-foreground"
+                                      : "text-muted-foreground"
+                                }`}
                               >
-                                <Clock className="h-3 w-3" />
-                                {formatDistanceToNow(parseISO(grade.updatedAt), {
-                                  addSuffix: true,
-                                })}
+                                {grade ? getGradeDisplay(grade) : "Not graded"}
                               </span>
-                            )}
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          {grade ? (
-                            grade.isMissing ? (
-                              <StatusBadge status="missing" />
+                              {grade && getGradeTotal(grade) && (
+                                <span className="text-[11px] text-muted-foreground">
+                                  {getGradeTotal(grade)}
+                                </span>
+                              )}
+                              {grade?.updatedAt && (
+                                <span
+                                  className="flex items-center gap-0.5 text-[11px] text-muted-foreground"
+                                  title={`Updated ${format(parseISO(grade.updatedAt), "MMM d, yyyy h:mm a")}`}
+                                >
+                                  <Clock className="h-3 w-3" />
+                                  {formatDistanceToNow(parseISO(grade.updatedAt), {
+                                    addSuffix: true,
+                                  })}
+                                </span>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            {grade ? (
+                              grade.isMissing ? (
+                                <StatusBadge status="missing" />
+                              ) : (
+                                <StatusBadge status="completed" />
+                              )
                             ) : (
-                              <StatusBadge status="completed" />
-                            )
-                          ) : (
-                            <StatusBadge status="pending" />
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          <span className="text-[12px] text-muted-foreground truncate max-w-[150px] block">
-                            {grade?.feedback || "-"}
-                          </span>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="h-7 text-[12px]"
-                            onClick={() => openGradingSheet(student)}
-                          >
-                            {grade ? "Edit grade" : "Grade"}
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            </Card>
+                              <StatusBadge status="pending" />
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            <span className="text-[12px] text-muted-foreground truncate max-w-[150px] block">
+                              {grade?.feedback || "-"}
+                            </span>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-7 text-[12px]"
+                              onClick={() => openGradingSheet(student)}
+                            >
+                              {grade ? "Edit grade" : "Grade"}
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </Card>
+            </div>
           )}
         </TabsContent>
 
@@ -945,6 +1174,40 @@ export default function AssessmentDetailPage() {
       <Sheet open={gradingOpen} onOpenChange={setGradingOpen}>
         <SheetContent className="w-[420px] sm:max-w-[420px]">
           <SheetHeader>
+            {/* Next/prev navigation (#7) */}
+            {gradingStudent && (() => {
+              const sorted = [...students].sort((a, b) =>
+                `${a.lastName} ${a.firstName}`.localeCompare(`${b.lastName} ${b.firstName}`)
+              );
+              const idx = sorted.findIndex((s) => s.id === gradingStudent.id);
+              return (
+                <div className="flex items-center justify-between mb-1">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 text-[12px]"
+                    disabled={idx <= 0}
+                    onClick={() => navigateGrading("prev")}
+                  >
+                    <ArrowUp className="h-3.5 w-3.5 mr-1" />
+                    Prev
+                  </Button>
+                  <span className="text-[12px] text-muted-foreground">
+                    Student {idx + 1} of {sorted.length}
+                  </span>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 text-[12px]"
+                    disabled={idx >= sorted.length - 1}
+                    onClick={() => navigateGrading("next")}
+                  >
+                    Next
+                    <ArrowDown className="h-3.5 w-3.5 ml-1" />
+                  </Button>
+                </div>
+              );
+            })()}
             <SheetTitle className="text-[16px]">
               Grade: {gradingStudent?.firstName} {gradingStudent?.lastName}
             </SheetTitle>
@@ -1048,7 +1311,10 @@ export default function AssessmentDetailPage() {
                         <SelectContent>
                           {Array.from({ length: 9 }, (_, i) => (
                             <SelectItem key={i} value={i.toString()}>
-                              {i === 0 ? "Not assessed (0)" : `Level ${i}`}
+                              {i === 0
+                                ? "Not assessed (0)"
+                                : `Level ${i}${MYP_LEVEL_DESCRIPTORS[criterion]?.[i] ? ` \u2014 ${MYP_LEVEL_DESCRIPTORS[criterion][i]}` : ""}`
+                              }
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -1115,17 +1381,20 @@ export default function AssessmentDetailPage() {
               </Button>
             </div>
 
-            {/* Save button */}
+            {/* Save buttons (#7) */}
             <div className="flex gap-2 pt-2">
               <Button
                 variant="outline"
-                className="flex-1"
+                size="sm"
                 onClick={() => setGradingOpen(false)}
               >
                 Cancel
               </Button>
-              <Button className="flex-1" onClick={handleSaveGrade}>
+              <Button variant="outline" size="sm" className="flex-1" onClick={handleSaveGrade}>
                 Save grade
+              </Button>
+              <Button size="sm" className="flex-1" onClick={handleSaveAndNext}>
+                Save &amp; Next
               </Button>
             </div>
           </div>
@@ -1133,15 +1402,6 @@ export default function AssessmentDetailPage() {
       </Sheet>
 
       {/* Confirm Dialogs */}
-      <ConfirmDialog
-        open={publishConfirm}
-        onOpenChange={setPublishConfirm}
-        title="Publish assessment"
-        description={`This will publish "${assessment.title}" and send an announcement to all students in ${cls?.name ?? "this class"}. Students will be able to see the assessment details.`}
-        confirmLabel="Publish"
-        onConfirm={handlePublish}
-      />
-
       <ConfirmDialog
         open={archiveConfirm}
         onOpenChange={setArchiveConfirm}
@@ -1160,6 +1420,70 @@ export default function AssessmentDetailPage() {
         onConfirm={handleDelete}
         destructive
       />
+
+      {/* Announcement Preview Dialog (#17) */}
+      <Dialog open={announcePreviewOpen} onOpenChange={setAnnouncePreviewOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Publish & Send Announcement</DialogTitle>
+            <DialogDescription>
+              Review and edit the announcement before publishing.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div>
+              <div className="flex items-center gap-2 mb-2">
+                <Badge variant="secondary" className="text-[11px]">Announcements channel</Badge>
+                <Badge variant="outline" className="text-[11px]">{cls?.name}</Badge>
+              </div>
+              <Label className="text-[13px]">Announcement message</Label>
+              <Textarea
+                value={announceDraft}
+                onChange={(e) => setAnnounceDraft(e.target.value)}
+                rows={4}
+                className="mt-1.5 text-[13px]"
+              />
+            </div>
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" size="sm" onClick={() => setAnnouncePreviewOpen(false)}>
+              Cancel
+            </Button>
+            <Button size="sm" onClick={confirmPublishWithAnnouncement}>
+              <Send className="h-3.5 w-3.5 mr-1.5" />
+              Publish & send
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Details Dialog (#15) */}
+      <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Edit Assessment Details</DialogTitle>
+            <DialogDescription>Update the assessment title, description, or due date.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div>
+              <Label className="text-[13px]">Title</Label>
+              <Input value={editTitle} onChange={(e) => setEditTitle(e.target.value)} className="mt-1" />
+            </div>
+            <div>
+              <Label className="text-[13px]">Description</Label>
+              <Textarea value={editDescription} onChange={(e) => setEditDescription(e.target.value)} rows={3} className="mt-1 text-[13px]" />
+            </div>
+            <div>
+              <Label className="text-[13px]">Due date</Label>
+              <Input type="date" value={editDueDate} onChange={(e) => setEditDueDate(e.target.value)} className="mt-1" />
+            </div>
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" size="sm" onClick={() => setEditDialogOpen(false)}>Cancel</Button>
+            <Button size="sm" onClick={handleSaveEdit} disabled={!editTitle.trim()}>Save changes</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

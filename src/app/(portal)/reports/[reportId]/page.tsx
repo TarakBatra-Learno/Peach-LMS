@@ -48,12 +48,75 @@ import {
   Image,
   ShieldAlert,
   CalendarClock,
+  Lightbulb,
+  ChevronsUpDown,
 } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { toast } from "sonner";
 import { generateId } from "@/services/mock-service";
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import Link from "next/link";
+import { COMMENT_GUIDANCE } from "@/lib/comment-guidance";
+import { getMYPBoundaryGrade } from "@/lib/grade-helpers";
+
+import type { ReportSection } from "@/types/report";
+
+// ---------- helpers ----------
+
+const MASTERY_RANK: Record<string, number> = {
+  exceeding: 4,
+  meeting: 3,
+  approaching: 2,
+  beginning: 1,
+  not_assessed: 0,
+};
+const MASTERY_LABEL: Record<string, string> = {
+  exceeding: "Excellent",
+  meeting: "Proficient",
+  approaching: "Developing",
+  beginning: "Emerging",
+  not_assessed: "Not assessed",
+};
+const MASTERY_COLOR: Record<string, string> = {
+  exceeding: "bg-[#dcfce7] text-[#16a34a]",
+  meeting: "bg-[#dbeafe] text-[#2563eb]",
+  approaching: "bg-[#fef3c7] text-[#b45309]",
+  beginning: "bg-[#fee2e2] text-[#dc2626]",
+  not_assessed: "bg-muted text-muted-foreground",
+};
+
+function isSectionEmpty(section: ReportSection): boolean {
+  if (section.type === "teacher_comment") {
+    const text = (section.content?.comment as string) || (section.content?.text as string) || "";
+    return text.trim() === "";
+  }
+  if (section.type === "attendance") {
+    return section.content?.present == null && section.content?.total == null;
+  }
+  if (section.type === "portfolio_evidence") {
+    return !section.content?.artifactIds || (section.content.artifactIds as string[]).length === 0;
+  }
+  if (section.type === "behavior_incidents") {
+    return !section.content || Object.keys(section.content).length === 0;
+  }
+  // ATL skills: empty if no skills array, OR every skill is "not_assessed" with no artifact evidence
+  if (section.type === "learning_goals" || section.type === "atl_skills") {
+    const skills = section.content?.skills as { level?: string; artifactCount?: number }[] | undefined;
+    if (!skills || skills.length === 0) return true;
+    return skills.every((s) => (!s.level || s.level === "not_assessed") && (!s.artifactCount || s.artifactCount === 0));
+  }
+  // Portfolio highlights: empty if no artifact IDs
+  if (section.type === "portfolio") {
+    return !section.content?.artifactIds || (section.content.artifactIds as string[]).length === 0;
+  }
+  // Grades/criteria/other sections — empty if no content keys
+  return !section.content || Object.keys(section.content).length === 0;
+}
 
 // ---------- constants ----------
 
@@ -64,6 +127,9 @@ const SECTION_LABELS: Record<string, string> = {
   myp_criteria: "MYP Criteria",
   dp_grades: "DP Grades",
   portfolio_evidence: "Portfolio Evidence",
+  portfolio: "Portfolio Highlights",
+  learning_goals: "ATL Skills Progress",
+  atl_skills: "ATL Skills",
   behavior_incidents: "Behavior & Incidents",
 };
 
@@ -95,6 +161,7 @@ export default function ReportDetailPage() {
   const channels = useStore((s) => s.channels);
   const artifacts = useStore((s) => s.artifacts);
   const incidents = useStore((s) => s.incidents);
+  const learningGoals = useStore((s) => s.learningGoals);
 
   const [previewOpen, setPreviewOpen] = useState(false);
   const [familyPreviewOpen, setFamilyPreviewOpen] = useState(false);
@@ -111,6 +178,10 @@ export default function ReportDetailPage() {
   const [scheduledPublishAt, setScheduledPublishAt] = useState<string | null>(null);
   const [removeSectionConfirmOpen, setRemoveSectionConfirmOpen] = useState(false);
   const [sectionToRemove, setSectionToRemove] = useState<string | null>(null);
+  const [publishConfirmOpen, setPublishConfirmOpen] = useState(false);
+  const [distributeConfirmOpen, setDistributeConfirmOpen] = useState(false);
+  const [readyWarningOpen, setReadyWarningOpen] = useState(false);
+  const [emptySectionLabels, setEmptySectionLabels] = useState<string[]>([]);
 
   const report = reports.find((r) => r.id === reportId);
 
@@ -311,6 +382,55 @@ export default function ReportDetailPage() {
         };
       }
 
+      // Auto-fill ATL skills (learning_goals / atl_skills)
+      if (section.type === "learning_goals" || section.type === "atl_skills") {
+        if (hasContent) {
+          anySkipped = true;
+          return section;
+        }
+        const atlGoals = learningGoals.filter((g) => g.category === "atl_skill");
+        const skills = atlGoals.map((goal) => {
+          let bestLevel: string | null = null;
+          let bestGradedAt: string | null = null;
+
+          studentGrades.forEach((g) => {
+            g.standardsMastery?.forEach((sm) => {
+              if (sm.standardId === goal.id) {
+                const smLevel = sm.level || "not_assessed";
+                const isBetter =
+                  !bestLevel ||
+                  (g.gradedAt && (!bestGradedAt || g.gradedAt > bestGradedAt)) ||
+                  (!g.gradedAt && !bestGradedAt && (MASTERY_RANK[smLevel] || 0) > (MASTERY_RANK[bestLevel] || 0));
+                if (isBetter) {
+                  bestLevel = smLevel;
+                  bestGradedAt = g.gradedAt || null;
+                }
+              }
+            });
+          });
+
+          const artifactCount = studentArtifacts.filter((a) =>
+            a.learningGoalIds.includes(goal.id)
+          ).length;
+
+          return { goalId: goal.id, title: goal.title, level: bestLevel, artifactCount };
+        });
+        return { ...section, content: { skills } };
+      }
+
+      // Auto-fill portfolio highlights
+      if (section.type === "portfolio") {
+        if (hasContent) {
+          anySkipped = true;
+          return section;
+        }
+        const approved = studentArtifacts
+          .filter((a) => a.approvalStatus === "approved")
+          .sort((a, b) => (b.flaggedForReport ? 1 : 0) - (a.flaggedForReport ? 1 : 0))
+          .slice(0, 5);
+        return { ...section, content: { artifactIds: approved.map((a) => a.id) } };
+      }
+
       return section;
     });
 
@@ -448,11 +568,27 @@ export default function ReportDetailPage() {
 
   // Publish flow handlers
   const handleMarkReady = () => {
+    const emptyLabels = report.sections
+      .filter((s) => isSectionEmpty(s))
+      .map((s) => s.label);
+    if (emptyLabels.length > 0) {
+      setEmptySectionLabels(emptyLabels);
+      setReadyWarningOpen(true);
+      return;
+    }
+    confirmMarkReady();
+  };
+
+  const confirmMarkReady = () => {
     updateReport(reportId, { publishState: "ready" });
     toast.success("Report marked as ready for review");
   };
 
   const handlePublish = () => {
+    setPublishConfirmOpen(true);
+  };
+
+  const confirmPublish = () => {
     updateReport(reportId, {
       publishState: "published",
       publishedAt: new Date().toISOString(),
@@ -461,6 +597,10 @@ export default function ReportDetailPage() {
   };
 
   const handleDistribute = () => {
+    setDistributeConfirmOpen(true);
+  };
+
+  const confirmDistribute = () => {
     const now = new Date().toISOString();
     updateReport(reportId, {
       publishState: "distributed",
@@ -539,7 +679,11 @@ export default function ReportDetailPage() {
       case "dp_grades":
         return BookOpen;
       case "portfolio_evidence":
+      case "portfolio":
         return Image;
+      case "learning_goals":
+      case "atl_skills":
+        return BookOpen;
       case "behavior_incidents":
         return ShieldAlert;
       default:
@@ -571,14 +715,55 @@ export default function ReportDetailPage() {
               placeholder="Write your comment for this student..."
               className="min-h-[120px] text-[13px]"
             />
-            <Button
-              size="sm"
-              onClick={() => handleSaveComment(section.configId)}
-              disabled={commentDrafts[section.configId] === undefined}
-            >
-              <Save className="h-3.5 w-3.5 mr-1.5" />
-              Save Comment
-            </Button>
+            {/* Word count (#21) */}
+            {(() => {
+              const text = commentDrafts[section.configId] ?? (section.content.comment as string) ?? (section.content.text as string) ?? "";
+              const words = text.trim() ? text.trim().split(/\s+/).length : 0;
+              return (
+                <p className="text-[11px] text-muted-foreground">
+                  {words} {words === 1 ? "word" : "words"} &middot; {text.length} characters
+                </p>
+              );
+            })()}
+            <div className="flex items-center gap-2">
+              <Button
+                size="sm"
+                onClick={() => handleSaveComment(section.configId)}
+                disabled={commentDrafts[section.configId] === undefined}
+              >
+                <Save className="h-3.5 w-3.5 mr-1.5" />
+                Save Comment
+              </Button>
+            </div>
+
+            {/* Writing guidance (#22) — read-only reference, NOT insertable */}
+            <Collapsible>
+              <CollapsibleTrigger asChild>
+                <Button variant="ghost" size="sm" className="h-7 text-[12px] text-muted-foreground gap-1.5 px-2">
+                  <Lightbulb className="h-3.5 w-3.5" />
+                  {COMMENT_GUIDANCE.title}
+                  <ChevronsUpDown className="h-3 w-3" />
+                </Button>
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50/50 p-3 space-y-2">
+                  <ul className="space-y-1">
+                    {COMMENT_GUIDANCE.tips.map((tip, i) => (
+                      <li key={i} className="text-[12px] text-muted-foreground flex items-start gap-1.5">
+                        <span className="text-amber-500 mt-0.5">•</span>
+                        {tip}
+                      </li>
+                    ))}
+                  </ul>
+                  <div className="pt-2 border-t border-amber-200/50">
+                    <p className="text-[11px] font-medium text-muted-foreground mb-1">Example:</p>
+                    <p className="text-[12px] text-muted-foreground italic leading-relaxed">
+                      &ldquo;{COMMENT_GUIDANCE.example}&rdquo;
+                    </p>
+                  </div>
+                </div>
+              </CollapsibleContent>
+            </Collapsible>
           </div>
         );
       }
@@ -638,6 +823,115 @@ export default function ReportDetailPage() {
             </p>
           );
         }
+
+        // ── MYP Criteria table (#1, #25) ──
+        if (section.type === "myp_criteria") {
+          // Aggregate best criteria scores across all MYP assessments
+          const criteriaMap: Record<string, { criterion: string; level: number; assessmentName: string }> = {};
+          studentGrades.forEach((g) => {
+            if (g.mypCriteriaScores?.length) {
+              g.mypCriteriaScores.forEach((cs) => {
+                const existing = criteriaMap[cs.criterion];
+                if (!existing || cs.level > existing.level) {
+                  criteriaMap[cs.criterion] = {
+                    criterion: cs.criterion,
+                    level: cs.level,
+                    assessmentName: getAssessmentName(g.assessmentId),
+                  };
+                }
+              });
+            }
+          });
+          const criteriaEntries = ["A", "B", "C", "D"]
+            .map((c) => criteriaMap[c] || { criterion: c, level: 0, assessmentName: "—" })
+            .filter((c) => criteriaMap[c.criterion] || true); // always show A-D
+          const criteriaTotal = criteriaEntries.reduce((s, c) => s + c.level, 0);
+          const boundaryGrade = getMYPBoundaryGrade(criteriaTotal);
+
+          return (
+            <div className="space-y-3">
+              {/* Criteria table */}
+              <div className="overflow-x-auto">
+                <table className="w-full text-[13px]">
+                  <thead>
+                    <tr className="border-b border-border">
+                      <th className="text-left py-2 pr-4 font-medium text-muted-foreground">Criterion</th>
+                      <th className="text-center py-2 px-2 font-medium text-muted-foreground">Level</th>
+                      <th className="text-center py-2 px-2 font-medium text-muted-foreground">Max</th>
+                      <th className="text-left py-2 px-2 font-medium text-muted-foreground">Source</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {criteriaEntries.map((entry) => (
+                      <tr key={entry.criterion} className="border-b border-border/50">
+                        <td className="py-2 pr-4 font-medium">
+                          Criterion {entry.criterion}
+                          <span className="text-muted-foreground font-normal ml-1.5">
+                            {entry.criterion === "A" ? "(Knowing & understanding)" :
+                             entry.criterion === "B" ? "(Investigating)" :
+                             entry.criterion === "C" ? "(Communicating)" :
+                             "(Thinking critically)"}
+                          </span>
+                        </td>
+                        <td className="text-center py-2 px-2">
+                          {entry.level > 0 ? (
+                            <Badge variant="secondary" className="text-[12px]">{entry.level}</Badge>
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
+                        </td>
+                        <td className="text-center py-2 px-2 text-muted-foreground">8</td>
+                        <td className="py-2 px-2 text-[12px] text-muted-foreground">{entry.assessmentName}</td>
+                      </tr>
+                    ))}
+                    {/* Total row */}
+                    <tr className="border-t-2 border-border">
+                      <td className="py-2 pr-4 font-semibold">Total</td>
+                      <td className="text-center py-2 px-2">
+                        <Badge className="text-[12px]">{criteriaTotal}</Badge>
+                      </td>
+                      <td className="text-center py-2 px-2 text-muted-foreground font-medium">32</td>
+                      <td className="py-2 px-2"></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Boundary grade (#25) */}
+              <div className="flex items-center gap-3 rounded-lg bg-muted/50 p-3">
+                <div>
+                  <p className="text-[12px] text-muted-foreground font-medium">MYP Boundary Grade</p>
+                  <p className="text-[11px] text-muted-foreground">Based on criteria total of {criteriaTotal}/32</p>
+                </div>
+                <div className="ml-auto flex items-center gap-1.5">
+                  <span className="text-[28px] font-bold text-foreground">{boundaryGrade ?? "—"}</span>
+                  <span className="text-[14px] text-muted-foreground">/7</span>
+                </div>
+              </div>
+
+              {/* Also list individual assessment grades */}
+              <div>
+                <p className="text-[12px] font-medium text-muted-foreground mb-2">Assessment Details</p>
+                {studentGrades.map((grade) => (
+                  <div key={grade.id} className="flex items-center justify-between py-1.5 border-b border-border/30 text-[13px]">
+                    <Link href={`/assessments/${grade.assessmentId}`} className="text-[#c24e3f] hover:underline">
+                      {getAssessmentName(grade.assessmentId)}
+                    </Link>
+                    <span className="text-muted-foreground">
+                      {grade.isMissing
+                        ? "Missing"
+                        : grade.mypCriteriaScores?.length
+                        ? grade.mypCriteriaScores.map((c) => `${c.criterion}:${c.level}`).join(" ")
+                        : "—"}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        }
+
+        // ── Standard grades table (score / dp_scale / generic) ──
         return (
           <div className="overflow-x-auto">
             <table className="w-full text-[13px]">
@@ -873,6 +1167,137 @@ export default function ReportDetailPage() {
                   </Badge>
                 </div>
               ))}
+            </div>
+          </div>
+        );
+      }
+
+      // ---------- ATL Skills Progress / ATL Skills ----------
+      case "learning_goals":
+      case "atl_skills": {
+        const atlGoals = learningGoals.filter((g) => g.category === "atl_skill");
+
+        // Resolve best mastery per goal: most recent gradedAt, then highest level
+        const skillRows = atlGoals.map((goal) => {
+          let bestLevel: string | null = null;
+          let bestGradedAt: string | null = null;
+
+          studentGrades.forEach((g) => {
+            g.standardsMastery?.forEach((sm) => {
+              if (sm.standardId === goal.id) {
+                const smLevel = sm.level || "not_assessed";
+                const isBetter =
+                  !bestLevel ||
+                  (g.gradedAt && (!bestGradedAt || g.gradedAt > bestGradedAt)) ||
+                  (!g.gradedAt && !bestGradedAt && (MASTERY_RANK[smLevel] || 0) > (MASTERY_RANK[bestLevel] || 0));
+                if (isBetter) {
+                  bestLevel = smLevel;
+                  bestGradedAt = g.gradedAt || null;
+                }
+              }
+            });
+          });
+
+          const artifactCount = studentArtifacts.filter((a) =>
+            a.learningGoalIds.includes(goal.id)
+          ).length;
+
+          return { goal, level: bestLevel, artifactCount };
+        });
+
+        return (
+          <div className="space-y-3">
+            <table className="w-full text-[13px]">
+              <thead>
+                <tr className="border-b border-border">
+                  <th className="text-left py-2 pr-4 font-medium text-muted-foreground">ATL Skill</th>
+                  <th className="text-center py-2 px-2 font-medium text-muted-foreground">Level</th>
+                  <th className="text-center py-2 px-2 font-medium text-muted-foreground">Evidence</th>
+                </tr>
+              </thead>
+              <tbody>
+                {skillRows.map((row) => (
+                  <tr key={row.goal.id} className="border-b border-border/50">
+                    <td className="py-2 pr-4">
+                      <p className="font-medium">{row.goal.title}</p>
+                      <p className="text-[11px] text-muted-foreground">{row.goal.code}</p>
+                    </td>
+                    <td className="text-center py-2 px-2">
+                      {row.level && row.level !== "not_assessed" ? (
+                        <Badge className={`text-[11px] ${MASTERY_COLOR[row.level] || ""}`} variant="secondary">
+                          {MASTERY_LABEL[row.level] || row.level}
+                        </Badge>
+                      ) : (
+                        <span className="text-[12px] text-muted-foreground">—</span>
+                      )}
+                    </td>
+                    <td className="text-center py-2 px-2">
+                      {row.artifactCount > 0 ? (
+                        <span className="text-[12px]">{row.artifactCount} {row.artifactCount === 1 ? "item" : "items"}</span>
+                      ) : (
+                        <span className="text-[12px] text-muted-foreground">—</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {skillRows.every((r) => !r.level || r.level === "not_assessed") &&
+             skillRows.every((r) => r.artifactCount === 0) && (
+              <p className="text-[12px] text-muted-foreground italic">
+                No ATL skill assessments or linked evidence yet. Use Auto-fill after grading.
+              </p>
+            )}
+          </div>
+        );
+      }
+
+      // ---------- Portfolio Highlights / Selected Work Samples ----------
+      case "portfolio": {
+        // If teacher has curated IDs, use those; otherwise derive from studentArtifacts
+        const curatedIds = (section.content?.artifactIds as string[]) || [];
+        const displayArtifacts = curatedIds.length > 0
+          ? curatedIds.map((id) => artifacts.find((a) => a.id === id)).filter(Boolean)
+          : studentArtifacts
+              .filter((a) => a.approvalStatus === "approved")
+              .sort((a, b) => (b.flaggedForReport ? 1 : 0) - (a.flaggedForReport ? 1 : 0));
+
+        if (displayArtifacts.length === 0) {
+          return (
+            <p className="text-[13px] text-muted-foreground">
+              No approved portfolio items for this student.
+            </p>
+          );
+        }
+
+        const flaggedCount = displayArtifacts.filter((a) => a?.flaggedForReport).length;
+
+        return (
+          <div className="space-y-3">
+            <p className="text-[12px] text-muted-foreground">
+              {displayArtifacts.length} approved {displayArtifacts.length === 1 ? "artifact" : "artifacts"}
+              {flaggedCount > 0 && ` (${flaggedCount} flagged for report)`}
+              {curatedIds.length === 0 && " · auto-suggested"}
+            </p>
+            <div className="grid gap-2">
+              {displayArtifacts.slice(0, 8).map((artifact) =>
+                artifact ? (
+                  <div key={artifact.id} className="flex items-center gap-3 rounded-lg border border-border/50 p-3">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[13px] font-medium truncate">{artifact.title}</p>
+                      <p className="text-[11px] text-muted-foreground">
+                        {artifact.description ? artifact.description.slice(0, 80) + (artifact.description.length > 80 ? "…" : "") : "No description"}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <Badge variant="outline" className="text-[10px]">{artifact.mediaType}</Badge>
+                      {artifact.flaggedForReport && (
+                        <Badge variant="secondary" className="text-[10px] bg-amber-50 text-amber-700">Flagged</Badge>
+                      )}
+                    </div>
+                  </div>
+                ) : null
+              )}
             </div>
           </div>
         );
@@ -1244,9 +1669,10 @@ export default function ReportDetailPage() {
               )}
             </div>
 
-            {/* Friendly sections — hide internal-only data */}
+            {/* Friendly sections — hide internal-only data, hide empty sections except teacher_comment (#4) */}
             {sortedSections
               .filter((s) => s.type !== "behavior_incidents")
+              .filter((s) => s.type === "teacher_comment" || !isSectionEmpty(s))
               .map((section) => (
               <div key={section.configId} className="space-y-2">
                 <h3 className="text-[15px] font-semibold text-foreground flex items-center gap-2">
@@ -1256,8 +1682,10 @@ export default function ReportDetailPage() {
                     <CheckCircle2 className="h-4 w-4 text-green-600" />
                   ) : section.type === "teacher_comment" ? (
                     <MessageSquare className="h-4 w-4 text-blue-600" />
-                  ) : section.type === "portfolio_evidence" ? (
+                  ) : section.type === "portfolio_evidence" || section.type === "portfolio" ? (
                     <Image className="h-4 w-4 text-purple-600" />
+                  ) : section.type === "learning_goals" || section.type === "atl_skills" ? (
+                    <BookOpen className="h-4 w-4 text-emerald-600" />
                   ) : null}
                   {section.label}
                 </h3>
@@ -1286,7 +1714,59 @@ export default function ReportDetailPage() {
                       <div className="text-[11px] text-muted-foreground">Total</div>
                     </div>
                   </div>
-                ) : section.type === "grades" || section.type === "myp_criteria" || section.type === "dp_grades" ? (
+                ) : section.type === "myp_criteria" ? (
+                  <div className="bg-white rounded-md border p-3">
+                    {(() => {
+                      // Aggregate best criteria scores for Family Preview
+                      const criteriaMap: Record<string, { criterion: string; level: number }> = {};
+                      studentGrades.forEach((g) => {
+                        if (g.mypCriteriaScores?.length) {
+                          g.mypCriteriaScores.forEach((cs) => {
+                            if (!criteriaMap[cs.criterion] || cs.level > criteriaMap[cs.criterion].level) {
+                              criteriaMap[cs.criterion] = { criterion: cs.criterion, level: cs.level };
+                            }
+                          });
+                        }
+                      });
+                      const entries = ["A", "B", "C", "D"].map((c) => criteriaMap[c] || { criterion: c, level: 0 });
+                      const total = entries.reduce((s, e) => s + e.level, 0);
+                      const boundary = getMYPBoundaryGrade(total);
+                      return (
+                        <div className="space-y-3">
+                          <table className="w-full text-[13px]">
+                            <thead>
+                              <tr className="border-b border-border">
+                                <th className="text-left py-1.5 font-medium text-muted-foreground">Criterion</th>
+                                <th className="text-center py-1.5 font-medium text-muted-foreground">Achieved</th>
+                                <th className="text-center py-1.5 font-medium text-muted-foreground">Max</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {entries.map((e) => (
+                                <tr key={e.criterion} className="border-b border-border/30">
+                                  <td className="py-1.5">Criterion {e.criterion}</td>
+                                  <td className="text-center py-1.5 font-medium">{e.level > 0 ? e.level : "—"}</td>
+                                  <td className="text-center py-1.5 text-muted-foreground">8</td>
+                                </tr>
+                              ))}
+                              <tr className="border-t-2 border-border font-semibold">
+                                <td className="py-1.5">Total</td>
+                                <td className="text-center py-1.5">{total}</td>
+                                <td className="text-center py-1.5 text-muted-foreground">32</td>
+                              </tr>
+                            </tbody>
+                          </table>
+                          {boundary && (
+                            <div className="flex items-center justify-between bg-muted/50 rounded-md p-2">
+                              <span className="text-[12px] text-muted-foreground">MYP Boundary Grade</span>
+                              <span className="text-[16px] font-bold">{boundary}/7</span>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
+                  </div>
+                ) : section.type === "grades" || section.type === "dp_grades" ? (
                   <div className="bg-white rounded-md border p-3">
                     {studentGrades.length > 0 ? (
                       <div className="space-y-2">
@@ -1300,7 +1780,7 @@ export default function ReportDetailPage() {
                                 ? `${g.score}%`
                                 : g.dpGrade != null
                                 ? `${g.dpGrade}/7`
-                                : "Assessed"}
+                                : "Not yet graded"}
                             </Badge>
                           </div>
                         ))}
@@ -1308,6 +1788,57 @@ export default function ReportDetailPage() {
                     ) : (
                       <p className="text-[13px] text-muted-foreground">No grades available yet.</p>
                     )}
+                  </div>
+                ) : section.type === "learning_goals" || section.type === "atl_skills" ? (
+                  <div className="bg-white rounded-md border p-3 space-y-2">
+                    <p className="text-[12px] text-muted-foreground">ATL skills progress based on assessments and portfolio evidence this term.</p>
+                    {(() => {
+                      const atlGoals = learningGoals.filter((g) => g.category === "atl_skill");
+                      return atlGoals.map((goal) => {
+                        // Find mastery from auto-filled content or live data
+                        const skillsData = section.content?.skills as { goalId: string; level?: string; artifactCount?: number }[] | undefined;
+                        const saved = skillsData?.find((s) => s.goalId === goal.id);
+                        const level = saved?.level || null;
+                        const artCount = saved?.artifactCount ?? studentArtifacts.filter((a) => a.learningGoalIds.includes(goal.id)).length;
+                        return (
+                          <div key={goal.id} className="flex items-center justify-between text-[13px]">
+                            <span>{goal.title}</span>
+                            <div className="flex items-center gap-2">
+                              {level && level !== "not_assessed" ? (
+                                <Badge className={`text-[11px] ${MASTERY_COLOR[level] || ""}`} variant="secondary">
+                                  {MASTERY_LABEL[level] || level}
+                                </Badge>
+                              ) : artCount > 0 ? (
+                                <span className="text-[12px] text-muted-foreground">{artCount} portfolio {artCount === 1 ? "item" : "items"} linked</span>
+                              ) : (
+                                <span className="text-[12px] text-muted-foreground">—</span>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      });
+                    })()}
+                  </div>
+                ) : section.type === "portfolio" ? (
+                  <div className="bg-white rounded-md border p-3">
+                    {(() => {
+                      const ids = (section.content?.artifactIds as string[]) || [];
+                      const items = ids.length > 0
+                        ? ids.map((id) => artifacts.find((a) => a.id === id)).filter(Boolean)
+                        : studentArtifacts.filter((a) => a.approvalStatus === "approved");
+                      if (items.length === 0) return <p className="text-[13px] text-muted-foreground">No portfolio items available.</p>;
+                      return (
+                        <div className="space-y-2">
+                          {items.slice(0, 5).map((art) => art ? (
+                            <div key={art.id} className="flex items-center gap-2 text-[13px]">
+                              <Image className="h-4 w-4 text-muted-foreground" />
+                              <span>{art.title}</span>
+                              <Badge variant="outline" className="text-[10px] ml-auto">{art.mediaType}</Badge>
+                            </div>
+                          ) : null)}
+                        </div>
+                      );
+                    })()}
                   </div>
                 ) : section.type === "portfolio_evidence" ? (
                   <div className="bg-white rounded-md border p-3">
@@ -1330,7 +1861,7 @@ export default function ReportDetailPage() {
                 ) : (
                   <div className="bg-white rounded-md border p-3">
                     <p className="text-[13px] text-muted-foreground">
-                      {JSON.stringify(section.content) === "{}" ? "No content" : JSON.stringify(section.content)}
+                      {JSON.stringify(section.content) === "{}" ? "Not assessed this term" : JSON.stringify(section.content)}
                     </p>
                   </div>
                 )}
@@ -1386,8 +1917,29 @@ export default function ReportDetailPage() {
                     {attendanceSummary.absent} | Late: {attendanceSummary.late}{" "}
                     | Total: {attendanceSummary.total}
                   </p>
+                ) : section.type === "myp_criteria" ? (
+                  <div className="text-[13px]">
+                    {(() => {
+                      const cMap: Record<string, number> = {};
+                      studentGrades.forEach((g) => {
+                        g.mypCriteriaScores?.forEach((cs) => {
+                          if (!cMap[cs.criterion] || cs.level > cMap[cs.criterion]) cMap[cs.criterion] = cs.level;
+                        });
+                      });
+                      const entries = ["A", "B", "C", "D"].map((c) => ({ c, l: cMap[c] || 0 }));
+                      const tot = entries.reduce((s, e) => s + e.l, 0);
+                      const bg = getMYPBoundaryGrade(tot);
+                      return (
+                        <>
+                          {entries.map((e) => (
+                            <p key={e.c}>Criterion {e.c}: {e.l > 0 ? `${e.l}/8` : "—"}</p>
+                          ))}
+                          <p className="font-semibold mt-1">Total: {tot}/32 · Boundary Grade: {bg ?? "—"}/7</p>
+                        </>
+                      );
+                    })()}
+                  </div>
                 ) : section.type === "grades" ||
-                  section.type === "myp_criteria" ||
                   section.type === "dp_grades" ? (
                   <div className="text-[13px]">
                     {studentGrades.length > 0 ? (
@@ -1401,8 +1953,6 @@ export default function ReportDetailPage() {
                               ? `${g.score}%`
                               : g.dpGrade != null
                               ? `${g.dpGrade}/7`
-                              : g.mypCriteriaScores?.length
-                              ? `${Math.round(g.mypCriteriaScores.reduce((s, c) => s + c.level, 0) / g.mypCriteriaScores.length)}/8`
                               : "Pending"}
                           </li>
                         ))}
@@ -1412,6 +1962,45 @@ export default function ReportDetailPage() {
                         No grades available.
                       </p>
                     )}
+                  </div>
+                ) : section.type === "learning_goals" || section.type === "atl_skills" ? (
+                  <div className="text-[13px]">
+                    {(() => {
+                      const atlGoals = learningGoals.filter((g) => g.category === "atl_skill");
+                      const skillsData = section.content?.skills as { goalId: string; level?: string; artifactCount?: number }[] | undefined;
+                      return atlGoals.map((goal) => {
+                        const saved = skillsData?.find((s) => s.goalId === goal.id);
+                        const level = saved?.level || null;
+                        const artCount = saved?.artifactCount ?? 0;
+                        return (
+                          <p key={goal.id}>
+                            {goal.title}:{" "}
+                            {level && level !== "not_assessed"
+                              ? MASTERY_LABEL[level] || level
+                              : artCount > 0
+                              ? `${artCount} evidence item${artCount > 1 ? "s" : ""}`
+                              : "—"}
+                          </p>
+                        );
+                      });
+                    })()}
+                  </div>
+                ) : section.type === "portfolio" ? (
+                  <div className="text-[13px]">
+                    {(() => {
+                      const ids = (section.content?.artifactIds as string[]) || [];
+                      const items = ids.length > 0
+                        ? ids.map((id) => artifacts.find((a) => a.id === id)).filter(Boolean)
+                        : studentArtifacts.filter((a) => a.approvalStatus === "approved");
+                      if (items.length === 0) return <p className="text-muted-foreground">No portfolio items.</p>;
+                      return (
+                        <ul className="space-y-1">
+                          {items.slice(0, 5).map((art) => art ? (
+                            <li key={art.id}>{art.title} ({art.mediaType})</li>
+                          ) : null)}
+                        </ul>
+                      );
+                    })()}
                   </div>
                 ) : section.type === "portfolio_evidence" ? (
                   <div className="text-[13px]">
@@ -1471,6 +2060,37 @@ export default function ReportDetailPage() {
         description="This section and its content will be permanently removed from the report. This action cannot be undone."
         confirmLabel="Remove"
         onConfirm={confirmRemoveSection}
+        destructive
+      />
+
+      {/* Completeness warning before Mark Ready (#3) */}
+      <ConfirmDialog
+        open={readyWarningOpen}
+        onOpenChange={setReadyWarningOpen}
+        title="Report has empty sections"
+        description={`The following sections have no content: ${emptySectionLabels.join(", ")}. Are you sure you want to mark this report as ready?`}
+        confirmLabel="Mark ready anyway"
+        onConfirm={confirmMarkReady}
+      />
+
+      {/* Publish confirmation (#2) */}
+      <ConfirmDialog
+        open={publishConfirmOpen}
+        onOpenChange={setPublishConfirmOpen}
+        title="Publish this report?"
+        description={`This will mark ${studentName}'s report as published. It will be visible to coordinators and ready for distribution. This cannot be undone.`}
+        confirmLabel="Publish report"
+        onConfirm={confirmPublish}
+      />
+
+      {/* Distribute confirmation (#2) */}
+      <ConfirmDialog
+        open={distributeConfirmOpen}
+        onOpenChange={setDistributeConfirmOpen}
+        title="Distribute to family?"
+        description={`This will send ${studentName}'s report to ${student?.parentName || "their family"} (${student?.parentEmail || "email on file"}). They will see it in the Family Portal immediately. This cannot be undone.`}
+        confirmLabel="Distribute report"
+        onConfirm={confirmDistribute}
         destructive
       />
     </div>

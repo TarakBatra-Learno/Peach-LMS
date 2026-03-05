@@ -37,6 +37,7 @@ import { format, parseISO } from "date-fns";
 import { toast } from "sonner";
 import type { GradingMode, Status } from "@/types/common";
 import { RUBRIC_TEMPLATES } from "@/lib/constants";
+import { MYP_DEFAULT_CRITERIA } from "@/lib/myp-descriptors";
 
 const GRADING_MODE_LABELS: Record<GradingMode, string> = {
   score: "Score",
@@ -220,6 +221,18 @@ export default function AssessmentsPage() {
         ? RUBRIC_TEMPLATES.find((t) => t.id === selectedRubricTemplateId)
         : undefined;
 
+    // Pre-populate MYP criteria when MYP Criteria mode is selected (#6)
+    const mypCriteria =
+      newGradingMode === "myp_criteria"
+        ? MYP_DEFAULT_CRITERIA.map((c) => ({
+            id: generateId("mypc"),
+            criterion: c.criterion,
+            title: c.title,
+            maxLevel: c.maxLevel,
+            strandDescriptors: [],
+          }))
+        : undefined;
+
     addAssessment({
       id: newAssessmentId,
       title: newTitle.trim(),
@@ -238,6 +251,7 @@ export default function AssessmentsPage() {
           : assignedStudentIds,
       rubricCriteria: rubricTemplate?.rubricCriteria,
       rubric: rubricTemplate?.rubric,
+      mypCriteria,
     });
 
     addCalendarEvent({

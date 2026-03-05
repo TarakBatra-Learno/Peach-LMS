@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useStore } from "@/stores";
 import { PageHeader } from "@/components/shared/page-header";
@@ -14,6 +14,8 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 import {
   Sheet,
   SheetContent,
@@ -34,6 +36,10 @@ import {
   AlertCircle,
   ShieldAlert,
   ArrowRight,
+  FileText,
+  CheckCircle2,
+  Eye,
+  Send,
 } from "lucide-react";
 import type { PortfolioArtifact } from "@/types/portfolio";
 import Link from "next/link";
@@ -55,20 +61,48 @@ export default function ClassHubPage() {
       router.push(`/classes/${activeClassId}`);
     }
   }, [activeClassId, classId, router]);
-  const getStudentsByClassId = useStore((s) => s.getStudentsByClassId);
-  const getAssessmentsByClassId = useStore((s) => s.getAssessmentsByClassId);
+  const allStudents = useStore((s) => s.students);
+  const allClasses = useStore((s) => s.classes);
+  const allAssessments = useStore((s) => s.assessments);
   const grades = useStore((s) => s.grades);
-  const getArtifactsByClass = useStore((s) => s.getArtifactsByClass);
-  const getSessionsByClass = useStore((s) => s.getSessionsByClass);
-  const getAnnouncementsByClass = useStore((s) => s.getAnnouncementsByClass);
+  const allArtifacts = useStore((s) => s.artifacts);
+  const updateArtifact = useStore((s) => s.updateArtifact);
+  const allSessions = useStore((s) => s.attendanceSessions);
+  const allAnnouncements = useStore((s) => s.announcements);
   const learningGoals = useStore((s) => s.learningGoals);
+  const allReports = useStore((s) => s.reports);
+  const reportCycles = useStore((s) => s.reportCycles);
 
   const cls = getClassById(classId);
-  const students = getStudentsByClassId(classId);
-  const assessments = getAssessmentsByClassId(classId);
-  const artifacts = getArtifactsByClass(classId);
-  const sessions = getSessionsByClass(classId);
-  const announcements = getAnnouncementsByClass(classId);
+  const students = useMemo(() => {
+    const c = allClasses.find((c) => c.id === classId);
+    if (!c) return [];
+    return allStudents.filter((s) => c.studentIds.includes(s.id));
+  }, [allStudents, allClasses, classId]);
+  const assessments = useMemo(
+    () => allAssessments.filter((a) => a.classId === classId),
+    [allAssessments, classId]
+  );
+  const artifacts = useMemo(
+    () => allArtifacts.filter((a) => a.classId === classId),
+    [allArtifacts, classId]
+  );
+  const sessions = useMemo(
+    () => allSessions.filter((s) => s.classId === classId),
+    [allSessions, classId]
+  );
+  const announcements = useMemo(
+    () => allAnnouncements.filter((a) => a.classId === classId),
+    [allAnnouncements, classId]
+  );
+  const classReports = useMemo(
+    () => allReports.filter((r) => r.classId === classId),
+    [allReports, classId]
+  );
+  const openCycle = useMemo(
+    () => reportCycles.find((c) => c.status === "open" && c.classIds.includes(classId)),
+    [reportCycles, classId]
+  );
 
   const [incidentDialogOpen, setIncidentDialogOpen] = useState(false);
   const [detailArtifact, setDetailArtifact] = useState<PortfolioArtifact | null>(null);
@@ -122,6 +156,7 @@ export default function ClassHubPage() {
           <TabsTrigger value="grades">Grade snapshot</TabsTrigger>
           <TabsTrigger value="attendance">Attendance</TabsTrigger>
           <TabsTrigger value="portfolio">Portfolio</TabsTrigger>
+          <TabsTrigger value="reports">Reports</TabsTrigger>
           <TabsTrigger value="communication">Communication</TabsTrigger>
           <TabsTrigger value="schedule">Schedule</TabsTrigger>
         </TabsList>
@@ -335,6 +370,115 @@ export default function ClassHubPage() {
           )}
         </TabsContent>
 
+        {/* Reports tab (#23) */}
+        <TabsContent value="reports">
+          {!openCycle ? (
+            <EmptyState icon={FileText} title="No open report cycle" description="There is no active report cycle for this class. Reports will appear here when a cycle is open." />
+          ) : (() => {
+            const cycleReports = classReports.filter((r) => r.cycleId === openCycle.id);
+            if (cycleReports.length === 0) {
+              return <EmptyState icon={FileText} title="No reports yet" description={`No reports generated for ${openCycle.name} in this class.`} />;
+            }
+
+            const drafts = cycleReports.filter((r) => r.publishState === "draft").length;
+            const ready = cycleReports.filter((r) => r.publishState === "ready").length;
+            const published = cycleReports.filter((r) => r.publishState === "published").length;
+            const distributed = cycleReports.filter((r) => r.publishState === "distributed").length;
+
+            return (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-[14px] font-medium">{openCycle.name}</p>
+                    <p className="text-[12px] text-muted-foreground">{openCycle.term} · {openCycle.academicYear}</p>
+                  </div>
+                  <Link href={`/reports/cycles/${openCycle.id}`}>
+                    <Button variant="outline" size="sm" className="h-7 text-[12px]">
+                      View cycle <ArrowRight className="h-3 w-3 ml-1" />
+                    </Button>
+                  </Link>
+                </div>
+
+                {/* Stats row */}
+                <div className="grid grid-cols-4 gap-3">
+                  <div className="rounded-lg bg-muted/50 p-3 text-center">
+                    <p className="text-[18px] font-semibold">{drafts}</p>
+                    <p className="text-[11px] text-muted-foreground">Drafts</p>
+                  </div>
+                  <div className="rounded-lg bg-muted/50 p-3 text-center">
+                    <p className="text-[18px] font-semibold">{ready}</p>
+                    <p className="text-[11px] text-muted-foreground">Ready</p>
+                  </div>
+                  <div className="rounded-lg bg-muted/50 p-3 text-center">
+                    <p className="text-[18px] font-semibold">{published}</p>
+                    <p className="text-[11px] text-muted-foreground">Published</p>
+                  </div>
+                  <div className="rounded-lg bg-muted/50 p-3 text-center">
+                    <p className="text-[18px] font-semibold">{distributed}</p>
+                    <p className="text-[11px] text-muted-foreground">Distributed</p>
+                  </div>
+                </div>
+
+                {/* Student report list */}
+                <Card className="p-4 gap-0">
+                  <table className="w-full text-[13px]">
+                    <thead>
+                      <tr className="border-b border-border">
+                        <th className="text-left py-2 pr-4 font-medium text-muted-foreground">Student</th>
+                        <th className="text-center py-2 px-2 font-medium text-muted-foreground">Status</th>
+                        <th className="text-center py-2 px-2 font-medium text-muted-foreground">Sections filled</th>
+                        <th className="text-right py-2 pl-2 font-medium text-muted-foreground">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {cycleReports.map((rpt) => {
+                        const st = allStudents.find((s) => s.id === rpt.studentId);
+                        const filledSections = rpt.sections.filter((sec) => {
+                          if (sec.type === "teacher_comment") {
+                            const txt = (sec.content?.comment as string) || (sec.content?.text as string) || "";
+                            return txt.trim() !== "";
+                          }
+                          return sec.content && Object.keys(sec.content).length > 0;
+                        }).length;
+                        const totalSec = rpt.sections.length;
+                        const pct = totalSec > 0 ? Math.round((filledSections / totalSec) * 100) : 0;
+                        return (
+                          <tr key={rpt.id} className="border-b border-border/50 hover:bg-muted/30 transition-colors">
+                            <td className="py-2 pr-4">
+                              <Link href={`/reports/${rpt.id}`} className="font-medium hover:text-[#c24e3f] transition-colors">
+                                {st ? `${st.firstName} ${st.lastName}` : "Unknown"}
+                              </Link>
+                            </td>
+                            <td className="text-center py-2 px-2">
+                              <StatusBadge status={rpt.publishState} />
+                            </td>
+                            <td className="text-center py-2 px-2">
+                              <div className="flex items-center justify-center gap-1.5">
+                                <div className="w-10 h-1.5 bg-muted rounded-full overflow-hidden">
+                                  <div
+                                    className={`h-full rounded-full ${pct === 100 ? "bg-green-500" : pct > 50 ? "bg-amber-500" : "bg-red-400"}`}
+                                    style={{ width: `${pct}%` }}
+                                  />
+                                </div>
+                                <span className="text-[11px] text-muted-foreground">{filledSections}/{totalSec}</span>
+                              </div>
+                            </td>
+                            <td className="text-right py-2 pl-2">
+                              <Link href={`/reports/${rpt.id}`}>
+                                <Button variant="outline" size="sm" className="h-7 text-[12px]">Edit</Button>
+                              </Link>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </Card>
+              </div>
+            );
+          })()}
+        </TabsContent>
+
         <TabsContent value="communication">
           {announcements.length === 0 ? (
             <EmptyState icon={MessageSquare} title="No announcements" description="Class announcements will appear here." />
@@ -474,6 +618,23 @@ export default function ClassHubPage() {
                       </p>
                     </div>
                   )}
+
+                  <Separator />
+
+                  {/* Flag for report toggle (#19) */}
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <Label className="text-[13px] font-medium">Flag for report</Label>
+                      <p className="text-[12px] text-muted-foreground">Include this artifact in term reports</p>
+                    </div>
+                    <Switch
+                      checked={detailArtifact.flaggedForReport ?? false}
+                      onCheckedChange={(checked) => {
+                        updateArtifact(detailArtifact.id, { flaggedForReport: checked });
+                        setDetailArtifact({ ...detailArtifact, flaggedForReport: checked });
+                      }}
+                    />
+                  </div>
 
                   <Separator />
 
