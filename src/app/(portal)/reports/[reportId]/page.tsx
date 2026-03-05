@@ -90,7 +90,15 @@ const MASTERY_COLOR: Record<string, string> = {
   not_assessed: "bg-muted text-muted-foreground",
 };
 
-function isSectionEmpty(section: ReportSection): boolean {
+/**
+ * Check if a report section is empty.
+ * Some section types render from live store data (grades, behavior_incidents)
+ * rather than from section.content, so we accept optional live-data counts.
+ */
+function isSectionEmpty(
+  section: ReportSection,
+  liveData?: { studentGradesCount?: number; studentIncidentsCount?: number },
+): boolean {
   if (section.type === "teacher_comment") {
     const text = (section.content?.comment as string) || (section.content?.text as string) || "";
     return text.trim() === "";
@@ -102,6 +110,13 @@ function isSectionEmpty(section: ReportSection): boolean {
     return !section.content?.artifactIds || (section.content.artifactIds as string[]).length === 0;
   }
   if (section.type === "behavior_incidents") {
+    // Renderer reads from studentIncidents store, not section.content
+    if (liveData?.studentIncidentsCount != null) return liveData.studentIncidentsCount === 0;
+    return !section.content || Object.keys(section.content).length === 0;
+  }
+  // Grades render from live studentGrades, not section.content
+  if (section.type === "grades" || section.type === "myp_criteria" || section.type === "dp_grades") {
+    if (liveData?.studentGradesCount != null) return liveData.studentGradesCount === 0;
     return !section.content || Object.keys(section.content).length === 0;
   }
   // ATL skills: empty if no skills array, OR every skill is "not_assessed" with no artifact evidence
@@ -114,7 +129,7 @@ function isSectionEmpty(section: ReportSection): boolean {
   if (section.type === "portfolio") {
     return !section.content?.artifactIds || (section.content.artifactIds as string[]).length === 0;
   }
-  // Grades/criteria/other sections — empty if no content keys
+  // Other sections — empty if no content keys
   return !section.content || Object.keys(section.content).length === 0;
 }
 
@@ -568,8 +583,12 @@ export default function ReportDetailPage() {
 
   // Publish flow handlers
   const handleMarkReady = () => {
+    const liveData = {
+      studentGradesCount: studentGrades.length,
+      studentIncidentsCount: studentIncidents.length,
+    };
     const emptyLabels = report.sections
-      .filter((s) => isSectionEmpty(s))
+      .filter((s) => isSectionEmpty(s, liveData))
       .map((s) => s.label);
     if (emptyLabels.length > 0) {
       setEmptySectionLabels(emptyLabels);
@@ -1320,18 +1339,6 @@ export default function ReportDetailPage() {
       <PageHeader
         title={`Report: ${studentName}`}
         description={`${cls?.name || "Unknown Class"} \u00b7 ${cycle?.name || "Unknown Cycle"} \u00b7 ${cycle?.term || ""}`}
-        primaryAction={{
-          label: "Print Preview",
-          onClick: () => setPreviewOpen(true),
-          icon: Printer,
-        }}
-        secondaryActions={[
-          {
-            label: "Download PDF",
-            onClick: handleDownloadPdf,
-            icon: Download,
-          },
-        ]}
       >
         <div className="flex items-center gap-2 mt-2">
           <Link
@@ -1347,19 +1354,42 @@ export default function ReportDetailPage() {
               {template.name}
             </Badge>
           )}
-          <Button
-            variant="outline"
-            size="sm"
-            className="ml-auto text-[13px]"
-            onClick={() => setFamilyPreviewOpen(true)}
-          >
-            <Eye className="h-3.5 w-3.5 mr-1.5" />
-            Family Preview
-          </Button>
+          <div className="flex items-center gap-2 ml-auto">
+            <Button
+              variant="outline"
+              size="sm"
+              className="text-[13px]"
+              onClick={() => setFamilyPreviewOpen(true)}
+            >
+              <Eye className="h-3.5 w-3.5 mr-1.5" />
+              Family Preview
+            </Button>
+            <Button
+              size="sm"
+              className="text-[13px]"
+              onClick={() => setPreviewOpen(true)}
+            >
+              <Printer className="h-3.5 w-3.5 mr-1.5" />
+              Print Preview
+            </Button>
+          </div>
         </div>
       </PageHeader>
 
-      {/* Publish Flow Actions + Auto-fill */}
+      {/* Auto-fill — distinct from publish flow */}
+      <div className="flex items-center gap-3 mb-4 p-3 rounded-lg bg-amber-50/50 border border-amber-200/50">
+        <Wand2 className="h-4 w-4 text-amber-600" />
+        <div className="flex-1 min-w-0">
+          <p className="text-[13px] font-medium text-foreground">Auto-fill sections</p>
+          <p className="text-[11px] text-muted-foreground">Populate attendance, grades, ATL skills, and portfolio from existing data</p>
+        </div>
+        <Button size="sm" variant="outline" onClick={handleAutoFill} className="shrink-0">
+          <Wand2 className="h-3.5 w-3.5 mr-1.5" />
+          Auto-fill
+        </Button>
+      </div>
+
+      {/* Publish Flow */}
       <div className="flex items-center gap-3 mb-6 p-4 rounded-lg bg-muted/50 border border-border/50">
         <span className="text-[13px] text-muted-foreground mr-2">
           Publish flow:
@@ -1394,7 +1424,7 @@ export default function ReportDetailPage() {
           Distribute
         </Button>
 
-        {/* Schedule button (A12) */}
+        {/* Schedule button */}
         <Button
           size="sm"
           variant="outline"
@@ -1403,12 +1433,6 @@ export default function ReportDetailPage() {
         >
           <CalendarClock className="h-3.5 w-3.5 mr-1.5" />
           Schedule
-        </Button>
-
-        {/* Auto-fill button (A5) */}
-        <Button size="sm" variant="outline" onClick={handleAutoFill}>
-          <Wand2 className="h-3.5 w-3.5 mr-1.5" />
-          Auto-fill
         </Button>
 
         {scheduledPublishAt && (
@@ -1669,10 +1693,9 @@ export default function ReportDetailPage() {
               )}
             </div>
 
-            {/* Friendly sections — hide internal-only data, hide empty sections except teacher_comment (#4) */}
+            {/* Friendly sections — hide empty sections except teacher_comment (#4) */}
             {sortedSections
-              .filter((s) => s.type !== "behavior_incidents")
-              .filter((s) => s.type === "teacher_comment" || !isSectionEmpty(s))
+              .filter((s) => s.type === "teacher_comment" || !isSectionEmpty(s, { studentGradesCount: studentGrades.length, studentIncidentsCount: studentIncidents.length }))
               .map((section) => (
               <div key={section.configId} className="space-y-2">
                 <h3 className="text-[15px] font-semibold text-foreground flex items-center gap-2">
@@ -1686,6 +1709,8 @@ export default function ReportDetailPage() {
                     <Image className="h-4 w-4 text-purple-600" />
                   ) : section.type === "learning_goals" || section.type === "atl_skills" ? (
                     <BookOpen className="h-4 w-4 text-emerald-600" />
+                  ) : section.type === "behavior_incidents" ? (
+                    <ShieldAlert className="h-4 w-4 text-amber-600" />
                   ) : null}
                   {section.label}
                 </h3>
@@ -1710,8 +1735,8 @@ export default function ReportDetailPage() {
                       <div className="text-[11px] text-muted-foreground">Late</div>
                     </div>
                     <div className="bg-white rounded-md border p-2">
-                      <div className="text-[16px] font-semibold">{attendanceSummary.total}</div>
-                      <div className="text-[11px] text-muted-foreground">Total</div>
+                      <div className="text-[16px] font-semibold text-blue-600">{attendanceSummary.excused}</div>
+                      <div className="text-[11px] text-muted-foreground">Excused</div>
                     </div>
                   </div>
                 ) : section.type === "myp_criteria" ? (
@@ -1856,6 +1881,24 @@ export default function ReportDetailPage() {
                       </div>
                     ) : (
                       <p className="text-[13px] text-muted-foreground">No portfolio evidence attached.</p>
+                    )}
+                  </div>
+                ) : section.type === "behavior_incidents" ? (
+                  <div className="bg-white rounded-md border p-3">
+                    {studentIncidents.length > 0 ? (
+                      <div className="space-y-2">
+                        <p className="text-[12px] text-muted-foreground">
+                          {studentIncidents.length} {studentIncidents.length === 1 ? "item" : "items"} recorded this term.
+                        </p>
+                        {studentIncidents.map((inc) => (
+                          <div key={inc.id} className="flex items-center justify-between text-[13px]">
+                            <span>{inc.title}</span>
+                            <Badge variant="outline" className="text-[10px] capitalize">{inc.status}</Badge>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-[13px] text-muted-foreground">No wellbeing notes this term.</p>
                     )}
                   </div>
                 ) : (
@@ -2043,7 +2086,11 @@ export default function ReportDetailPage() {
               </div>
             ))}
           </div>
-          <div className="flex justify-end pt-2">
+          <div className="flex justify-end gap-2 pt-2">
+            <Button size="sm" variant="outline" onClick={handleDownloadPdf}>
+              <Download className="h-3.5 w-3.5 mr-1.5" />
+              Download PDF
+            </Button>
             <Button size="sm" onClick={() => window.print()}>
               <Printer className="h-3.5 w-3.5 mr-1.5" />
               Print
