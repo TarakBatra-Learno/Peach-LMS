@@ -22,7 +22,7 @@ export interface ReportTemplate {
 
 export interface ReportSectionConfig {
   id: ID;
-  type: "grades" | "attendance" | "portfolio" | "teacher_comment" | "learning_goals" | "media" | "custom_text" | "myp_criteria" | "dp_grades" | "atl_skills" | "portfolio_evidence" | "behavior_incidents";
+  type: "grades" | "attendance" | "portfolio" | "teacher_comment" | "learning_goals" | "media" | "custom_text" | "myp_criteria" | "dp_grades" | "atl_skills" | "portfolio_evidence" | "behavior_incidents" | "standards_skills";
   label: string;
   required: boolean;
   order: number;

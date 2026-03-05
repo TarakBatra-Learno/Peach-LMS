@@ -13,20 +13,13 @@ import { useMockLoading } from "@/lib/hooks/use-mock-loading";
 import { CardGridSkeleton } from "@/components/shared/skeleton-loader";
 import { generateId } from "@/services/mock-service";
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
+import { AttendanceDialog } from "@/components/shared/attendance-dialog";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-} from "@/components/ui/dialog";
 import {
   Select,
   SelectContent,
@@ -704,107 +697,7 @@ export default function AttendancePage() {
       </Tabs>
 
       {/* Take Attendance Dialog */}
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="sm:max-w-[600px] max-h-[80vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Take attendance</DialogTitle>
-            <DialogDescription>
-              Select a class and mark attendance for each student.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-4 py-2">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label className="text-[13px]">Class</Label>
-                <Select value={selectedClassId} onValueChange={handleClassChange}>
-                  <SelectTrigger className="mt-1.5 h-9 text-[13px]">
-                    <SelectValue placeholder="Select class" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {classes.map((cls) => (
-                      <SelectItem key={cls.id} value={cls.id}>
-                        {cls.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label className="text-[13px]">Date</Label>
-                <Input
-                  type="date"
-                  value={selectedDate}
-                  onChange={(e) => setSelectedDate(e.target.value)}
-                  className="mt-1.5 h-9 text-[13px]"
-                />
-              </div>
-            </div>
-
-            {selectedClassId && classStudents.length > 0 && (
-              <div className="space-y-1.5 max-h-[400px] overflow-y-auto">
-                {classStudents.map((student) => {
-                  const dlgStatus = records[student.id] || "present";
-                  const dlgShowNote = dlgStatus !== "present";
-                  return (
-                  <div
-                    key={student.id}
-                    className="py-2 px-3 rounded-lg hover:bg-muted/50"
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="text-[13px] font-medium">
-                        {student.firstName} {student.lastName}
-                      </span>
-                      <div className="flex gap-1">
-                        {STATUS_OPTIONS.map((opt) => {
-                          const isActive = dlgStatus === opt.value;
-                          return (
-                            <button
-                              key={opt.value}
-                              onClick={() => handleStatusChange(student.id, opt.value)}
-                              className={cn(
-                                "px-2 py-1 rounded text-[11px] font-medium transition-all border",
-                                isActive && opt.value === "present" && "bg-[#dcfce7] text-[#16a34a] border-[#16a34a]/30",
-                                isActive && opt.value === "absent" && "bg-[#fee2e2] text-[#dc2626] border-[#dc2626]/30",
-                                isActive && opt.value === "late" && "bg-[#fef3c7] text-[#b45309] border-[#b45309]/30",
-                                isActive && opt.value === "excused" && "bg-[#dbeafe] text-[#2563eb] border-[#2563eb]/30",
-                                !isActive && "bg-background text-muted-foreground border-border hover:bg-muted"
-                              )}
-                            >
-                              {opt.label}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                    {dlgShowNote && (
-                      <div className="mt-1.5 ml-0">
-                        <Input
-                          value={notes[student.id] || ""}
-                          onChange={(e) => { setNotes((prev) => ({ ...prev, [student.id]: e.target.value })); setIsDirty(true); }}
-                          placeholder={`Reason for ${dlgStatus}...`}
-                          className="h-7 text-[11px]"
-                        />
-                      </div>
-                    )}
-                  </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDialogOpen(false)}>
-              Cancel
-            </Button>
-            <Button onClick={handleCompleteSession} disabled={!selectedClassId}>
-              <CheckCircle2 className="h-4 w-4 mr-1.5" />
-              Complete session
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <AttendanceDialog open={dialogOpen} onOpenChange={setDialogOpen} />
 
       <ConfirmDialog
         open={discardConfirmOpen}

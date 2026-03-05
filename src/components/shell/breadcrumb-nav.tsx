@@ -128,9 +128,11 @@ export function BreadcrumbNav() {
     entries.push({ label: capitalize(segment), href });
   }
 
-  // On student profile pages, inject class hierarchy when ?classId is present
-  // Result: Home > Classes > ClassName > StudentName
+  // When ?classId is present, inject class hierarchy breadcrumbs
+  // Pattern: replace the list-page entry ("Assessments"/"Reports") with Classes > ClassName
   const contextClassId = searchParams.get("classId");
+
+  // /students/{id}?classId= → Home > Classes > ClassName > StudentName
   if (pathname.startsWith("/students/") && contextClassId) {
     const cls = classes.find((c) => c.id === contextClassId);
     const studentIdx = entries.findIndex((e) => e.href.startsWith("/students/"));
@@ -139,6 +141,47 @@ export function BreadcrumbNav() {
         { label: "Classes", href: "/classes" },
         { label: cls?.name ?? contextClassId, href: `/classes/${contextClassId}` },
       );
+    }
+  }
+
+  // /assessments/{id}?classId= → Home > Classes > ClassName > AssessmentTitle
+  if (pathname.startsWith("/assessments/") && contextClassId) {
+    const cls = classes.find((c) => c.id === contextClassId);
+    const asmtIdx = entries.findIndex((e) => e.href.startsWith("/assessments"));
+    if (asmtIdx !== -1) {
+      // Remove the "Assessments" list-page entry if it exists
+      if (entries[asmtIdx].label === "Assessments") {
+        entries.splice(asmtIdx, 1,
+          { label: "Classes", href: "/classes" },
+          { label: cls?.name ?? contextClassId, href: `/classes/${contextClassId}?tab=assessments` },
+        );
+      } else {
+        // It's the assessment detail entry directly — just prepend class hierarchy
+        entries.splice(asmtIdx, 0,
+          { label: "Classes", href: "/classes" },
+          { label: cls?.name ?? contextClassId, href: `/classes/${contextClassId}?tab=assessments` },
+        );
+      }
+    }
+  }
+
+  // /reports/{id}?classId= → Home > Classes > ClassName > Report - StudentName
+  if (pathname.match(/^\/reports\/[^/]+$/) && contextClassId && !pathname.includes("cycles")) {
+    const cls = classes.find((c) => c.id === contextClassId);
+    const rptIdx = entries.findIndex((e) => e.href.startsWith("/reports"));
+    if (rptIdx !== -1) {
+      // Remove the "Reports" list-page entry if it exists
+      if (entries[rptIdx].label === "Reports") {
+        entries.splice(rptIdx, 1,
+          { label: "Classes", href: "/classes" },
+          { label: cls?.name ?? contextClassId, href: `/classes/${contextClassId}?tab=reports` },
+        );
+      } else {
+        entries.splice(rptIdx, 0,
+          { label: "Classes", href: "/classes" },
+          { label: cls?.name ?? contextClassId, href: `/classes/${contextClassId}?tab=reports` },
+        );
+      }
     }
   }
 

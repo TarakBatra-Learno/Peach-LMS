@@ -50,6 +50,7 @@ import {
   CalendarClock,
   Lightbulb,
   ChevronsUpDown,
+  Target,
 } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { toast } from "sonner";
@@ -125,6 +126,12 @@ function isSectionEmpty(
     if (!skills || skills.length === 0) return true;
     return skills.every((s) => (!s.level || s.level === "not_assessed") && (!s.artifactCount || s.artifactCount === 0));
   }
+  // Standards & Skills: same logic
+  if (section.type === "standards_skills") {
+    const skills = section.content?.skills as { level?: string; artifactCount?: number }[] | undefined;
+    if (!skills || skills.length === 0) return true;
+    return skills.every((s) => (!s.level || s.level === "not_assessed") && (!s.artifactCount || s.artifactCount === 0));
+  }
   // Portfolio highlights: empty if no artifact IDs
   if (section.type === "portfolio") {
     return !section.content?.artifactIds || (section.content.artifactIds as string[]).length === 0;
@@ -146,6 +153,7 @@ const SECTION_LABELS: Record<string, string> = {
   learning_goals: "ATL Skills Progress",
   atl_skills: "ATL Skills",
   behavior_incidents: "Behavior & Incidents",
+  standards_skills: "Standards & Skills",
 };
 
 const ADDABLE_SECTION_TYPES = [
@@ -154,6 +162,7 @@ const ADDABLE_SECTION_TYPES = [
   "grades",
   "portfolio_evidence",
   "behavior_incidents",
+  "standards_skills",
 ] as const;
 
 // ---------- component ----------
@@ -433,6 +442,61 @@ export default function ReportDetailPage() {
         return { ...section, content: { skills } };
       }
 
+      // Auto-fill Standards & Skills
+      if (section.type === "standards_skills") {
+        if (hasContent) {
+          anySkipped = true;
+          return section;
+        }
+        // Collect learning goals scoped to the report's class assessments + portfolio artifacts
+        const classAssessments = assessments.filter(
+          (a) => a.classId === report.classId && a.status === "published"
+        );
+        const relevantGoalIds = new Set<string>();
+        classAssessments.forEach((a) =>
+          a.learningGoalIds.forEach((gid) => relevantGoalIds.add(gid))
+        );
+        studentArtifacts.forEach((a) =>
+          a.learningGoalIds.forEach((gid) => relevantGoalIds.add(gid))
+        );
+        const scopedGoals = learningGoals.filter((g) => relevantGoalIds.has(g.id));
+
+        const skills = scopedGoals.map((goal) => {
+          let bestLevel: string | null = null;
+          let bestGradedAt: string | null = null;
+
+          studentGrades.forEach((g) => {
+            g.standardsMastery?.forEach((sm) => {
+              if (sm.standardId === goal.id) {
+                const smLevel = sm.level || "not_assessed";
+                const isBetter =
+                  !bestLevel ||
+                  (g.gradedAt && (!bestGradedAt || g.gradedAt > bestGradedAt)) ||
+                  (!g.gradedAt && !bestGradedAt && (MASTERY_RANK[smLevel] || 0) > (MASTERY_RANK[bestLevel] || 0));
+                if (isBetter) {
+                  bestLevel = smLevel;
+                  bestGradedAt = g.gradedAt || null;
+                }
+              }
+            });
+          });
+
+          const artifactCount = studentArtifacts.filter((a) =>
+            a.learningGoalIds.includes(goal.id)
+          ).length;
+
+          return {
+            goalId: goal.id,
+            title: goal.title,
+            code: goal.code,
+            category: goal.category,
+            level: bestLevel,
+            artifactCount,
+          };
+        });
+        return { ...section, content: { skills } };
+      }
+
       // Auto-fill portfolio highlights
       if (section.type === "portfolio") {
         if (hasContent) {
@@ -705,6 +769,8 @@ export default function ReportDetailPage() {
         return BookOpen;
       case "behavior_incidents":
         return ShieldAlert;
+      case "standards_skills":
+        return Target;
       default:
         return FileText;
     }
@@ -1271,6 +1337,120 @@ export default function ReportDetailPage() {
         );
       }
 
+      // ---------- Standards & Skills ----------
+      case "standards_skills": {
+        // Scope to learning goals linked by class assessments + portfolio artifacts
+        const classAssmts = assessments.filter(
+          (a) => a.classId === report.classId && a.status === "published"
+        );
+        const relevantGoalIds = new Set<string>();
+        classAssmts.forEach((a) =>
+          a.learningGoalIds.forEach((gid) => relevantGoalIds.add(gid))
+        );
+        studentArtifacts.forEach((a) =>
+          a.learningGoalIds.forEach((gid) => relevantGoalIds.add(gid))
+        );
+        const scopedGoals = learningGoals.filter((g) => relevantGoalIds.has(g.id));
+
+        // Resolve best mastery per goal
+        const ssRows = scopedGoals.map((goal) => {
+          let bestLevel: string | null = null;
+          let bestGradedAt: string | null = null;
+
+          studentGrades.forEach((g) => {
+            g.standardsMastery?.forEach((sm) => {
+              if (sm.standardId === goal.id) {
+                const smLevel = sm.level || "not_assessed";
+                const isBetter =
+                  !bestLevel ||
+                  (g.gradedAt && (!bestGradedAt || g.gradedAt > bestGradedAt)) ||
+                  (!g.gradedAt && !bestGradedAt && (MASTERY_RANK[smLevel] || 0) > (MASTERY_RANK[bestLevel] || 0));
+                if (isBetter) {
+                  bestLevel = smLevel;
+                  bestGradedAt = g.gradedAt || null;
+                }
+              }
+            });
+          });
+
+          const artifactCount = studentArtifacts.filter((a) =>
+            a.learningGoalIds.includes(goal.id)
+          ).length;
+
+          return { goal, level: bestLevel, artifactCount };
+        });
+
+        // Group by category
+        const CATEGORY_LABELS: Record<string, string> = {
+          standard: "Standards",
+          atl_skill: "ATL Skills",
+          learner_profile: "Learner Profile",
+        };
+        const categories = ["standard", "atl_skill", "learner_profile"] as const;
+        const groupedRows = categories
+          .map((cat) => ({
+            category: cat,
+            label: CATEGORY_LABELS[cat],
+            rows: ssRows.filter((r) => r.goal.category === cat),
+          }))
+          .filter((g) => g.rows.length > 0);
+
+        if (groupedRows.length === 0) {
+          return (
+            <p className="text-[13px] text-muted-foreground">
+              No standards or skills data for this class yet. Use Auto-fill after grading.
+            </p>
+          );
+        }
+
+        return (
+          <div className="space-y-5">
+            {groupedRows.map((group) => (
+              <div key={group.category}>
+                <h4 className="text-[12px] font-semibold text-muted-foreground uppercase tracking-wide mb-2">
+                  {group.label}
+                </h4>
+                <table className="w-full text-[13px]">
+                  <thead>
+                    <tr className="border-b border-border">
+                      <th className="text-left py-2 pr-4 font-medium text-muted-foreground">Goal</th>
+                      <th className="text-center py-2 px-2 font-medium text-muted-foreground">Level</th>
+                      <th className="text-center py-2 px-2 font-medium text-muted-foreground">Evidence</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {group.rows.map((row) => (
+                      <tr key={row.goal.id} className="border-b border-border/50">
+                        <td className="py-2 pr-4">
+                          <p className="font-medium">{row.goal.title}</p>
+                          <p className="text-[11px] text-muted-foreground">{row.goal.code}</p>
+                        </td>
+                        <td className="text-center py-2 px-2">
+                          {row.level && row.level !== "not_assessed" ? (
+                            <Badge className={`text-[11px] ${MASTERY_COLOR[row.level] || ""}`} variant="secondary">
+                              {MASTERY_LABEL[row.level] || row.level}
+                            </Badge>
+                          ) : (
+                            <span className="text-[12px] text-muted-foreground">—</span>
+                          )}
+                        </td>
+                        <td className="text-center py-2 px-2">
+                          {row.artifactCount > 0 ? (
+                            <span className="text-[12px]">{row.artifactCount} {row.artifactCount === 1 ? "item" : "items"}</span>
+                          ) : (
+                            <span className="text-[12px] text-muted-foreground">—</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ))}
+          </div>
+        );
+      }
+
       // ---------- Portfolio Highlights / Selected Work Samples ----------
       case "portfolio": {
         // If teacher has curated IDs, use those; otherwise derive from studentArtifacts
@@ -1557,14 +1737,14 @@ export default function ReportDetailPage() {
           }
         }}
       >
-        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+        <DialogContent className="max-w-lg max-h-[85vh]">
           <DialogHeader>
             <DialogTitle>Select Portfolio Evidence</DialogTitle>
             <DialogDescription>
               Choose artifacts to include in this report section.
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-2 py-2">
+          <div className="space-y-2 py-2 overflow-y-auto min-h-0">
             {studentArtifacts.length === 0 ? (
               <p className="text-[13px] text-muted-foreground text-center py-4">
                 No artifacts found for this student.
@@ -1923,14 +2103,14 @@ export default function ReportDetailPage() {
 
       {/* Print Preview Dialog */}
       <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
-        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+        <DialogContent className="max-w-2xl max-h-[85vh]">
           <DialogHeader>
             <DialogTitle>Report Preview</DialogTitle>
             <DialogDescription>
               Print-ready preview for {studentName}
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-6 py-4">
+          <div className="space-y-6 py-4 overflow-y-auto min-h-0">
             {/* Preview Header */}
             <div className="text-center border-b border-border pb-4">
               <h2 className="text-[18px] font-semibold">{studentName}</h2>

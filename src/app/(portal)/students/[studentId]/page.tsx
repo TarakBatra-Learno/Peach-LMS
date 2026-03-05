@@ -55,6 +55,7 @@ import { generateId } from "@/services/mock-service";
 import type { PortfolioArtifact } from "@/types/portfolio";
 import type { GradeRecord } from "@/types/gradebook";
 import { getGradePercentage, getGradeCellDisplay } from "@/lib/grade-helpers";
+import { StudentStandardsTab } from "@/components/student-tabs/student-standards-tab";
 
 export default function StudentProfilePage() {
   const params = useParams();
@@ -311,6 +312,7 @@ export default function StudentProfilePage() {
         <TabsList className="mb-6">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="grades">Grades</TabsTrigger>
+          <TabsTrigger value="standards">Standards</TabsTrigger>
           <TabsTrigger value="portfolio">Portfolio</TabsTrigger>
           <TabsTrigger value="attendance">Attendance</TabsTrigger>
           <TabsTrigger value="reports">Reports</TabsTrigger>
@@ -473,6 +475,18 @@ export default function StudentProfilePage() {
               </div>
             </Card>
           )}
+        </TabsContent>
+
+        {/* ── Standards ── */}
+        <TabsContent value="standards">
+          <StudentStandardsTab
+            studentId={studentId}
+            grades={filteredGrades}
+            assessments={assessments}
+            learningGoals={learningGoals}
+            classFilter={validClassFilter}
+            classes={studentClasses}
+          />
         </TabsContent>
 
         {/* ── Portfolio ── */}

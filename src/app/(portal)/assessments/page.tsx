@@ -400,7 +400,7 @@ export default function AssessmentsPage() {
 
       {/* Create Assessment Dialog */}
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent className="sm:max-w-[520px] max-h-[90vh] overflow-y-auto">
+        <DialogContent className="sm:max-w-[520px] max-h-[90vh]">
           <DialogHeader>
             <DialogTitle>Create assessment</DialogTitle>
             <DialogDescription>
@@ -408,7 +408,7 @@ export default function AssessmentsPage() {
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4 py-2">
+          <div className="space-y-4 py-2 overflow-y-auto min-h-0">
             <div className="space-y-1.5">
               <Label className="text-[13px]">Title *</Label>
               <Input
@@ -462,13 +462,12 @@ export default function AssessmentsPage() {
                         string,
                       ][]
                     ).map(([value, label]) => (
-                      <SelectItem key={value} value={value}>
-                        <div>
-                          <span>{label}</span>
-                          <span className="block text-[11px] text-muted-foreground font-normal">
-                            {GRADING_MODE_DESCRIPTIONS[value]}
-                          </span>
-                        </div>
+                      <SelectItem
+                        key={value}
+                        value={value}
+                        title={GRADING_MODE_DESCRIPTIONS[value]}
+                      >
+                        {label}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -515,13 +514,8 @@ export default function AssessmentsPage() {
                   </SelectTrigger>
                   <SelectContent>
                     {RUBRIC_TEMPLATES.map((t) => (
-                      <SelectItem key={t.id} value={t.id}>
-                        <div>
-                          <span>{t.label}</span>
-                          <span className="block text-[11px] text-muted-foreground font-normal">
-                            {t.description}
-                          </span>
-                        </div>
+                      <SelectItem key={t.id} value={t.id} title={t.description}>
+                        {t.label}
                       </SelectItem>
                     ))}
                   </SelectContent>

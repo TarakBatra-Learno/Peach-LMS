@@ -235,24 +235,42 @@ export function generateSeedData() {
     totalPoints?: number; rubric?: RubricCriterion[]; checklist?: ChecklistItem[];
     standardIds?: string[]; mypCriteria?: MYPCriterion[];
   }[] = [
-    // MYP HR (4 assessments) - rubric & standards
+    // MYP HR (10 assessments) - rubric & standards
     { title: "Personal Project Proposal", desc: "Write a proposal for your MYP Personal Project.", classId: CLS_MYP_HR, mode: "rubric", status: "published", dueDaysAgo: 30, goalIds: [lgId(5), lgId(6)], rubric: hrRubric },
     { title: "Community Service Reflection", desc: "Reflect on your community service experience.", classId: CLS_MYP_HR, mode: "rubric", status: "published", dueDaysAgo: 20, goalIds: [lgId(5), lgId(14)], rubric: hrRubric },
     { title: "ATL Skills Self-Assessment", desc: "Complete the ATL skills self-assessment form.", classId: CLS_MYP_HR, mode: "standards", status: "published", dueDaysAgo: 14, goalIds: [lgId(6), lgId(7), lgId(8)], standardIds: [lgId(6), lgId(7), lgId(8)] },
+    { title: "Learner Profile Self-Reflection", desc: "Reflect on your development as an IB Learner.", classId: CLS_MYP_HR, mode: "rubric", status: "published", dueDaysAgo: 42, goalIds: [lgId(11), lgId(14)], rubric: hrRubric },
+    { title: "Digital Citizenship Quiz", desc: "Demonstrate understanding of digital rights and responsibilities.", classId: CLS_MYP_HR, mode: "score", status: "published", dueDaysAgo: 36, goalIds: [lgId(6), lgId(10)], totalPoints: 20 },
+    { title: "Goal Setting & Action Plan", desc: "Create SMART goals and an action plan for Term 2.", classId: CLS_MYP_HR, mode: "rubric", status: "published", dueDaysAgo: 28, goalIds: [lgId(8), lgId(5)], rubric: hrRubric },
+    { title: "CAS Activity Log Review", desc: "Review and document CAS experiences.", classId: CLS_MYP_HR, mode: "standards", status: "published", dueDaysAgo: 18, goalIds: [lgId(7), lgId(15)], standardIds: [lgId(7), lgId(15)] },
+    { title: "Advisory Group Presentation", desc: "Present your advisory group project to the class.", classId: CLS_MYP_HR, mode: "rubric", status: "published", dueDaysAgo: 10, goalIds: [lgId(6), lgId(7)], rubric: hrRubric },
+    { title: "Term 1 Self-Assessment", desc: "Evaluate your progress against Term 1 learning goals.", classId: CLS_MYP_HR, mode: "standards", status: "published", dueDaysAgo: 5, goalIds: [lgId(8), lgId(11)], standardIds: [lgId(8), lgId(11)] },
     { title: "Term 2 Learning Portfolio", desc: "Curate your best work samples for Term 2.", classId: CLS_MYP_HR, mode: "rubric", status: "draft", dueDaysAgo: -7, goalIds: [lgId(5), lgId(8)], rubric: hrRubric },
 
-    // MYP SCI (5 assessments) - myp_criteria
+    // MYP SCI (11 assessments) - myp_criteria & score
     { title: "Ecology Lab Report", desc: "Investigate the effect of pH on plant growth.", classId: CLS_MYP_SCI, mode: "myp_criteria", status: "published", dueDaysAgo: 35, goalIds: [lgId(1), lgId(2)], mypCriteria: mypSciCriteria },
     { title: "Chemistry Unit Test", desc: "End-of-unit assessment on atomic structure.", classId: CLS_MYP_SCI, mode: "score", status: "published", dueDaysAgo: 25, goalIds: [lgId(1)], totalPoints: 50 },
     { title: "Scientific Investigation: Osmosis", desc: "Design and conduct an experiment on osmosis.", classId: CLS_MYP_SCI, mode: "myp_criteria", status: "published", dueDaysAgo: 15, goalIds: [lgId(1), lgId(2), lgId(9)], mypCriteria: mypSciCriteria },
     { title: "Physics Problem Set", desc: "Complete problems on forces and motion.", classId: CLS_MYP_SCI, mode: "score", status: "published", dueDaysAgo: 7, goalIds: [lgId(1)], totalPoints: 40 },
+    { title: "Biology Microscopy Practical", desc: "Observe and draw cell structures under the microscope.", classId: CLS_MYP_SCI, mode: "myp_criteria", status: "published", dueDaysAgo: 45, goalIds: [lgId(1), lgId(2)], mypCriteria: mypSciCriteria },
+    { title: "Periodic Table Quiz", desc: "Identify elements, groups, and periodic trends.", classId: CLS_MYP_SCI, mode: "score", status: "published", dueDaysAgo: 38, goalIds: [lgId(1)], totalPoints: 30 },
+    { title: "Energy Transfer Investigation", desc: "Design an experiment to measure energy transfer efficiency.", classId: CLS_MYP_SCI, mode: "myp_criteria", status: "published", dueDaysAgo: 30, goalIds: [lgId(1), lgId(2), lgId(10)], mypCriteria: mypSciCriteria },
+    { title: "Scientific Method Worksheet", desc: "Apply the scientific method to real-world scenarios.", classId: CLS_MYP_SCI, mode: "score", status: "published", dueDaysAgo: 22, goalIds: [lgId(1), lgId(9)], totalPoints: 25 },
+    { title: "Climate Change Research Project", desc: "Research and present on a climate change topic.", classId: CLS_MYP_SCI, mode: "myp_criteria", status: "published", dueDaysAgo: 12, goalIds: [lgId(2), lgId(9), lgId(10)], mypCriteria: mypSciCriteria },
+    { title: "Lab Safety Assessment", desc: "Demonstrate knowledge of lab safety procedures.", classId: CLS_MYP_SCI, mode: "score", status: "published", dueDaysAgo: 3, goalIds: [lgId(1)], totalPoints: 20 },
     { title: "IDU Collaboration Reflection", desc: "Reflect on the interdisciplinary unit collaboration.", classId: CLS_MYP_SCI, mode: "myp_criteria", status: "draft", dueDaysAgo: -5, goalIds: [lgId(1), lgId(7), lgId(10)], mypCriteria: mypSciCriteria },
 
-    // DP ENG (5 assessments) - dp_scale & score
+    // DP ENG (11 assessments) - dp_scale & score
     { title: "Paper 1: Guided Textual Analysis", desc: "Unseen text analysis under timed conditions.", classId: CLS_DP_ENG, mode: "dp_scale", status: "published", dueDaysAgo: 32, goalIds: [lgId(3), lgId(4)] },
     { title: "Individual Oral Commentary", desc: "15-minute oral commentary on studied work.", classId: CLS_DP_ENG, mode: "dp_scale", status: "published", dueDaysAgo: 22, goalIds: [lgId(3), lgId(14)] },
     { title: "Written Task 1: Creative Response", desc: "Creative writing based on studied text.", classId: CLS_DP_ENG, mode: "score", status: "published", dueDaysAgo: 12, goalIds: [lgId(4), lgId(6)], totalPoints: 30, checklist },
     { title: "Comparative Essay Draft", desc: "Compare two works from the reading list.", classId: CLS_DP_ENG, mode: "dp_scale", status: "published", dueDaysAgo: 4, goalIds: [lgId(3), lgId(4), lgId(10)] },
+    { title: "Unseen Poetry Analysis", desc: "Analyse an unseen poem under timed conditions.", classId: CLS_DP_ENG, mode: "dp_scale", status: "published", dueDaysAgo: 48, goalIds: [lgId(3), lgId(10)] },
+    { title: "Reading Journal: Novel Study", desc: "Maintain a reflective reading journal on the class novel.", classId: CLS_DP_ENG, mode: "score", status: "published", dueDaysAgo: 40, goalIds: [lgId(3), lgId(4)], totalPoints: 25 },
+    { title: "Dramatic Monologue Performance", desc: "Perform an original dramatic monologue based on a studied character.", classId: CLS_DP_ENG, mode: "dp_scale", status: "published", dueDaysAgo: 34, goalIds: [lgId(4), lgId(14)] },
+    { title: "Rhetorical Analysis Essay", desc: "Analyse the rhetorical strategies in a non-fiction text.", classId: CLS_DP_ENG, mode: "dp_scale", status: "published", dueDaysAgo: 26, goalIds: [lgId(3), lgId(4), lgId(10)] },
+    { title: "Vocabulary & Grammar Test", desc: "Assess knowledge of literary terminology and grammar conventions.", classId: CLS_DP_ENG, mode: "score", status: "published", dueDaysAgo: 18, goalIds: [lgId(4)], totalPoints: 40 },
+    { title: "Socratic Seminar Participation", desc: "Participate in a Socratic seminar on global issues in literature.", classId: CLS_DP_ENG, mode: "dp_scale", status: "published", dueDaysAgo: 8, goalIds: [lgId(3), lgId(14), lgId(6)] },
     { title: "HL Essay Outline", desc: "Submit the outline for your HL extended essay.", classId: CLS_DP_ENG, mode: "score", status: "draft", dueDaysAgo: -10, goalIds: [lgId(4), lgId(9)], totalPoints: 20 },
   ];
 
@@ -366,6 +384,28 @@ export function generateSeedData() {
 
       grades.push(grade);
     });
+  });
+
+  // -----------------------------------------------------------------------
+  // Second pass: populate standardsMastery for non-standards-mode assessments
+  // that reference learning goals via learningGoalIds (all categories).
+  // This gives the Standards & Skills tab data to display.
+  // -----------------------------------------------------------------------
+  grades.forEach((grade) => {
+    if (grade.isMissing || (grade.standardsMastery && grade.standardsMastery.length > 0)) return;
+    const asmt = assessments.find((a) => a.id === grade.assessmentId);
+    if (!asmt || asmt.gradingMode === "standards" || asmt.status === "draft") return;
+    const goalIds = asmt.learningGoalIds.filter((gid) =>
+      learningGoals.some((g) => g.id === gid)
+    );
+    if (goalIds.length === 0) return;
+    const aIdx = assessments.indexOf(asmt);
+    const sIds = studentsForClass(asmt.classId);
+    const sIdx = sIds.indexOf(grade.studentId);
+    grade.standardsMastery = goalIds.map((stdId, gi) => ({
+      standardId: stdId,
+      level: masteryLevels[(sIdx + aIdx + gi) % masteryLevels.length],
+    }));
   });
 
   // -----------------------------------------------------------------------
@@ -655,6 +695,7 @@ export function generateSeedData() {
         { id: "sec_ms_3", type: "atl_skills", label: "ATL Skills", required: true, order: 3 },
         { id: "sec_ms_4", type: "portfolio", label: "Selected Work Samples", required: false, order: 4 },
         { id: "sec_ms_5", type: "teacher_comment", label: "Subject Teacher Comment", required: true, order: 5 },
+        { id: "sec_ms_6", type: "standards_skills", label: "Standards & Skills", required: false, order: 6 },
       ],
     },
     {
@@ -667,6 +708,7 @@ export function generateSeedData() {
         { id: "sec_dp_2", type: "attendance", label: "Attendance Summary", required: true, order: 2 },
         { id: "sec_dp_3", type: "portfolio", label: "Key Submissions", required: false, order: 3 },
         { id: "sec_dp_4", type: "teacher_comment", label: "Teacher Comment", required: true, order: 4 },
+        { id: "sec_dp_5", type: "standards_skills", label: "Standards & Skills", required: false, order: 5 },
       ],
     },
   ];

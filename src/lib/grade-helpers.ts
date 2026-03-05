@@ -77,6 +77,31 @@ export function getGradeCellDisplay(
 }
 
 /**
+ * Returns true when a grade record has been fully entered for its assessment's
+ * grading mode. "Missing" grades are considered incomplete (returns false).
+ */
+export function isGradeComplete(
+  grade: GradeRecord | undefined,
+  assessment: Assessment
+): boolean {
+  if (!grade || grade.isMissing) return false;
+  switch (assessment.gradingMode) {
+    case "score":
+      return grade.score != null;
+    case "dp_scale":
+      return grade.dpGrade != null;
+    case "myp_criteria":
+      return (grade.mypCriteriaScores?.length ?? 0) > 0;
+    case "rubric":
+      return (grade.rubricScores?.length ?? 0) > 0;
+    case "standards":
+      return (grade.standardsMastery?.length ?? 0) > 0;
+    default:
+      return false;
+  }
+}
+
+/**
  * Returns a normalised 0–100 percentage for a grade, or null if not computable.
  * Handles all five grading modes.
  */

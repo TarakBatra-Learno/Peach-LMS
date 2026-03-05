@@ -1,22 +1,20 @@
 "use client";
 
-import { useState, useMemo, useCallback, useEffect } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useStore } from "@/stores";
 import { PageHeader } from "@/components/shared/page-header";
 import { StatCard } from "@/components/shared/stat-card";
 import { EmptyState } from "@/components/shared/empty-state";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { CardGridSkeleton } from "@/components/shared/skeleton-loader";
+import { GradingSheet } from "@/components/shared/grading-sheet";
 import { useMockLoading } from "@/lib/hooks/use-mock-loading";
-import { generateId } from "@/services/mock-service";
+import { useGradeEditor } from "@/lib/hooks/use-grade-editor";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
-import { Separator } from "@/components/ui/separator";
 import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -26,13 +24,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetDescription,
-} from "@/components/ui/sheet";
 import {
   Table,
   TableBody,
@@ -45,7 +36,6 @@ import {
   BookOpen,
   Users,
   BarChart3,
-  TrendingUp,
   GraduationCap,
   ClipboardCheck,
   User,
@@ -53,7 +43,6 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { format, parseISO } from "date-fns";
-import { toast } from "sonner";
 import {
   BarChart,
   Bar,
@@ -63,17 +52,13 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts";
-import type { GradeRecord } from "@/types/gradebook";
 import type { Assessment } from "@/types/assessment";
 import type { LearningGoal } from "@/types/assessment";
-import type { Student } from "@/types/student";
 import {
   GRADING_MODE_LABELS,
   getGradeCellDisplay,
   getGradePercentage,
 } from "@/lib/grade-helpers";
-
-const MYP_CRITERIA_LABELS = ["A", "B", "C", "D"] as const;
 
 export default function GradebookPage() {
   const loading = useMockLoading();
@@ -85,12 +70,9 @@ export default function GradebookPage() {
   const getClassById = useStore((s) => s.getClassById);
   const getStudentsByClassId = useStore((s) => s.getStudentsByClassId);
   const getStudentById = useStore((s) => s.getStudentById);
-  const getGradesByAssessment = useStore((s) => s.getGradesByAssessment);
   const getGradesByStudent = useStore((s) => s.getGradesByStudent);
-  const addGrade = useStore((s) => s.addGrade);
-  const updateGrade = useStore((s) => s.updateGrade);
-
   const activeClassId = useStore((s) => s.ui.activeClassId);
+  const editor = useGradeEditor();
 
   // Class view state — sync with global class switcher
   const [selectedClassId, setSelectedClassId] = useState(activeClassId || "");
@@ -99,18 +81,6 @@ export default function GradebookPage() {
   }, [activeClassId]);
   // Student view state
   const [selectedStudentId, setSelectedStudentId] = useState("");
-
-  // Grading sheet state
-  const [gradingOpen, setGradingOpen] = useState(false);
-  const [gradingStudentId, setGradingStudentId] = useState("");
-  const [gradingAssessmentId, setGradingAssessmentId] = useState("");
-  const [gradingScore, setGradingScore] = useState("");
-  const [gradingFeedback, setGradingFeedback] = useState("");
-  const [gradingIsMissing, setGradingIsMissing] = useState(false);
-  const [gradingMypScores, setGradingMypScores] = useState<
-    Record<string, number>
-  >({});
-  const [gradingDpGrade, setGradingDpGrade] = useState("4");
 
   // Weight categories state for analytics
   const [showWeights, setShowWeights] = useState(false);
@@ -340,94 +310,6 @@ export default function GradebookPage() {
     return { unweighted, weighted };
   }, [selectedClassId, classAssessments, classStudents, grades, weightCategories]);
 
-  const openGradingSheet = (studentId: string, assessmentId: string) => {
-    const asmt = assessments.find((a) => a.id === assessmentId);
-    if (!asmt) return;
-
-    const existingGrade = grades.find(
-      (g) => g.studentId === studentId && g.assessmentId === assessmentId
-    );
-
-    setGradingStudentId(studentId);
-    setGradingAssessmentId(assessmentId);
-    setGradingIsMissing(existingGrade?.isMissing ?? false);
-    setGradingFeedback(existingGrade?.feedback ?? "");
-
-    if (asmt.gradingMode === "score") {
-      setGradingScore(existingGrade?.score?.toString() ?? "");
-    } else if (asmt.gradingMode === "dp_scale") {
-      setGradingDpGrade(existingGrade?.dpGrade?.toString() ?? "4");
-    } else if (asmt.gradingMode === "myp_criteria") {
-      const existing: Record<string, number> = {};
-      existingGrade?.mypCriteriaScores?.forEach((c) => {
-        existing[c.criterion] = c.level;
-      });
-      setGradingMypScores(existing);
-    }
-
-    setGradingOpen(true);
-  };
-
-  const handleSaveGrade = () => {
-    const asmt = assessments.find((a) => a.id === gradingAssessmentId);
-    const student = getStudentById(gradingStudentId);
-    if (!asmt || !student) return;
-
-    const existingGrade = grades.find(
-      (g) =>
-        g.studentId === gradingStudentId &&
-        g.assessmentId === gradingAssessmentId
-    );
-    const now = new Date().toISOString();
-
-    const baseGrade: Partial<GradeRecord> = {
-      assessmentId: asmt.id,
-      studentId: gradingStudentId,
-      classId: asmt.classId,
-      gradingMode: asmt.gradingMode,
-      feedback: gradingFeedback.trim() || undefined,
-      isMissing: gradingIsMissing,
-      gradedAt: now,
-    };
-
-    if (!gradingIsMissing) {
-      if (asmt.gradingMode === "score") {
-        baseGrade.score = parseInt(gradingScore) || 0;
-        baseGrade.totalPoints = asmt.totalPoints;
-      } else if (asmt.gradingMode === "dp_scale") {
-        baseGrade.dpGrade = parseInt(gradingDpGrade) || 4;
-      } else if (asmt.gradingMode === "myp_criteria") {
-        baseGrade.mypCriteriaScores = MYP_CRITERIA_LABELS.map((c) => ({
-          criterionId: `crit_${c}`,
-          criterion: c,
-          level: gradingMypScores[c] ?? 0,
-        }));
-      }
-    }
-
-    if (existingGrade) {
-      updateGrade(existingGrade.id, baseGrade);
-      toast.success(
-        `Grade updated for ${student.firstName} ${student.lastName}`
-      );
-    } else {
-      addGrade({
-        id: generateId("grade"),
-        ...baseGrade,
-      } as GradeRecord);
-      toast.success(
-        `Grade saved for ${student.firstName} ${student.lastName}`
-      );
-    }
-
-    setGradingOpen(false);
-  };
-
-  const gradingAssessment = assessments.find(
-    (a) => a.id === gradingAssessmentId
-  );
-  const gradingStudentObj = getStudentById(gradingStudentId);
-
   if (loading)
     return (
       <>
@@ -569,7 +451,7 @@ export default function GradebookPage() {
                               >
                                 <button
                                   onClick={() =>
-                                    openGradingSheet(student.id, asmt.id)
+                                    editor.openGradingSheet(student.id, asmt.id)
                                   }
                                   className={`text-[12px] font-medium px-2 py-1 rounded-md hover:bg-muted transition-colors cursor-pointer ${
                                     grade?.isMissing
@@ -751,7 +633,7 @@ export default function GradebookPage() {
           )}
         </TabsContent>
 
-        {/* Standards / Mastery Tab */}
+        {/* Standards & Skills Tab */}
         {selectedClassId && (
           <TabsContent value="standards">
             {masteryData.goals.length === 0 ? (
@@ -1224,198 +1106,7 @@ export default function GradebookPage() {
         </TabsContent>
       </Tabs>
 
-      {/* Grading Sheet (shared across tabs) */}
-      <Sheet open={gradingOpen} onOpenChange={setGradingOpen}>
-        <SheetContent className="w-[420px] sm:max-w-[420px]">
-          <SheetHeader>
-            <SheetTitle className="text-[16px]">
-              Grade: {gradingStudentObj?.firstName}{" "}
-              {gradingStudentObj?.lastName}
-            </SheetTitle>
-            <SheetDescription className="text-[13px]">
-              {gradingAssessment?.title} &middot;{" "}
-              {gradingAssessment
-                ? GRADING_MODE_LABELS[gradingAssessment.gradingMode]
-                : ""}
-            </SheetDescription>
-          </SheetHeader>
-
-          <div className="space-y-5 mt-6">
-            {/* Mark as missing */}
-            <div className="flex items-center justify-between">
-              <div>
-                <Label className="text-[13px] font-medium">
-                  Mark as missing
-                </Label>
-                <p className="text-[12px] text-muted-foreground">
-                  Student did not submit this assessment
-                </p>
-              </div>
-              <Switch
-                checked={gradingIsMissing}
-                onCheckedChange={setGradingIsMissing}
-              />
-            </div>
-
-            <Separator />
-
-            {/* Score mode */}
-            {gradingAssessment?.gradingMode === "score" &&
-              !gradingIsMissing && (
-                <div className="space-y-1.5">
-                  <Label className="text-[13px]">
-                    Score{" "}
-                    {gradingAssessment.totalPoints &&
-                      `(out of ${gradingAssessment.totalPoints})`}
-                  </Label>
-                  <div className="flex items-center gap-2">
-                    <Input
-                      type="number"
-                      value={gradingScore}
-                      onChange={(e) => setGradingScore(e.target.value)}
-                      placeholder="0"
-                      min={0}
-                      max={gradingAssessment.totalPoints}
-                      className="h-9 text-[13px] w-24"
-                    />
-                    {gradingAssessment.totalPoints && (
-                      <span className="text-[13px] text-muted-foreground">
-                        / {gradingAssessment.totalPoints}
-                      </span>
-                    )}
-                  </div>
-                  {gradingAssessment.totalPoints &&
-                    gradingScore &&
-                    parseInt(gradingScore) > 0 && (
-                      <p className="text-[12px] text-muted-foreground">
-                        {Math.round(
-                          (parseInt(gradingScore) /
-                            gradingAssessment.totalPoints) *
-                            100
-                        )}
-                        %
-                      </p>
-                    )}
-                </div>
-              )}
-
-            {/* MYP Criteria mode */}
-            {gradingAssessment?.gradingMode === "myp_criteria" &&
-              !gradingIsMissing && (
-                <div className="space-y-4">
-                  <Label className="text-[13px] font-medium">
-                    MYP Criteria levels (1-8)
-                  </Label>
-                  {MYP_CRITERIA_LABELS.map((criterion) => {
-                    const mypCrit =
-                      gradingAssessment.mypCriteria?.find(
-                        (c) => c.criterion === criterion
-                      );
-                    return (
-                      <div key={criterion} className="space-y-1.5">
-                        <div className="flex items-center justify-between">
-                          <Label className="text-[13px]">
-                            Criterion {criterion}
-                            {mypCrit ? `: ${mypCrit.title}` : ""}
-                          </Label>
-                          <Badge variant="outline" className="text-[11px]">
-                            Level {gradingMypScores[criterion] ?? 0}
-                          </Badge>
-                        </div>
-                        <Select
-                          value={(
-                            gradingMypScores[criterion] ?? 0
-                          ).toString()}
-                          onValueChange={(v) =>
-                            setGradingMypScores((prev) => ({
-                              ...prev,
-                              [criterion]: parseInt(v),
-                            }))
-                          }
-                        >
-                          <SelectTrigger className="h-9 text-[13px]">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {Array.from({ length: 9 }, (_, i) => (
-                              <SelectItem key={i} value={i.toString()}>
-                                {i === 0
-                                  ? "Not assessed (0)"
-                                  : `Level ${i}`}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-
-            {/* DP Scale mode */}
-            {gradingAssessment?.gradingMode === "dp_scale" &&
-              !gradingIsMissing && (
-                <div className="space-y-1.5">
-                  <Label className="text-[13px]">DP Grade (1-7)</Label>
-                  <Select
-                    value={gradingDpGrade}
-                    onValueChange={setGradingDpGrade}
-                  >
-                    <SelectTrigger className="h-9 text-[13px]">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {[1, 2, 3, 4, 5, 6, 7].map((n) => (
-                        <SelectItem key={n} value={n.toString()}>
-                          {n} -{" "}
-                          {
-                            [
-                              "",
-                              "Very poor",
-                              "Poor",
-                              "Mediocre",
-                              "Satisfactory",
-                              "Good",
-                              "Very good",
-                              "Excellent",
-                            ][n]
-                          }
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
-
-            <Separator />
-
-            {/* Feedback */}
-            <div className="space-y-1.5">
-              <Label className="text-[13px]">Feedback</Label>
-              <Textarea
-                value={gradingFeedback}
-                onChange={(e) => setGradingFeedback(e.target.value)}
-                placeholder="Add feedback for the student..."
-                className="text-[13px] min-h-[100px]"
-              />
-            </div>
-
-            {/* Save button */}
-            <div className="flex gap-2 pt-2">
-              <Button
-                variant="outline"
-                className="flex-1"
-                onClick={() => setGradingOpen(false)}
-              >
-                Cancel
-              </Button>
-              <Button className="flex-1" onClick={handleSaveGrade}>
-                Save grade
-              </Button>
-            </div>
-          </div>
-        </SheetContent>
-      </Sheet>
+      <GradingSheet editor={editor} />
     </div>
   );
 }
