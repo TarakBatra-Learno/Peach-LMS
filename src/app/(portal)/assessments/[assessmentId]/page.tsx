@@ -1430,7 +1430,7 @@ export default function AssessmentDetailPage() {
               Review and edit the announcement before publishing.
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-2">
+          <div className="space-y-4 py-2 overflow-y-auto min-h-0">
             <div>
               <div className="flex items-center gap-2 mb-2">
                 <Badge variant="secondary" className="text-[11px]">Announcements channel</Badge>
@@ -1464,7 +1464,7 @@ export default function AssessmentDetailPage() {
             <DialogTitle>Edit Assessment Details</DialogTitle>
             <DialogDescription>Update the assessment title, description, or due date.</DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-2">
+          <div className="space-y-4 py-2 overflow-y-auto min-h-0">
             <div>
               <Label className="text-[13px]">Title</Label>
               <Input value={editTitle} onChange={(e) => setEditTitle(e.target.value)} className="mt-1" />

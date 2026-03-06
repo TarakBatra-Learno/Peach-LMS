@@ -10,6 +10,7 @@ import { EmptyState } from "@/components/shared/empty-state";
 import { useMockLoading } from "@/lib/hooks/use-mock-loading";
 import { CardGridSkeleton } from "@/components/shared/skeleton-loader";
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
+import { AttendanceDialog } from "@/components/shared/attendance-dialog";
 import { generateId } from "@/services/mock-service";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -155,6 +156,7 @@ export default function CalendarPage() {
   const deleteCalendarEvent = useStore((s) => s.deleteCalendarEvent);
   const getClassById = useStore((s) => s.getClassById);
   const incidents = useStore((s) => s.incidents);
+  const attendanceSessions = useStore((s) => s.attendanceSessions);
 
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
@@ -169,6 +171,11 @@ export default function CalendarPage() {
   const [calView, setCalView] = useState<"month" | "week">("month");
   const [currentWeekStart, setCurrentWeekStart] = useState(() => startOfWeek(new Date()));
   const [typeFilter, setTypeFilter] = useState<CalendarEvent["type"] | "all">("all");
+
+  // Attendance dialog state
+  const [attendanceDialogOpen, setAttendanceDialogOpen] = useState(false);
+  const [attendanceClassId, setAttendanceClassId] = useState<string>("");
+  const [attendanceDate, setAttendanceDate] = useState<string>("");
 
   // Build calendar grid
   const calendarDays = useMemo(() => {
@@ -753,7 +760,7 @@ export default function CalendarPage() {
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4 py-2">
+          <div className="space-y-4 py-2 overflow-y-auto min-h-0">
             <div>
               <Label className="text-[13px]">Title</Label>
               <Input
@@ -965,7 +972,16 @@ export default function CalendarPage() {
       {/* Event Detail Sheet */}
       <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
         <SheetContent className="sm:max-w-[420px]">
-          {selectedEvent && (
+          {selectedEvent && (() => {
+            const isClassEvent = selectedEvent.type === "class";
+            const sheetDateStr = format(parseISO(selectedEvent.startTime), "yyyy-MM-dd");
+            const calAttTaken = isClassEvent && selectedEvent.classId
+              ? attendanceSessions.some(
+                  (s) => s.classId === selectedEvent.classId && s.date === sheetDateStr
+                )
+              : false;
+
+            return (
             <>
               <SheetHeader>
                 <SheetTitle className="text-[18px]">{selectedEvent.title}</SheetTitle>
@@ -1010,6 +1026,19 @@ export default function CalendarPage() {
                       <span>
                         {getClassById(selectedEvent.classId)?.name || "Unknown class"}
                       </span>
+                    </div>
+                  )}
+                  {isClassEvent && (
+                    <div className="flex items-center gap-3 text-[13px]">
+                      <CheckCircle2 className="h-4 w-4 text-muted-foreground shrink-0" />
+                      {calAttTaken ? (
+                        <Badge variant="outline" className="text-[11px] bg-[#dcfce7] text-[#16a34a] border-transparent">
+                          <CheckCircle2 className="h-3 w-3 mr-1" />
+                          Taken
+                        </Badge>
+                      ) : (
+                        <span className="text-muted-foreground">Not taken</span>
+                      )}
                     </div>
                   )}
                   {selectedEvent.videoCallUrl && (
@@ -1116,6 +1145,39 @@ export default function CalendarPage() {
 
                 <Separator />
 
+                {isClassEvent && selectedEvent.classId && (
+                  <div className="flex flex-col gap-2">
+                    <Button
+                      size="sm"
+                      onClick={() => {
+                        setAttendanceClassId(selectedEvent.classId!);
+                        setAttendanceDate(sheetDateStr);
+                        setAttendanceDialogOpen(true);
+                      }}
+                    >
+                      {calAttTaken ? (
+                        <>
+                          <Pencil className="h-4 w-4 mr-1.5" />
+                          Edit attendance
+                        </>
+                      ) : (
+                        <>
+                          <CheckCircle2 className="h-4 w-4 mr-1.5" />
+                          Take attendance
+                        </>
+                      )}
+                    </Button>
+                    <Link
+                      href={`/classes/${selectedEvent.classId}`}
+                      className="inline-flex items-center gap-1.5 text-[13px] text-[#c24e3f] hover:underline"
+                      onClick={() => setSheetOpen(false)}
+                    >
+                      View class
+                      <ExternalLink className="h-3.5 w-3.5" />
+                    </Link>
+                  </div>
+                )}
+
                 <div className="flex gap-2">
                   <Button
                     variant="outline"
@@ -1141,7 +1203,8 @@ export default function CalendarPage() {
                 </div>
               </div>
             </>
-          )}
+            );
+          })()}
         </SheetContent>
       </Sheet>
 
@@ -1154,6 +1217,14 @@ export default function CalendarPage() {
         confirmLabel="Delete"
         onConfirm={handleDeleteEvent}
         destructive
+      />
+
+      {/* Attendance Dialog */}
+      <AttendanceDialog
+        open={attendanceDialogOpen}
+        onOpenChange={setAttendanceDialogOpen}
+        prefilledClassId={attendanceClassId || undefined}
+        prefilledDate={attendanceDate || undefined}
       />
     </div>
   );

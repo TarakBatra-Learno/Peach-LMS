@@ -18,14 +18,14 @@ export const NAV_ITEMS = [
   { label: "Portfolio", href: "/portfolio", icon: FolderOpen },
   { label: "Reports", href: "/reports", icon: FileText },
   { label: "Communication", href: "/communication", icon: MessageSquare },
-  { label: "Operations", href: "/operations/attendance", icon: CalendarDays },
+  { label: "Operations", href: "/operations/timetable", icon: CalendarDays },
   { label: "Student Support", href: "/support", icon: Shield },
 ] as const;
 
 export const OPERATIONS_TABS = [
-  { label: "Attendance", href: "/operations/attendance" },
-  { label: "Calendar", href: "/operations/calendar" },
   { label: "Timetable", href: "/operations/timetable" },
+  { label: "Calendar", href: "/operations/calendar" },
+  { label: "Attendance", href: "/operations/attendance" },
   { label: "Compliance", href: "/operations/compliance" },
 ] as const;
 

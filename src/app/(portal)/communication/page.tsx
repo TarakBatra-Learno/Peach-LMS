@@ -659,7 +659,7 @@ export default function CommunicationPage() {
             <DialogTitle>New announcement</DialogTitle>
             <DialogDescription>Compose and send an announcement to a class channel.</DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-2">
+          <div className="space-y-4 py-2 overflow-y-auto min-h-0">
             <div className="space-y-1.5">
               <Label className="text-[13px]">Channel *</Label>
               <Select value={composeChannel} onValueChange={setComposeChannel}>

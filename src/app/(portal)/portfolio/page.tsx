@@ -579,7 +579,7 @@ export default function PortfolioPage() {
             <DialogTitle>Add artifact</DialogTitle>
             <DialogDescription>Add a new student work artifact to the portfolio.</DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-2">
+          <div className="space-y-4 py-2 overflow-y-auto min-h-0">
             <div className="space-y-1.5">
               <Label className="text-[13px]">Title *</Label>
               <Input
@@ -709,7 +709,7 @@ export default function PortfolioPage() {
             const stu = students.find((s) => s.id === detailArtifact.studentId);
             const MediaIcon = getMediaIcon(detailArtifact.mediaType);
             return (
-              <div className="space-y-4 py-2">
+              <div className="space-y-4 py-2 overflow-y-auto min-h-0">
                 {/* Family-friendly header */}
                 <div className="rounded-lg bg-[#c24e3f]/5 border border-[#c24e3f]/10 p-4">
                   <div className="flex items-center gap-3 mb-2">

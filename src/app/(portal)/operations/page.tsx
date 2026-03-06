@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
 
 export default function OperationsPage() {
-  redirect("/operations/attendance");
+  redirect("/operations/timetable");
 }

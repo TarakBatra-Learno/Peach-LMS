@@ -30,7 +30,7 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { toast } from "sonner";
-import { format, parseISO } from "date-fns";
+import { format, parseISO, getDay, addDays, subDays } from "date-fns";
 import {
   LineChart,
   Line,
@@ -61,6 +61,18 @@ const STATUS_OPTIONS: { value: AttendanceStatus; label: string; icon: React.Comp
   { value: "excused", label: "Excused", icon: ShieldCheck },
 ];
 
+const DAY_MAP: Record<string, number> = { mon: 1, tue: 2, wed: 3, thu: 4, fri: 5 };
+const DAY_LABELS: Record<string, string> = { mon: "Mon", tue: "Tue", wed: "Wed", thu: "Thu", fri: "Fri" };
+
+interface ScheduledSession {
+  date: string; // yyyy-MM-dd
+  dayLabel: string;
+  startTime: string;
+  endTime: string;
+  room?: string;
+  taken: boolean;
+}
+
 export default function AttendancePage() {
   const loading = useMockLoading();
   const searchParams = useSearchParams();
@@ -88,6 +100,45 @@ export default function AttendancePage() {
   const [isDirty, setIsDirty] = useState(false);
   const [discardConfirmOpen, setDiscardConfirmOpen] = useState(false);
   const [pendingClassId, setPendingClassId] = useState<string | null>(null);
+  const [useCustomDate, setUseCustomDate] = useState(false);
+
+  const selectedClass = useMemo(
+    () => classes.find((c) => c.id === selectedClassId),
+    [classes, selectedClassId]
+  );
+
+  // Generate scheduled sessions for the selected class
+  const scheduledSessions = useMemo((): ScheduledSession[] => {
+    if (!selectedClass) return [];
+    const today = new Date();
+    const sessions: ScheduledSession[] = [];
+
+    // Look back 7 days and forward 21 days
+    for (let d = -7; d <= 21; d++) {
+      const date = d < 0 ? subDays(today, Math.abs(d)) : addDays(today, d);
+      const jsDay = getDay(date); // 0=Sun, 1=Mon...
+      const dateStr = format(date, "yyyy-MM-dd");
+
+      for (const slot of selectedClass.schedule) {
+        const slotDay = DAY_MAP[slot.day];
+        if (slotDay === jsDay) {
+          const taken = attendanceSessions.some(
+            (s) => s.classId === selectedClassId && s.date === dateStr
+          );
+          sessions.push({
+            date: dateStr,
+            dayLabel: DAY_LABELS[slot.day] || slot.day,
+            startTime: slot.startTime,
+            endTime: slot.endTime,
+            room: slot.room,
+            taken,
+          });
+        }
+      }
+    }
+
+    return sessions;
+  }, [selectedClass, selectedClassId, attendanceSessions]);
 
   const classStudents = useMemo(() => {
     if (!selectedClassId) return [];
@@ -97,6 +148,7 @@ export default function AttendancePage() {
   // Initialize records when class changes
   const applyClassChange = (classId: string) => {
     setSelectedClassId(classId);
+    setUseCustomDate(false);
     const studs = getStudentsByClassId(classId);
     const defaultRecords: Record<string, AttendanceStatus> = {};
     studs.forEach((s) => {
@@ -128,6 +180,51 @@ export default function AttendancePage() {
     setRecords((prev) => ({ ...prev, [studentId]: status }));
     setIsDirty(true);
   };
+
+  // Schedule validation — warn if selected date doesn't match class schedule (custom date mode only)
+  const scheduleWarning = useMemo(() => {
+    if (!useCustomDate) return null;
+    if (!selectedClassId || !selectedDate) return null;
+    const cls = getClassById(selectedClassId);
+    if (!cls || !cls.schedule || cls.schedule.length === 0) return null;
+    const date = new Date(selectedDate + "T12:00:00");
+    const jsDay = getDay(date);
+    const matchesSchedule = cls.schedule.some((slot) => DAY_MAP[slot.day] === jsDay);
+    if (matchesSchedule) return null;
+    const scheduleDays = cls.schedule.map((s) => DAY_LABELS[s.day] || s.day).join(", ");
+    return `No lesson scheduled for this date. This class meets on ${scheduleDays}.`;
+  }, [useCustomDate, selectedClassId, selectedDate, getClassById]);
+
+  // Auto-select session: URL date → today → next upcoming untaken
+  useEffect(() => {
+    if (!selectedClassId || scheduledSessions.length === 0) return;
+    if (useCustomDate) return;
+
+    // If URL has a date param that matches a session, select it
+    if (urlDate) {
+      const match = scheduledSessions.find((s) => s.date === urlDate);
+      if (match) {
+        setSelectedDate(urlDate);
+        return;
+      }
+    }
+
+    // Try today
+    const todayStr = format(new Date(), "yyyy-MM-dd");
+    const todayMatch = scheduledSessions.find((s) => s.date === todayStr);
+    if (todayMatch) {
+      setSelectedDate(todayStr);
+      return;
+    }
+
+    // Next upcoming untaken
+    const upcoming = scheduledSessions.find((s) => s.date >= todayStr && !s.taken);
+    if (upcoming) {
+      setSelectedDate(upcoming.date);
+      return;
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedClassId, scheduledSessions]);
 
   const handleCompleteSession = () => {
     if (!selectedClassId) {
@@ -284,8 +381,8 @@ export default function AttendancePage() {
         <TabsContent value="register" className="space-y-6">
           {/* Quick take attendance inline */}
           <Card className="p-5 gap-0">
-            <div className="flex items-center gap-4 mb-4">
-              <div className="flex-1">
+            <div className="space-y-4 mb-4">
+              <div>
                 <Label className="text-[12px] font-medium text-muted-foreground uppercase tracking-wide mb-1.5 block">
                   Class
                 </Label>
@@ -302,23 +399,107 @@ export default function AttendancePage() {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="w-[180px]">
-                <Label className="text-[12px] font-medium text-muted-foreground uppercase tracking-wide mb-1.5 block">
-                  Date
-                </Label>
-                <div className="flex items-center gap-2">
-                  <Input
-                    type="date"
-                    value={selectedDate}
-                    onChange={(e) => setSelectedDate(e.target.value)}
-                    className="h-9 text-[13px]"
-                  />
-                  {selectedDate === format(new Date(), "yyyy-MM-dd") && (
-                    <Badge variant="default" className="text-[10px] shrink-0">Today</Badge>
-                  )}
+
+              {/* Session picker */}
+              {selectedClassId && !useCustomDate && (
+                <div className="w-[280px]">
+                  <Label className="text-[12px] font-medium text-muted-foreground uppercase tracking-wide mb-1.5 block">
+                    Session
+                  </Label>
+                  <div className="space-y-1 max-h-[180px] overflow-y-auto rounded-md border border-input p-1">
+                    {scheduledSessions.length === 0 ? (
+                      <p className="text-[12px] text-muted-foreground px-2 py-3 text-center">
+                        No scheduled sessions found.
+                      </p>
+                    ) : (
+                      scheduledSessions.map((session) => {
+                        const isSelected = selectedDate === session.date;
+                        const isToday = session.date === format(new Date(), "yyyy-MM-dd");
+                        return (
+                          <button
+                            key={session.date}
+                            type="button"
+                            onClick={() => { setSelectedDate(session.date); setIsDirty(false); }}
+                            disabled={session.taken}
+                            className={cn(
+                              "w-full flex items-center justify-between px-3 py-2 rounded-md text-[13px] transition-colors text-left",
+                              isSelected && !session.taken && "bg-[#fff2f0] border border-[#c24e3f]/30",
+                              !isSelected && !session.taken && "hover:bg-muted/50",
+                              session.taken && "opacity-50 cursor-not-allowed"
+                            )}
+                          >
+                            <div className="flex items-center gap-2">
+                              <CalendarDays className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                              <span className="font-medium">
+                                {session.dayLabel} {format(new Date(session.date + "T12:00:00"), "d MMM")}
+                              </span>
+                              <span className="text-muted-foreground">
+                                {session.startTime}–{session.endTime}
+                              </span>
+                              {session.room && (
+                                <span className="text-muted-foreground">({session.room})</span>
+                              )}
+                              {isToday && (
+                                <span className="text-[10px] font-semibold text-[#c24e3f] uppercase">Today</span>
+                              )}
+                            </div>
+                            {session.taken && (
+                              <span className="flex items-center gap-1 text-[11px] text-[#16a34a] font-medium shrink-0">
+                                <CheckCircle2 className="h-3 w-3" />
+                                Taken
+                              </span>
+                            )}
+                          </button>
+                        );
+                      })
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setUseCustomDate(true)}
+                    className="mt-1.5 text-[12px] text-muted-foreground hover:text-foreground transition-colors underline"
+                  >
+                    Custom date
+                  </button>
                 </div>
-              </div>
+              )}
+
+              {/* Custom date fallback */}
+              {selectedClassId && useCustomDate && (
+                <div className="w-[180px]">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <Label className="text-[12px] font-medium text-muted-foreground uppercase tracking-wide">
+                      Date
+                    </Label>
+                    <button
+                      type="button"
+                      onClick={() => setUseCustomDate(false)}
+                      className="text-[12px] text-muted-foreground hover:text-foreground transition-colors underline"
+                    >
+                      Back to sessions
+                    </button>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      type="date"
+                      value={selectedDate}
+                      onChange={(e) => setSelectedDate(e.target.value)}
+                      className="h-9 text-[13px]"
+                    />
+                    {selectedDate === format(new Date(), "yyyy-MM-dd") && (
+                      <Badge variant="default" className="text-[10px] shrink-0">Today</Badge>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
+
+            {scheduleWarning && selectedClassId && useCustomDate && (
+              <div className="flex items-start gap-2 rounded-md bg-[#fef3c7] border border-[#b45309]/20 px-3 py-2 mb-4">
+                <AlertTriangle className="h-4 w-4 text-[#b45309] shrink-0 mt-0.5" />
+                <p className="text-[12px] text-[#b45309]">{scheduleWarning}</p>
+              </div>
+            )}
 
             {selectedClassId && classStudents.length > 0 && (
               <>

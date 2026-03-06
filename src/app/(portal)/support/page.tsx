@@ -779,7 +779,7 @@ export default function SupportPage() {
               Record a new student incident
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-2">
+          <div className="space-y-4 py-2 overflow-y-auto min-h-0">
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label className="text-[13px]">Student *</Label>
@@ -1182,7 +1182,7 @@ export default function SupportPage() {
               Add or remove incident categories
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-2">
+          <div className="space-y-4 py-2 overflow-y-auto min-h-0">
             <div className="flex gap-2">
               <Input
                 value={newCategoryName}
