@@ -501,21 +501,26 @@ export default function TimetablePage() {
                             isSameDay(dayDate, today) && "bg-[#fff2f0]/40"
                           )}
                         >
-                          {visibleDeadlines.map((evt) => (
-                            <button
-                              key={evt.id}
-                              type="button"
-                              onClick={() => openEventSheet(evt, dayDate)}
-                              className="w-full text-left mb-0.5"
-                            >
-                              <div className="rounded bg-[#fee2e2] border border-[#dc2626]/20 px-1.5 py-0.5 hover:bg-[#fecaca] transition-colors cursor-pointer min-w-0">
-                                <div className="flex items-center gap-1 min-w-0">
-                                  <Target className="h-2.5 w-2.5 text-[#dc2626] shrink-0" />
-                                  <span className="text-[11px] font-medium text-[#dc2626] truncate">{evt.title}</span>
+                          {visibleDeadlines.map((evt) => {
+                            const dlClass = evt.classId ? getClassById(evt.classId) : null;
+                            return (
+                              <button
+                                key={evt.id}
+                                type="button"
+                                onClick={() => openEventSheet(evt, dayDate)}
+                                className="w-full text-left mb-0.5"
+                              >
+                                <div className="rounded bg-[#fee2e2] border border-[#dc2626]/20 px-1.5 py-0.5 hover:bg-[#fecaca] transition-colors cursor-pointer min-w-0">
+                                  <div className="flex items-center gap-1 min-w-0">
+                                    <span title={dlClass?.name || ""} className="shrink-0 flex">
+                                      <BookOpen className="h-2.5 w-2.5 text-[#dc2626]" />
+                                    </span>
+                                    <span className="text-[11px] font-medium text-[#dc2626] truncate">{evt.title}</span>
+                                  </div>
                                 </div>
-                              </div>
-                            </button>
-                          ))}
+                              </button>
+                            );
+                          })}
                           {deadlineOverflow > 0 && (
                             <button
                               type="button"
