@@ -1031,7 +1031,7 @@ export function generateSeedData() {
     const dueDate = new Date(asmt.dueDate + "T23:59:00.000Z");
     calendarEvents.push({
       id: calId(calCount),
-      title: `Due: ${asmt.title}`,
+      title: asmt.title,
       description: asmt.description,
       type: "deadline",
       classId: asmt.classId,
