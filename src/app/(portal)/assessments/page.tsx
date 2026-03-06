@@ -94,11 +94,7 @@ export default function AssessmentsPage() {
 
   const activeClassId = useStore((s) => s.ui.activeClassId);
 
-  // Filters — sync with global class switcher
-  const [classFilter, setClassFilter] = useState(activeClassId || "all");
-  useEffect(() => {
-    setClassFilter(activeClassId || "all");
-  }, [activeClassId]);
+  // Filters
   const [statusFilter, setStatusFilter] = useState("all");
   const [gradingModeFilter, setGradingModeFilter] = useState("all");
   const [dueFilter, setDueFilter] = useState("all");
@@ -132,20 +128,12 @@ export default function AssessmentsPage() {
     }
   }, [newClassId, getStudentsByClassId]);
 
-  const classOptions = useMemo(
-    () => [
-      { value: "all", label: "All classes" },
-      ...classes.map((c) => ({ value: c.id, label: c.name })),
-    ],
-    [classes]
-  );
-
   const handleSearch = useCallback((q: string) => setSearch(q), []);
 
   const filtered = useMemo(() => {
     let result = assessments;
-    if (classFilter !== "all") {
-      result = result.filter((a) => a.classId === classFilter);
+    if (activeClassId) {
+      result = result.filter((a) => a.classId === activeClassId);
     }
     if (statusFilter !== "all") {
       result = result.filter((a) => a.status === statusFilter);
@@ -172,7 +160,7 @@ export default function AssessmentsPage() {
       (a, b) =>
         new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
     );
-  }, [assessments, classFilter, statusFilter, gradingModeFilter, dueFilter, search]);
+  }, [assessments, activeClassId, statusFilter, gradingModeFilter, dueFilter, search]);
 
   // Group learning goals by category
   const goalsByCategory = useMemo(() => {
@@ -293,13 +281,6 @@ export default function AssessmentsPage() {
 
       <FilterBar
         filters={[
-          {
-            key: "class",
-            label: "Class",
-            options: classOptions,
-            value: classFilter,
-            onChange: setClassFilter,
-          },
           {
             key: "status",
             label: "Status",

@@ -20,6 +20,8 @@ export default function ReportsPage() {
   const reportCycles = useStore((s) => s.reportCycles);
   const reportTemplates = useStore((s) => s.reportTemplates);
   const classes = useStore((s) => s.classes);
+  const activeClassId = useStore((s) => s.ui.activeClassId);
+  const getClassById = useStore((s) => s.getClassById);
 
   // Sort & filter state for report cycles
   const [cycleSort, setCycleSort] = useState("name");
@@ -35,6 +37,10 @@ export default function ReportsPage() {
   // Filtered & sorted report cycles
   const filteredCycles = useMemo(() => {
     let result = [...reportCycles];
+    // Macro filter: only show cycles that include the active class
+    if (activeClassId) {
+      result = result.filter((c) => c.classIds.includes(activeClassId));
+    }
     if (cycleStatusFilter !== "all") {
       result = result.filter((c) => c.status === cycleStatusFilter);
     }
@@ -58,7 +64,15 @@ export default function ReportsPage() {
       }
     });
     return result;
-  }, [reportCycles, cycleStatusFilter, cycleYearFilter, cycleSort]);
+  }, [reportCycles, activeClassId, cycleStatusFilter, cycleYearFilter, cycleSort]);
+
+  // Filtered templates: match programme of active class
+  const filteredTemplates = useMemo(() => {
+    if (!activeClassId) return reportTemplates;
+    const activeClass = getClassById(activeClassId);
+    if (!activeClass) return reportTemplates;
+    return reportTemplates.filter((t) => t.programme === activeClass.programme);
+  }, [reportTemplates, activeClassId, getClassById]);
 
   if (loading)
     return (
@@ -128,32 +142,32 @@ export default function ReportsPage() {
               description={reportCycles.length === 0 ? "Report cycles will appear here once configured." : "No cycles match your current filters."}
             />
           ) : (
-            <div className="space-y-2">
+            <div className="flex flex-col gap-4">
               {filteredCycles.map((cycle) => {
-                const cycleClasses = classes.filter((c) =>
-                  cycle.classIds.includes(c.id)
-                );
+                const cycleClasses = activeClassId
+                  ? classes.filter((c) => c.id === activeClassId && cycle.classIds.includes(c.id))
+                  : classes.filter((c) => cycle.classIds.includes(c.id));
                 return (
                   <Link
                     key={cycle.id}
                     href={`/reports/cycles/${cycle.id}`}
                   >
-                    <Card className="p-4 gap-0 hover:shadow-[0_1px_2px_rgba(16,24,40,0.06)] hover:border-border/80 transition-all cursor-pointer">
+                    <Card className="gap-0 hover:shadow-[0_1px_2px_rgba(16,24,40,0.06)] hover:border-border/80 transition-all cursor-pointer" style={{ padding: "24px 28px" }}>
                       <div className="flex items-center justify-between">
                         <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-2 mb-1">
-                            <p className="text-[14px] font-medium">
+                          <div className="flex items-center gap-3 mb-2">
+                            <p className="text-[15px] font-medium">
                               {cycle.name}
                             </p>
                             <StatusBadge status={cycle.status} />
                           </div>
-                          <p className="text-[12px] text-muted-foreground">
+                          <p className="text-[13px] text-muted-foreground">
                             {cycle.term} &middot; {cycle.academicYear}
                           </p>
                         </div>
-                        <div className="flex items-center gap-4 text-[12px] text-muted-foreground shrink-0">
-                          <span className="flex items-center gap-1">
-                            <FileText className="h-3.5 w-3.5" />
+                        <div className="flex items-center gap-6 text-[13px] text-muted-foreground shrink-0">
+                          <span className="flex items-center gap-2">
+                            <FileText className="h-4 w-4" />
                             {cycleClasses.length} class
                             {cycleClasses.length !== 1 && "es"}
                           </span>
@@ -173,15 +187,15 @@ export default function ReportsPage() {
 
         {/* ── Templates ── */}
         <TabsContent value="templates">
-          {reportTemplates.length === 0 ? (
+          {filteredTemplates.length === 0 ? (
             <EmptyState
               icon={LayoutTemplate}
               title="No templates"
-              description="Report templates will appear here once created."
+              description={reportTemplates.length === 0 ? "Report templates will appear here once created." : "No templates match the selected class filter."}
             />
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {reportTemplates.map((template) => (
+              {filteredTemplates.map((template) => (
                 <Card key={template.id} className="p-5 gap-0">
                   <div className="flex items-start justify-between mb-2">
                     <h3 className="text-[14px] font-semibold">

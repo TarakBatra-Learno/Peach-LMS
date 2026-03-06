@@ -112,9 +112,9 @@ export function BreadcrumbNav() {
       continue;
     }
 
-    // "cycles" segment under reports
+    // "cycles" segment under reports — skip it; the cycle name breadcrumb is sufficient
+    // (the "Reports" entry already links back to the reports page)
     if (segment === "cycles" && segments[i - 1] === "reports") {
-      entries.push({ label: "Cycles", href });
       continue;
     }
 
@@ -216,7 +216,7 @@ export function BreadcrumbNav() {
           const isLast = index === entries.length - 1;
 
           return (
-            <span key={entry.href} className="inline-flex items-center gap-1.5">
+            <span key={`${index}-${entry.href}`} className="inline-flex items-center gap-1.5">
               <BreadcrumbSeparator />
               <BreadcrumbItem>
                 {isLast ? (

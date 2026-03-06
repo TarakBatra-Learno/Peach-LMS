@@ -7,7 +7,7 @@ const STORAGE_KEY = "peach-lms-store";
 const defaultUIState = {
   sidebarCollapsed: false,
   activeClassId: null as string | null,
-  activeTerm: "Term 1",
+  activeAcademicYear: "2025/26",
   drawerOpen: false,
   drawerContent: null as string | null,
   simulateLatency: true,
@@ -45,7 +45,7 @@ export const useStore = create<AppStore>()(
       // UI Actions
       toggleSidebar: () => set((s) => ({ ui: { ...s.ui, sidebarCollapsed: !s.ui.sidebarCollapsed } })),
       setActiveClass: (classId) => set((s) => ({ ui: { ...s.ui, activeClassId: classId } })),
-      setActiveTerm: (term) => set((s) => ({ ui: { ...s.ui, activeTerm: term } })),
+      setActiveAcademicYear: (year) => set((s) => ({ ui: { ...s.ui, activeAcademicYear: year } })),
       openDrawer: (content) => set((s) => ({ ui: { ...s.ui, drawerOpen: true, drawerContent: content } })),
       closeDrawer: () => set((s) => ({ ui: { ...s.ui, drawerOpen: false, drawerContent: null } })),
       setSimulateLatency: (v) => set((s) => ({ ui: { ...s.ui, simulateLatency: v } })),

@@ -6,7 +6,7 @@ import { generateSeedData } from "@/data/seed";
 import { DashboardSkeleton } from "@/components/shared/skeleton-loader";
 
 // Bump this version whenever seed data shape changes to force a reseed.
-const SEED_VERSION = 5;
+const SEED_VERSION = 8;
 const SEED_VERSION_KEY = "peach-lms-seed-version";
 
 export function StoreInitializer({ children }: { children: React.ReactNode }) {
@@ -24,16 +24,6 @@ export function StoreInitializer({ children }: { children: React.ReactNode }) {
       const seed = generateSeedData();
       resetAllData(seed);
       localStorage.setItem(SEED_VERSION_KEY, String(SEED_VERSION));
-    }
-
-    // Auto-detect current term from report cycle dates
-    const reportCycles = useStore.getState().reportCycles;
-    const today = new Date().toISOString().slice(0, 10);
-    const currentCycle = reportCycles.find(
-      (rc) => rc.startDate <= today && today <= rc.endDate
-    );
-    if (currentCycle) {
-      useStore.getState().setActiveTerm(currentCycle.term);
     }
 
     setReady(true);

@@ -105,15 +105,10 @@ export default function PortfolioPage() {
 
   const activeClassId = useStore((s) => s.ui.activeClassId);
 
-  // Filter state — sync with global class switcher
-  const [classFilter, setClassFilter] = useState(activeClassId || "all");
-  useEffect(() => {
-    setClassFilter(activeClassId || "all");
-  }, [activeClassId]);
+  // Filter state
   const [mediaFilter, setMediaFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
-  const [byClassSelection, setByClassSelection] = useState("all");
 
   // Create dialog form state
   const [formTitle, setFormTitle] = useState("");
@@ -150,9 +145,9 @@ export default function PortfolioPage() {
 
   // Class-filtered artifacts for stats
   const classFilteredArtifacts = useMemo(() => {
-    if (classFilter === "all") return artifacts;
-    return artifacts.filter((a) => a.classId === classFilter);
-  }, [artifacts, classFilter]);
+    if (!activeClassId) return artifacts;
+    return artifacts.filter((a) => a.classId === activeClassId);
+  }, [artifacts, activeClassId]);
 
   // Stats (respect class filter)
   const pendingArtifacts = useMemo(() => classFilteredArtifacts.filter((a) => a.approvalStatus === "pending"), [classFilteredArtifacts]);
@@ -162,7 +157,7 @@ export default function PortfolioPage() {
   // Filtered artifacts for "All" tab
   const filteredArtifacts = useMemo(() => {
     return artifacts.filter((a) => {
-      if (classFilter !== "all" && a.classId !== classFilter) return false;
+      if (activeClassId && a.classId !== activeClassId) return false;
       if (mediaFilter !== "all" && a.mediaType !== mediaFilter) return false;
       if (statusFilter !== "all" && a.approvalStatus !== statusFilter) return false;
       if (searchQuery) {
@@ -173,13 +168,7 @@ export default function PortfolioPage() {
       }
       return true;
     });
-  }, [artifacts, classFilter, mediaFilter, statusFilter, searchQuery, students]);
-
-  // Artifacts for "By Class" tab
-  const byClassArtifacts = useMemo(() => {
-    if (byClassSelection === "all") return artifacts;
-    return artifacts.filter((a) => a.classId === byClassSelection);
-  }, [artifacts, byClassSelection]);
+  }, [artifacts, activeClassId, mediaFilter, statusFilter, searchQuery, students]);
 
   // Helpers
   const getStudentName = useCallback(
@@ -367,10 +356,6 @@ export default function PortfolioPage() {
   }, [urlStudentId, urlArtifactId, students.length, artifacts.length]);
 
   // Filter configs
-  const classFilterOptions = [
-    { value: "all", label: "All classes" },
-    ...classes.map((c) => ({ value: c.id, label: c.name })),
-  ];
   const mediaFilterOptions = [
     { value: "all", label: "All types" },
     ...MEDIA_TYPE_OPTIONS.map((m) => ({ value: m.value, label: m.label })),
@@ -493,14 +478,12 @@ export default function PortfolioPage() {
               <Badge variant="secondary" className="ml-1.5 text-[11px] h-5 px-1.5">{pendingArtifacts.length}</Badge>
             )}
           </TabsTrigger>
-          <TabsTrigger value="by-class" className="text-[13px]">By class</TabsTrigger>
         </TabsList>
 
         {/* All artifacts tab */}
         <TabsContent value="all">
           <FilterBar
             filters={[
-              { key: "class", label: "Class", options: classFilterOptions, value: classFilter, onChange: setClassFilter },
               { key: "media", label: "Media type", options: mediaFilterOptions, value: mediaFilter, onChange: setMediaFilter },
               { key: "status", label: "Status", options: statusFilterOptions, value: statusFilter, onChange: setStatusFilter },
             ]}
@@ -540,36 +523,6 @@ export default function PortfolioPage() {
           )}
         </TabsContent>
 
-        {/* By class tab */}
-        <TabsContent value="by-class">
-          <div className="mb-4">
-            <Select value={byClassSelection} onValueChange={setByClassSelection}>
-              <SelectTrigger className="w-[240px] h-9 text-[13px]">
-                <SelectValue placeholder="Select a class" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All classes</SelectItem>
-                {classes.map((cls) => (
-                  <SelectItem key={cls.id} value={cls.id}>{cls.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          {byClassArtifacts.length === 0 ? (
-            <EmptyState
-              icon={FolderOpen}
-              title="No artifacts"
-              description={byClassSelection === "all" ? "No artifacts have been added yet." : "No artifacts for this class yet."}
-              action={{ label: "Add artifact", onClick: () => setCreateOpen(true) }}
-            />
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {byClassArtifacts.map((artifact) => (
-                <ArtifactCard key={artifact.id} artifact={artifact} />
-              ))}
-            </div>
-          )}
-        </TabsContent>
       </Tabs>
 
       {/* Create artifact dialog */}

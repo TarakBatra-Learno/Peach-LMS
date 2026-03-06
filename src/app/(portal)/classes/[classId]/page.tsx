@@ -70,14 +70,24 @@ export default function ClassHubPage() {
   );
 
   const activeClassId = useStore((s) => s.ui.activeClassId);
+  const setActiveClass = useStore((s) => s.setActiveClass);
   const getClassById = useStore((s) => s.getClassById);
 
-  // When the global class switcher changes, navigate to the new class
+  // If the user navigated directly to a class that differs from the macro filter,
+  // reset the macro filter to "All classes" so the page stays on the intended class.
+  // When the macro filter changes *after* mount, navigate to the newly selected class.
+  const [initialClassId] = useState(classId);
   useEffect(() => {
     if (activeClassId && activeClassId !== classId) {
-      router.push(`/classes/${activeClassId}`);
+      if (classId === initialClassId) {
+        // User landed here directly — clear the macro filter instead of redirecting
+        setActiveClass(null);
+      } else {
+        // The macro filter changed while on this page — follow it
+        router.push(`/classes/${activeClassId}`);
+      }
     }
-  }, [activeClassId, classId, router]);
+  }, [activeClassId, classId, initialClassId, router, setActiveClass]);
   const allStudents = useStore((s) => s.students);
   const allClasses = useStore((s) => s.classes);
   const allAssessments = useStore((s) => s.assessments);
@@ -454,11 +464,17 @@ export default function ClassHubPage() {
                     <p className="text-[14px] font-medium">{openCycle.name}</p>
                     <p className="text-[12px] text-muted-foreground">{openCycle.term} · {openCycle.academicYear}</p>
                   </div>
-                  <Link href={`/reports/cycles/${openCycle.id}`}>
-                    <Button variant="outline" size="sm" className="h-7 text-[12px]">
-                      View cycle <ArrowRight className="h-3 w-3 ml-1" />
-                    </Button>
-                  </Link>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7 text-[12px]"
+                    onClick={() => {
+                      setActiveClass(null);
+                      router.push("/reports");
+                    }}
+                  >
+                    View cycle <ArrowRight className="h-3 w-3 ml-1" />
+                  </Button>
                 </div>
 
                 {/* Stats row */}

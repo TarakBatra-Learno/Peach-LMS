@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo } from "react";
 import { useStore } from "@/stores";
 import { PageHeader } from "@/components/shared/page-header";
 import { StatCard } from "@/components/shared/stat-card";
@@ -74,11 +74,6 @@ export default function GradebookPage() {
   const activeClassId = useStore((s) => s.ui.activeClassId);
   const editor = useGradeEditor();
 
-  // Class view state — sync with global class switcher
-  const [selectedClassId, setSelectedClassId] = useState(activeClassId || "");
-  useEffect(() => {
-    setSelectedClassId(activeClassId || "");
-  }, [activeClassId]);
   // Student view state
   const [selectedStudentId, setSelectedStudentId] = useState("");
 
@@ -93,18 +88,18 @@ export default function GradebookPage() {
   });
 
   // Class view data
-  const selectedClass = selectedClassId
-    ? getClassById(selectedClassId)
+  const selectedClass = activeClassId
+    ? getClassById(activeClassId)
     : undefined;
-  const classStudents = selectedClassId
-    ? getStudentsByClassId(selectedClassId)
+  const classStudents = activeClassId
+    ? getStudentsByClassId(activeClassId)
     : [];
   const classAssessments = useMemo(
     () =>
       assessments.filter(
-        (a) => a.classId === selectedClassId && a.status === "published"
+        (a) => a.classId === activeClassId && a.status === "published"
       ),
-    [assessments, selectedClassId]
+    [assessments, activeClassId]
   );
 
   // Student view data
@@ -186,7 +181,7 @@ export default function GradebookPage() {
 
   // Standards/mastery data: for each learning goal, compute per-student mastery
   const masteryData = useMemo(() => {
-    if (!selectedClassId) return { goals: [], matrix: new Map<string, Map<string, { avg: number; level: string }>>() };
+    if (!activeClassId) return { goals: [], matrix: new Map<string, Map<string, { avg: number; level: string }>>() };
     // Filter learning goals that are linked to at least one class assessment
     const linkedGoalIds = new Set(
       classAssessments.flatMap((a) => a.learningGoalIds ?? [])
@@ -233,11 +228,11 @@ export default function GradebookPage() {
       matrix.set(goal.id, studentMap);
     }
     return { goals, matrix };
-  }, [selectedClassId, classAssessments, classStudents, learningGoals, grades]);
+  }, [activeClassId, classAssessments, classStudents, learningGoals, grades]);
 
   // Bar chart data: grade distribution by decile ranges for selected class
   const classBarChartData = useMemo(() => {
-    if (!selectedClassId) return [];
+    if (!activeClassId) return [];
     const buckets = [
       { range: "0-9", min: 0, max: 9, count: 0 },
       { range: "10-19", min: 10, max: 19, count: 0 },
@@ -262,11 +257,11 @@ export default function GradebookPage() {
       }
     }
     return buckets.map((b) => ({ range: b.range, students: b.count }));
-  }, [selectedClassId, classAssessments, classStudents, grades]);
+  }, [activeClassId, classAssessments, classStudents, grades]);
 
   // Class average for the selected class
   const classAvgData = useMemo(() => {
-    if (!selectedClassId) return { unweighted: null as number | null, weighted: null as number | null };
+    if (!activeClassId) return { unweighted: null as number | null, weighted: null as number | null };
     // Unweighted average: simple mean of all grade percentages in this class
     const allPcts: number[] = [];
     // Per grading mode: collect percentages
@@ -308,7 +303,7 @@ export default function GradebookPage() {
     }
 
     return { unweighted, weighted };
-  }, [selectedClassId, classAssessments, classStudents, grades, weightCategories]);
+  }, [activeClassId, classAssessments, classStudents, grades, weightCategories]);
 
   if (loading)
     return (
@@ -329,7 +324,7 @@ export default function GradebookPage() {
         <TabsList className="mb-6">
           <TabsTrigger value="class">Class view</TabsTrigger>
           <TabsTrigger value="student">Student view</TabsTrigger>
-          {selectedClassId && (
+          {activeClassId && (
             <TabsTrigger value="standards">Standards</TabsTrigger>
           )}
           <TabsTrigger value="analytics">Analytics</TabsTrigger>
@@ -337,29 +332,11 @@ export default function GradebookPage() {
 
         {/* Class View Tab */}
         <TabsContent value="class">
-          <div className="mb-4">
-            <Select
-              value={selectedClassId}
-              onValueChange={setSelectedClassId}
-            >
-              <SelectTrigger className="w-[280px] h-9 text-[13px]">
-                <SelectValue placeholder="Select a class" />
-              </SelectTrigger>
-              <SelectContent>
-                {classes.map((c) => (
-                  <SelectItem key={c.id} value={c.id}>
-                    {c.name} &middot; {c.subject}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          {!selectedClassId ? (
+          {!activeClassId ? (
             <EmptyState
               icon={BookOpen}
               title="Select a class"
-              description="Choose a class above to view its gradebook."
+              description="Choose a class from the top bar to view its gradebook."
             />
           ) : classAssessments.length === 0 ? (
             <EmptyState
@@ -430,7 +407,7 @@ export default function GradebookPage() {
                                 {student.lastName[0]}
                               </div>
                               <Link
-                                href={`/students/${student.id}?classId=${selectedClassId}`}
+                                href={`/students/${student.id}?classId=${activeClassId}`}
                                 className="text-[13px] font-medium hover:text-[#c24e3f] transition-colors"
                               >
                                 {student.firstName} {student.lastName}
@@ -634,7 +611,7 @@ export default function GradebookPage() {
         </TabsContent>
 
         {/* Standards & Skills Tab */}
-        {selectedClassId && (
+        {activeClassId && (
           <TabsContent value="standards">
             {masteryData.goals.length === 0 ? (
               <EmptyState
@@ -657,7 +634,7 @@ export default function GradebookPage() {
                             className="text-[12px] font-medium text-center min-w-[100px]"
                           >
                             <Link
-                              href={`/students/${student.id}?classId=${selectedClassId}`}
+                              href={`/students/${student.id}?classId=${activeClassId}`}
                               className="hover:text-[#c24e3f] transition-colors"
                             >
                               {student.firstName} {student.lastName.charAt(0)}.
@@ -758,7 +735,7 @@ export default function GradebookPage() {
           </div>
 
           {/* Class average summary card (selected class) */}
-          {selectedClassId && selectedClass && (
+          {activeClassId && selectedClass && (
             <Card className="p-5 gap-0 mb-6">
               <div className="flex items-center justify-between mb-2">
                 <h3 className="text-[16px] font-semibold">
@@ -799,7 +776,7 @@ export default function GradebookPage() {
           )}
 
           {/* Grade distribution bar chart (selected class) */}
-          {selectedClassId && (
+          {activeClassId && (
             <Card className="p-5 gap-0 mb-6">
               <h3 className="text-[16px] font-semibold mb-4">
                 Grade distribution &mdash; {selectedClass?.name ?? "Class"}
@@ -852,7 +829,7 @@ export default function GradebookPage() {
           )}
 
           {/* Weight categories */}
-          {selectedClassId && (
+          {activeClassId && (
             <Card className="p-5 gap-0 mb-6">
               <div className="flex items-center justify-between mb-3">
                 <h3 className="text-[16px] font-semibold">Weight categories</h3>

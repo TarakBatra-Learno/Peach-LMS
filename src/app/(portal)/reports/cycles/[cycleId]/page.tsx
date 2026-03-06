@@ -14,13 +14,6 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
   FileText,
   Send,
   Eye,
@@ -45,22 +38,22 @@ export default function ReportCycleDetailPage() {
   const getStudentById = useStore((s) => s.getStudentById);
   const getClassById = useStore((s) => s.getClassById);
   const reportTemplates = useStore((s) => s.reportTemplates);
+  const activeClassId = useStore((s) => s.ui.activeClassId);
 
   const [confirmOpen, setConfirmOpen] = useState(false);
-  const [classFilter, setClassFilter] = useState<string>("all");
 
   const cycle = reportCycles.find((c) => c.id === cycleId);
   const cycleReports = getReportsByCycle(cycleId);
 
-  // Get unique classes in this cycle for the filter
-  const cycleClasses = cycle
-    ? cycle.classIds.map((cid) => getClassById(cid)).filter(Boolean)
-    : [];
+  // Filter reports by macro filter (activeClassId)
+  const filteredReports = activeClassId
+    ? cycleReports.filter((r) => r.classId === activeClassId)
+    : cycleReports;
 
-  // Filter reports by selected class
-  const filteredReports = classFilter === "all"
-    ? cycleReports
-    : cycleReports.filter((r) => r.classId === classFilter);
+  // Classes shown: respect macro filter
+  const displayClassCount = activeClassId
+    ? (cycle?.classIds.includes(activeClassId) ? 1 : 0)
+    : (cycle?.classIds.length ?? 0);
 
   if (loading) return <DetailSkeleton />;
   if (!cycle)
@@ -133,7 +126,7 @@ export default function ReportCycleDetailPage() {
         <div className="flex gap-2 mt-2">
           <StatusBadge status={cycle.status} />
           <Badge variant="outline" className="text-[11px]">
-            {cycle.classIds.length} class{cycle.classIds.length !== 1 && "es"}
+            {displayClassCount} class{displayClassCount !== 1 && "es"}
           </Badge>
         </div>
       </PageHeader>
@@ -146,29 +139,7 @@ export default function ReportCycleDetailPage() {
         <StatCard label="Distributed" value={distributed} icon={Send} />
       </div>
 
-      {/* Class filter (#1 partial) */}
-      {cycleClasses.length > 1 && (
-        <div className="mb-4 flex items-center gap-3">
-          <span className="text-[13px] text-muted-foreground">Filter by class:</span>
-          <Select value={classFilter} onValueChange={setClassFilter}>
-            <SelectTrigger className="w-[260px] h-9 text-[13px]">
-              <SelectValue placeholder="All classes" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All classes ({cycleReports.length})</SelectItem>
-              {cycleClasses.map((cls) =>
-                cls ? (
-                  <SelectItem key={cls.id} value={cls.id}>
-                    {cls.name} ({cycleReports.filter((r) => r.classId === cls.id).length})
-                  </SelectItem>
-                ) : null
-              )}
-            </SelectContent>
-          </Select>
-        </div>
-      )}
-
-      {/* Report list with batch review (#12) */}
+      {/* Report list */}
       {filteredReports.length === 0 ? (
         <EmptyState
           icon={FileText}

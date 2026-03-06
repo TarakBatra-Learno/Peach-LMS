@@ -97,11 +97,12 @@ export default function SupportPage() {
   const [planSheetOpen, setPlanSheetOpen] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState<SupportPlan | null>(null);
 
+  const activeClassId = useStore((s) => s.ui.activeClassId);
+
   // Incident filters
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [severityFilter, setSeverityFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
-  const [classFilter, setClassFilter] = useState("all");
   const [followUpFilter, setFollowUpFilter] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -175,10 +176,10 @@ export default function SupportPage() {
     if (statusFilter !== "all") {
       result = result.filter((i) => i.status === statusFilter);
     }
-    if (classFilter !== "all") {
+    if (activeClassId) {
       result = result.filter((i) => {
         const studentClasses = studentClassMap[i.studentId] || [];
-        return studentClasses.includes(classFilter);
+        return studentClasses.includes(activeClassId);
       });
     }
     if (followUpFilter !== "all") {
@@ -210,7 +211,7 @@ export default function SupportPage() {
       (a, b) =>
         new Date(b.reportedAt).getTime() - new Date(a.reportedAt).getTime()
     );
-  }, [incidents, categoryFilter, severityFilter, statusFilter, classFilter, followUpFilter, searchQuery, getStudentById, studentClassMap]);
+  }, [incidents, categoryFilter, severityFilter, statusFilter, activeClassId, followUpFilter, searchQuery, getStudentById, studentClassMap]);
 
   // Analytics
   const analytics = useMemo(() => {
@@ -446,19 +447,6 @@ export default function SupportPage() {
                 ],
                 value: statusFilter,
                 onChange: setStatusFilter,
-              },
-              {
-                key: "class",
-                label: "Class",
-                options: [
-                  { value: "all", label: "All classes" },
-                  ...classes.map((c) => ({
-                    value: c.id,
-                    label: c.name,
-                  })),
-                ],
-                value: classFilter,
-                onChange: setClassFilter,
               },
               {
                 key: "followup",

@@ -9,7 +9,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { TERMS, TEACHER } from "@/lib/constants";
+import { ACADEMIC_YEARS, TEACHER } from "@/lib/constants";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   DropdownMenu,
@@ -32,9 +32,9 @@ import { GlobalSearch } from "@/components/shell/global-search";
 export function TopBar() {
   const classes = useStore((s) => s.classes);
   const activeClassId = useStore((s) => s.ui.activeClassId);
-  const activeTerm = useStore((s) => s.ui.activeTerm);
+  const activeAcademicYear = useStore((s) => s.ui.activeAcademicYear);
   const setActiveClass = useStore((s) => s.setActiveClass);
-  const setActiveTerm = useStore((s) => s.setActiveTerm);
+  const setActiveAcademicYear = useStore((s) => s.setActiveAcademicYear);
   const simulateLatency = useStore((s) => s.ui.simulateLatency);
   const simulateErrors = useStore((s) => s.ui.simulateErrors);
   const setSimulateLatency = useStore((s) => s.setSimulateLatency);
@@ -65,16 +65,41 @@ export function TopBar() {
   return (
     <>
       <header className="fixed top-0 left-0 right-0 z-50 h-[56px] bg-background border-b border-border flex items-center justify-between px-4">
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3">
           <span className="text-[18px] font-bold text-[#c24e3f] tracking-tight">
             Peach
           </span>
           <Badge variant="outline" className="text-[11px] font-medium text-muted-foreground hidden sm:flex">
             Demo data
           </Badge>
-        </div>
 
-        <div className="flex items-center gap-3">
+          <div className="hidden sm:block w-px h-6 bg-border mx-1" />
+
+          <Select
+            value={activeAcademicYear}
+            onValueChange={(v) => {
+              setActiveAcademicYear(v);
+              // If the currently selected class isn't in the new year, reset
+              if (activeClassId) {
+                const cls = classes.find((c) => c.id === activeClassId);
+                if (cls && cls.academicYear !== v) {
+                  setActiveClass(null);
+                }
+              }
+            }}
+          >
+            <SelectTrigger className="w-[110px] h-8 text-[13px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {ACADEMIC_YEARS.map((y) => (
+                <SelectItem key={y.value} value={y.value}>
+                  {y.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
           <Select
             value={activeClassId || "all"}
             onValueChange={(v) => setActiveClass(v === "all" ? null : v)}
@@ -84,29 +109,18 @@ export function TopBar() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All classes</SelectItem>
-              {classes.map((c) => (
-                <SelectItem key={c.id} value={c.id}>
-                  <span className="flex items-center gap-2">
-                    {c.name}
-                    <Badge variant="outline" className="text-[10px] px-1.5 py-0">
-                      {c.programme}
-                    </Badge>
-                  </span>
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-
-          <Select value={activeTerm} onValueChange={setActiveTerm}>
-            <SelectTrigger className="w-[120px] h-8 text-[13px]">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {TERMS.map((t) => (
-                <SelectItem key={t} value={t}>
-                  {t}
-                </SelectItem>
-              ))}
+              {classes
+                .filter((c) => c.academicYear === activeAcademicYear)
+                .map((c) => (
+                  <SelectItem key={c.id} value={c.id}>
+                    <span className="flex items-center gap-2">
+                      {c.name}
+                      <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+                        {c.programme}
+                      </Badge>
+                    </span>
+                  </SelectItem>
+                ))}
             </SelectContent>
           </Select>
         </div>

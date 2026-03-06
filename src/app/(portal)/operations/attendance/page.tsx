@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { useSearchParams } from "next/navigation";
 import { useStore } from "@/stores";
 import Link from "next/link";
@@ -84,16 +84,23 @@ export default function AttendancePage() {
   const getClassById = useStore((s) => s.getClassById);
 
   const activeClassId = useStore((s) => s.ui.activeClassId);
+  const setActiveClass = useStore((s) => s.setActiveClass);
 
   // Read URL params for timetable deep-link
   const urlClassId = searchParams.get("classId");
   const urlDate = searchParams.get("date");
 
+  // Sync URL classId into macro filter (idempotent + validated)
+  useEffect(() => {
+    if (urlClassId && urlClassId !== activeClassId && classes.some((c) => c.id === urlClassId)) {
+      setActiveClass(urlClassId);
+    }
+  }, [urlClassId, activeClassId, classes, setActiveClass]);
+
   const [dialogOpen, setDialogOpen] = useState(false);
   const [activeTab, setActiveTab] = useState("register");
 
-  // Register form state — sync with global class switcher or URL params
-  const [selectedClassId, setSelectedClassId] = useState<string>(urlClassId || activeClassId || "");
+  // Register form state
   const [selectedDate, setSelectedDate] = useState(urlDate || format(new Date(), "yyyy-MM-dd"));
   const [records, setRecords] = useState<Record<string, AttendanceStatus>>({});
   const [notes, setNotes] = useState<Record<string, string>>({});
@@ -103,8 +110,8 @@ export default function AttendancePage() {
   const [useCustomDate, setUseCustomDate] = useState(false);
 
   const selectedClass = useMemo(
-    () => classes.find((c) => c.id === selectedClassId),
-    [classes, selectedClassId]
+    () => classes.find((c) => c.id === activeClassId),
+    [classes, activeClassId]
   );
 
   // Generate scheduled sessions for the selected class
@@ -123,7 +130,7 @@ export default function AttendancePage() {
         const slotDay = DAY_MAP[slot.day];
         if (slotDay === jsDay) {
           const taken = attendanceSessions.some(
-            (s) => s.classId === selectedClassId && s.date === dateStr
+            (s) => s.classId === activeClassId && s.date === dateStr
           );
           sessions.push({
             date: dateStr,
@@ -138,16 +145,16 @@ export default function AttendancePage() {
     }
 
     return sessions;
-  }, [selectedClass, selectedClassId, attendanceSessions]);
+  }, [selectedClass, activeClassId, attendanceSessions]);
 
   const classStudents = useMemo(() => {
-    if (!selectedClassId) return [];
-    return getStudentsByClassId(selectedClassId);
-  }, [selectedClassId, getStudentsByClassId]);
+    if (!activeClassId) return [];
+    return getStudentsByClassId(activeClassId);
+  }, [activeClassId, getStudentsByClassId]);
 
   // Initialize records when class changes
   const applyClassChange = (classId: string) => {
-    setSelectedClassId(classId);
+    setActiveClass(classId);
     setUseCustomDate(false);
     const studs = getStudentsByClassId(classId);
     const defaultRecords: Record<string, AttendanceStatus> = {};
@@ -159,20 +166,27 @@ export default function AttendancePage() {
     setIsDirty(false);
   };
 
-  const handleClassChange = (classId: string) => {
-    if (isDirty) {
-      setPendingClassId(classId);
-      setDiscardConfirmOpen(true);
-      return;
-    }
-    applyClassChange(classId);
-  };
-
-  // Sync with global class switcher
+  // When activeClassId changes (TopBar switch), reset form state
+  const prevClassRef = useRef(activeClassId);
   useEffect(() => {
-    if (activeClassId && activeClassId !== selectedClassId) {
-      handleClassChange(activeClassId);
+    if (activeClassId && activeClassId !== prevClassRef.current) {
+      if (isDirty) {
+        setPendingClassId(activeClassId);
+        setDiscardConfirmOpen(true);
+      } else {
+        // Reset form state for the new class
+        setUseCustomDate(false);
+        const studs = getStudentsByClassId(activeClassId);
+        const defaultRecords: Record<string, AttendanceStatus> = {};
+        studs.forEach((s) => {
+          defaultRecords[s.id] = "present";
+        });
+        setRecords(defaultRecords);
+        setNotes({});
+        setIsDirty(false);
+      }
     }
+    prevClassRef.current = activeClassId;
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeClassId]);
 
@@ -184,8 +198,8 @@ export default function AttendancePage() {
   // Schedule validation — warn if selected date doesn't match class schedule (custom date mode only)
   const scheduleWarning = useMemo(() => {
     if (!useCustomDate) return null;
-    if (!selectedClassId || !selectedDate) return null;
-    const cls = getClassById(selectedClassId);
+    if (!activeClassId || !selectedDate) return null;
+    const cls = getClassById(activeClassId);
     if (!cls || !cls.schedule || cls.schedule.length === 0) return null;
     const date = new Date(selectedDate + "T12:00:00");
     const jsDay = getDay(date);
@@ -193,11 +207,11 @@ export default function AttendancePage() {
     if (matchesSchedule) return null;
     const scheduleDays = cls.schedule.map((s) => DAY_LABELS[s.day] || s.day).join(", ");
     return `No lesson scheduled for this date. This class meets on ${scheduleDays}.`;
-  }, [useCustomDate, selectedClassId, selectedDate, getClassById]);
+  }, [useCustomDate, activeClassId, selectedDate, getClassById]);
 
   // Auto-select session: URL date → today → next upcoming untaken
   useEffect(() => {
-    if (!selectedClassId || scheduledSessions.length === 0) return;
+    if (!activeClassId || scheduledSessions.length === 0) return;
     if (useCustomDate) return;
 
     // If URL has a date param that matches a session, select it
@@ -224,10 +238,10 @@ export default function AttendancePage() {
       return;
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedClassId, scheduledSessions]);
+  }, [activeClassId, scheduledSessions]);
 
   const handleCompleteSession = () => {
-    if (!selectedClassId) {
+    if (!activeClassId) {
       toast.error("Please select a class");
       return;
     }
@@ -245,7 +259,7 @@ export default function AttendancePage() {
 
     addAttendanceSession({
       id: generateId("att"),
-      classId: selectedClassId,
+      classId: activeClassId,
       date: selectedDate,
       records: attendanceRecords,
       completedAt: new Date().toISOString(),
@@ -253,7 +267,6 @@ export default function AttendancePage() {
 
     toast.success("Attendance session recorded");
     setDialogOpen(false);
-    setSelectedClassId("");
     setRecords({});
     setNotes({});
     setIsDirty(false);
@@ -382,26 +395,8 @@ export default function AttendancePage() {
           {/* Quick take attendance inline */}
           <Card className="p-5 gap-0">
             <div className="space-y-4 mb-4">
-              <div>
-                <Label className="text-[12px] font-medium text-muted-foreground uppercase tracking-wide mb-1.5 block">
-                  Class
-                </Label>
-                <Select value={selectedClassId} onValueChange={handleClassChange}>
-                  <SelectTrigger className="h-9 text-[13px]">
-                    <SelectValue placeholder="Select a class" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {classes.map((cls) => (
-                      <SelectItem key={cls.id} value={cls.id}>
-                        {cls.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
               {/* Session picker */}
-              {selectedClassId && !useCustomDate && (
+              {activeClassId && !useCustomDate && (
                 <div className="w-[280px]">
                   <Label className="text-[12px] font-medium text-muted-foreground uppercase tracking-wide mb-1.5 block">
                     Session
@@ -465,7 +460,7 @@ export default function AttendancePage() {
               )}
 
               {/* Custom date fallback */}
-              {selectedClassId && useCustomDate && (
+              {activeClassId && useCustomDate && (
                 <div className="w-[180px]">
                   <div className="flex items-center justify-between mb-1.5">
                     <Label className="text-[12px] font-medium text-muted-foreground uppercase tracking-wide">
@@ -494,14 +489,14 @@ export default function AttendancePage() {
               )}
             </div>
 
-            {scheduleWarning && selectedClassId && useCustomDate && (
+            {scheduleWarning && activeClassId && useCustomDate && (
               <div className="flex items-start gap-2 rounded-md bg-[#fef3c7] border border-[#b45309]/20 px-3 py-2 mb-4">
                 <AlertTriangle className="h-4 w-4 text-[#b45309] shrink-0 mt-0.5" />
                 <p className="text-[12px] text-[#b45309]">{scheduleWarning}</p>
               </div>
             )}
 
-            {selectedClassId && classStudents.length > 0 && (
+            {activeClassId && classStudents.length > 0 && (
               <>
                 <Separator className="mb-4" />
                 <div className="space-y-2">
@@ -588,16 +583,18 @@ export default function AttendancePage() {
               </>
             )}
 
-            {selectedClassId && classStudents.length === 0 && (
+            {activeClassId && classStudents.length === 0 && (
               <p className="text-[13px] text-muted-foreground text-center py-8">
                 No students enrolled in this class.
               </p>
             )}
 
-            {!selectedClassId && (
-              <p className="text-[13px] text-muted-foreground text-center py-8">
-                Select a class to begin taking attendance.
-              </p>
+            {!activeClassId && (
+              <EmptyState
+                icon={ClipboardCheck}
+                title="Select a class"
+                description="Choose a class from the top bar to take attendance."
+              />
             )}
           </Card>
 
@@ -608,15 +605,7 @@ export default function AttendancePage() {
               <EmptyState
                 icon={ClipboardCheck}
                 title="No attendance sessions"
-                description="Take attendance for a class to see sessions here."
-                action={{
-                  label: "Take attendance",
-                  onClick: () => {
-                    if (classes.length > 0) {
-                      handleClassChange(classes[0].id);
-                    }
-                  },
-                }}
+                description="Select a class from the top bar and take attendance to see sessions here."
               />
             ) : (
               <div className="space-y-2">

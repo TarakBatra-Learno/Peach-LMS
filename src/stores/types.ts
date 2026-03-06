@@ -12,7 +12,7 @@ import { CalendarEvent } from "@/types/calendar";
 export interface UIState {
   sidebarCollapsed: boolean;
   activeClassId: string | null;
-  activeTerm: string;
+  activeAcademicYear: string;
   drawerOpen: boolean;
   drawerContent: string | null;
   simulateLatency: boolean;
@@ -49,7 +49,7 @@ export interface AppActions {
   // UI
   toggleSidebar: () => void;
   setActiveClass: (classId: string | null) => void;
-  setActiveTerm: (term: string) => void;
+  setActiveAcademicYear: (year: string) => void;
   openDrawer: (content: string) => void;
   closeDrawer: () => void;
   setSimulateLatency: (v: boolean) => void;

@@ -29,7 +29,9 @@ export const OPERATIONS_TABS = [
   { label: "Compliance", href: "/operations/compliance" },
 ] as const;
 
-export const TERMS = ["Term 1", "Term 2", "Full Year"] as const;
+export const ACADEMIC_YEARS = [
+  { value: "2025/26", label: "2025/26" },
+] as const;
 
 export const TEACHER = {
   name: "Ms. Sarah Mitchell",

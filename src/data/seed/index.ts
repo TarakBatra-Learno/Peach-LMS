@@ -144,7 +144,7 @@ export function generateSeedData() {
         scheduleSlot("wed", "08:00", "08:30", "Room 201"),
         scheduleSlot("fri", "08:00", "08:30", "Room 201"),
       ],
-      academicYear: "2025-2026",
+      academicYear: "2025/26",
       term: "Term 2",
     },
     {
@@ -160,7 +160,7 @@ export function generateSeedData() {
         scheduleSlot("tue", "11:00", "12:00", "Lab 3"),
         scheduleSlot("thu", "09:00", "10:00", "Lab 3"),
       ],
-      academicYear: "2025-2026",
+      academicYear: "2025/26",
       term: "Term 2",
     },
     {
@@ -176,7 +176,7 @@ export function generateSeedData() {
         scheduleSlot("wed", "10:15", "11:45", "Room 305"),
         scheduleSlot("fri", "10:15", "11:45", "Room 305"),
       ],
-      academicYear: "2025-2026",
+      academicYear: "2025/26",
       term: "Term 2",
     },
   ];
@@ -721,7 +721,7 @@ export function generateSeedData() {
       id: "rc_t1",
       name: "Term 1 Reports 2025-2026",
       term: "Term 1",
-      academicYear: "2025-2026",
+      academicYear: "2025/26",
       startDate: "2025-08-25",
       endDate: "2025-12-15",
       templateId: undefined,
@@ -732,7 +732,7 @@ export function generateSeedData() {
       id: "rc_t2",
       name: "Term 2 Reports 2025-2026",
       term: "Term 2",
-      academicYear: "2025-2026",
+      academicYear: "2025/26",
       startDate: "2026-01-12",
       endDate: "2026-03-20",
       templateId: undefined,
@@ -852,7 +852,7 @@ export function generateSeedData() {
     const studentNum = parseInt(student.id.replace("stu_", ""));
     const years: TranscriptYear[] = [
       {
-        academicYear: "2025-2026",
+        academicYear: "2025/26",
         terms: [
           {
             term: "Term 1",

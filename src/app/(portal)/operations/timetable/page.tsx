@@ -144,8 +144,9 @@ export default function TimetablePage() {
   const updateCalendarEvent = useStore((s) => s.updateCalendarEvent);
   const deleteCalendarEvent = useStore((s) => s.deleteCalendarEvent);
 
+  const activeClassId = useStore((s) => s.ui.activeClassId);
+
   const [weekOffset, setWeekOffset] = useState(0);
-  const [classFilter, setClassFilter] = useState("all");
 
   // Sheet state
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -290,18 +291,18 @@ export default function TimetablePage() {
   const weekDays = Array.from({ length: 5 }, (_, i) => addDays(baseDate, i));
 
   // Filter events for timetable: all non-all-day events
-  // When a class filter is active, show that class's events + all non-class events
+  // When a class is selected in the macro filter, show that class's events + all non-class events
   const timetableEvents = useMemo(() => {
     return calendarEvents.filter((e) => {
       // Exclude all-day events (they don't have time slots)
       if (e.isAllDay) return false;
       // Class filter: when a specific class is selected, only show matching class events + all non-class events
-      if (classFilter !== "all") {
-        if (e.type === "class" && e.classId !== classFilter) return false;
+      if (activeClassId) {
+        if (e.type === "class" && e.classId !== activeClassId) return false;
       }
       return true;
     });
-  }, [calendarEvents, classFilter]);
+  }, [calendarEvents, activeClassId]);
 
   // Section D: Place events into the timetable grid using date-string keys
   const grid = useMemo(() => {
@@ -343,8 +344,8 @@ export default function TimetablePage() {
     const result: Record<number, CalendarEvent[]> = {};
     const deadlines = calendarEvents.filter((e) => {
       if (e.type !== "deadline") return false;
-      if (classFilter !== "all") {
-        if (e.classId !== classFilter) return false;
+      if (activeClassId) {
+        if (e.classId !== activeClassId) return false;
       }
       return true;
     });
@@ -363,7 +364,7 @@ export default function TimetablePage() {
     });
 
     return result;
-  }, [calendarEvents, classFilter, weekDays]);
+  }, [calendarEvents, activeClassId, weekDays]);
 
   const hasWeekDeadlines = Object.values(weekDeadlines).some((d) => d.length > 0);
 
@@ -425,19 +426,6 @@ export default function TimetablePage() {
           </span>
         </div>
 
-        <Select value={classFilter} onValueChange={setClassFilter}>
-          <SelectTrigger className="w-[200px] h-8 text-[13px]">
-            <SelectValue placeholder="All classes" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All classes</SelectItem>
-            {classes.map((c) => (
-              <SelectItem key={c.id} value={c.id}>
-                {c.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
       </div>
 
       {timetableEvents.length === 0 && !hasWeekDeadlines ? (
