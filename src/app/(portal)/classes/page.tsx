@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { useMockLoading } from "@/lib/hooks/use-mock-loading";
 import { CardGridSkeleton } from "@/components/shared/skeleton-loader";
-import { isGradeComplete } from "@/lib/grade-helpers";
+import { getToMarkCount } from "@/lib/grade-helpers";
 import { Users, ClipboardCheck, FolderOpen, BookOpen } from "lucide-react";
 import Link from "next/link";
 
@@ -38,19 +38,14 @@ export default function ClassesPage() {
             const classAssessments = assessments.filter((a) => a.classId === cls.id);
             const publishedCount = classAssessments.filter((a) => a.status === "published").length;
             const classStudentIds = cls.studentIds;
-            const ungradedCount = classAssessments
+            const toMarkCount = classAssessments
               .filter((a) => a.status === "published")
               .reduce((count, asmt) => {
                 const targetIds = asmt.assignedStudentIds?.length
                   ? asmt.assignedStudentIds.filter((id) => classStudentIds.includes(id))
                   : classStudentIds;
-                const needsGrading = targetIds.filter((sid) => {
-                  const grade = grades.find(
-                    (g) => g.studentId === sid && g.assessmentId === asmt.id
-                  );
-                  return !isGradeComplete(grade, asmt);
-                }).length;
-                return count + needsGrading;
+                const asmtGrades = grades.filter((g) => g.assessmentId === asmt.id);
+                return count + getToMarkCount(targetIds, asmtGrades, asmt);
               }, 0);
             const pendingArtifacts = artifacts.filter(
               (a) => a.classId === cls.id && a.approvalStatus === "pending"
@@ -85,7 +80,7 @@ export default function ClassesPage() {
                       </span>
                     )}
                   </div>
-                  {ungradedCount > 0 && (
+                  {toMarkCount > 0 && (
                     <div className="mt-3 pt-3 border-t border-border/50">
                       <button
                         className="text-[12px] text-[#f59e0b] font-medium hover:text-[#d97706] hover:underline transition-colors"
@@ -95,7 +90,7 @@ export default function ClassesPage() {
                           router.push(`/classes/${cls.id}?tab=assessments`);
                         }}
                       >
-                        {ungradedCount} submissions need grading →
+                        {toMarkCount} to mark →
                       </button>
                     </div>
                   )}

@@ -60,6 +60,7 @@ import {
   HelpCircle,
   XCircle,
   ExternalLink,
+  ArrowRight,
 } from "lucide-react";
 import { toast } from "sonner";
 import type { CalendarEvent, RsvpStatus } from "@/types/calendar";
@@ -347,6 +348,11 @@ export default function TimetablePage() {
       if (activeClassId) {
         if (e.classId !== activeClassId) return false;
       }
+      // Only show deadlines for published assessments
+      if (e.linkedAssessmentId) {
+        const linkedAsmt = assessments.find((a) => a.id === e.linkedAssessmentId);
+        if (linkedAsmt && linkedAsmt.status !== "published") return false;
+      }
       return true;
     });
 
@@ -364,7 +370,7 @@ export default function TimetablePage() {
     });
 
     return result;
-  }, [calendarEvents, activeClassId, weekDays]);
+  }, [calendarEvents, activeClassId, weekDays, assessments]);
 
   const hasWeekDeadlines = Object.values(weekDeadlines).some((d) => d.length > 0);
 
@@ -943,7 +949,13 @@ export default function TimetablePage() {
                       return a ? (
                         <div className="flex items-center gap-3 text-[13px]">
                           <Target className="h-4 w-4 text-muted-foreground shrink-0" />
-                          <span>Assessment: {a.title}</span>
+                          <Link
+                            href={`/assessments/${a.id}`}
+                            className="text-[#c24e3f] hover:underline"
+                            onClick={() => setSheetOpen(false)}
+                          >
+                            Assessment: {a.title}
+                          </Link>
                         </div>
                       ) : null;
                     })()}
@@ -980,6 +992,19 @@ export default function TimetablePage() {
 
                   <Separator />
 
+                  {selectedEvent.linkedAssessmentId && (() => {
+                    const linkedAsmt = assessments.find((x) => x.id === selectedEvent.linkedAssessmentId);
+                    return linkedAsmt ? (
+                      <Link
+                        href={`/assessments/${linkedAsmt.id}`}
+                        onClick={() => setSheetOpen(false)}
+                        className="inline-flex items-center justify-center gap-2 w-full rounded-md border border-border bg-background px-3 py-2 text-[13px] font-medium text-[#c24e3f] hover:bg-muted transition-colors"
+                      >
+                        Open assessment
+                        <ArrowRight className="h-4 w-4" />
+                      </Link>
+                    ) : null;
+                  })()}
                   <div className="flex gap-2">
                     <Button
                       variant="outline"

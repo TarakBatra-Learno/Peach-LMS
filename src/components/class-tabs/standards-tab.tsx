@@ -4,8 +4,17 @@ import { useState, useMemo } from "react";
 import Link from "next/link";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { EmptyState } from "@/components/shared/empty-state";
-import { ChevronDown, ChevronRight, Target } from "lucide-react";
+import { ChevronDown, ChevronRight, Target, LayoutGrid, List } from "lucide-react";
 import type { Student } from "@/types/student";
 import type { Assessment, LearningGoal } from "@/types/assessment";
 import type { GradeRecord } from "@/types/gradebook";
@@ -38,6 +47,7 @@ function findBestMasteryForGoal(
   let bestIdx = -1;
 
   for (const grade of studentGrades) {
+    if (grade.submissionStatus === "excused") continue;
     if (!grade.standardsMastery) continue;
     const match = grade.standardsMastery.find((sm) => sm.standardId === goalId);
     if (match && match.level !== "not_assessed") {
@@ -59,6 +69,7 @@ export function StandardsTab({
   learningGoals,
 }: StandardsTabProps) {
   const [expandedGoalId, setExpandedGoalId] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<"cards" | "matrix">("cards");
 
   // Published assessments for this class
   const publishedAssessments = useMemo(
@@ -122,24 +133,108 @@ export function StandardsTab({
 
   return (
     <div className="space-y-4">
-      {/* Summary */}
-      <div className="flex items-center gap-6 mb-2">
-        <p className="text-[13px] text-muted-foreground">
-          <span className="font-semibold text-foreground">{coveredStandards.length}</span> standards tracked across{" "}
-          <span className="font-semibold text-foreground">{publishedAssessments.length}</span> published assessments
-        </p>
-        <div className="flex items-center gap-3">
-          {MASTERY_LEVELS.map((ml) => (
-            <div key={ml.level} className="flex items-center gap-1">
-              <div className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: ml.color }} />
-              <span className="text-[11px] text-muted-foreground">{ml.label}</span>
-            </div>
-          ))}
+      {/* Summary + view toggle */}
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-6">
+          <p className="text-[13px] text-muted-foreground">
+            <span className="font-semibold text-foreground">{coveredStandards.length}</span> standards tracked across{" "}
+            <span className="font-semibold text-foreground">{publishedAssessments.length}</span> published assessments
+          </p>
+          <div className="flex items-center gap-3">
+            {MASTERY_LEVELS.map((ml) => (
+              <div key={ml.level} className="flex items-center gap-1">
+                <div className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: ml.color }} />
+                <span className="text-[11px] text-muted-foreground">{ml.label}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="flex items-center gap-1">
+          <Button
+            variant={viewMode === "cards" ? "default" : "outline"}
+            size="sm"
+            className="h-7 text-[11px] px-2"
+            onClick={() => setViewMode("cards")}
+          >
+            <List className="h-3.5 w-3.5 mr-1" />
+            Cards
+          </Button>
+          <Button
+            variant={viewMode === "matrix" ? "default" : "outline"}
+            size="sm"
+            className="h-7 text-[11px] px-2"
+            onClick={() => setViewMode("matrix")}
+          >
+            <LayoutGrid className="h-3.5 w-3.5 mr-1" />
+            Matrix
+          </Button>
         </div>
       </div>
 
-      {/* Standards list */}
-      <div className="space-y-2">
+      {/* Matrix view */}
+      {viewMode === "matrix" && (
+        <Card className="p-0 gap-0">
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="text-[12px] font-medium min-w-[180px] sticky left-0 bg-background z-10 border-r border-border">
+                    Standard
+                  </TableHead>
+                  {students.map((student) => (
+                    <TableHead key={student.id} className="text-[11px] font-medium text-center min-w-[70px]">
+                      <Link
+                        href={`/students/${student.id}?classId=${classId}`}
+                        className="hover:text-[#c24e3f] transition-colors"
+                      >
+                        {student.firstName[0]}{student.lastName[0]}
+                      </Link>
+                    </TableHead>
+                  ))}
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {standardData.map(({ goal }) => (
+                  <TableRow key={goal.id}>
+                    <TableCell className="sticky left-0 bg-background z-10 border-r border-border">
+                      <div className="flex items-center gap-2">
+                        <Badge variant="outline" className="text-[10px] font-mono shrink-0 h-5">
+                          {goal.code}
+                        </Badge>
+                        <span className="text-[12px] truncate max-w-[120px]" title={goal.title}>
+                          {goal.title}
+                        </span>
+                      </div>
+                    </TableCell>
+                    {students.map((student) => {
+                      const studentGrades = classGrades.filter((g) => g.studentId === student.id);
+                      const mastery = findBestMasteryForGoal(student.id, goal.id, studentGrades);
+                      const ml = mastery ? MASTERY_LEVELS.find((m) => m.level === mastery) : null;
+                      return (
+                        <TableCell key={student.id} className="text-center p-1">
+                          {ml ? (
+                            <span
+                              className="inline-block text-[10px] font-medium px-1.5 py-0.5 rounded"
+                              style={{ backgroundColor: ml.bg, color: ml.color }}
+                            >
+                              {ml.label.slice(0, 3)}
+                            </span>
+                          ) : (
+                            <span className="text-[10px] text-muted-foreground">-</span>
+                          )}
+                        </TableCell>
+                      );
+                    })}
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        </Card>
+      )}
+
+      {/* Card view - Standards list */}
+      {viewMode === "cards" && <div className="space-y-2">
         {standardData.map(({ goal, distribution, assessed }) => {
           const isExpanded = expandedGoalId === goal.id;
           const total = assessed || 1; // avoid /0
@@ -249,7 +344,7 @@ export function StandardsTab({
             </Card>
           );
         })}
-      </div>
+      </div>}
     </div>
   );
 }

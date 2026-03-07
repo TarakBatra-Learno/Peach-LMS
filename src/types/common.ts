@@ -1,6 +1,6 @@
 export type ID = string;
 export type Programme = "MYP" | "DP" | "general";
-export type GradingMode = "score" | "rubric" | "standards" | "myp_criteria" | "dp_scale";
+export type GradingMode = "score" | "rubric" | "standards" | "myp_criteria" | "dp_scale" | "checklist";
 export type Priority = "high" | "medium" | "low";
 export type Status = "draft" | "published" | "archived";
 export type DistributionStatus = "not_started" | "in_progress" | "completed";

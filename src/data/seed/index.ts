@@ -1,8 +1,8 @@
 import { format, subDays, addDays } from "date-fns";
 import type { Class, TimetableSlot } from "@/types/class";
 import type { Student, FamilyShareRecord } from "@/types/student";
-import type { Assessment, LearningGoal, MYPCriterion, RubricCriterion, ChecklistItem } from "@/types/assessment";
-import type { GradeRecord } from "@/types/gradebook";
+import type { Assessment, LearningGoal, MYPCriterion, RubricCriterion, ChecklistItem, ChecklistSection, ChecklistResponseStyle, ChecklistOutcomeModel } from "@/types/assessment";
+import type { GradeRecord, SubmissionStatus, ChecklistResultStatus } from "@/types/gradebook";
 import type { PortfolioArtifact } from "@/types/portfolio";
 import type { AttendanceSession } from "@/types/attendance";
 import type { Incident, SupportPlan, IncidentTaxonomy } from "@/types/incident";
@@ -227,12 +227,47 @@ export function generateSeedData() {
   ];
 
   // -----------------------------------------------------------------------
-  // Assessments (14)
+  // Checklist-mode assessment items
+  // -----------------------------------------------------------------------
+  const labReportChecklist: ChecklistItem[] = [
+    { id: "clm_1", label: "Title and date recorded", required: true },
+    { id: "clm_2", label: "Aim / research question stated", required: true },
+    { id: "clm_3", label: "Hypothesis with justification", required: true },
+    { id: "clm_4", label: "Variables identified (IV, DV, controlled)", required: true },
+    { id: "clm_5", label: "Method written in past tense", required: false },
+    { id: "clm_6", label: "Raw data table included", required: true, helpText: "Must include units and uncertainties" },
+    { id: "clm_7", label: "Graph with labels and trend line", required: false, requireEvidence: true },
+    { id: "clm_8", label: "Conclusion links back to hypothesis", required: true },
+  ];
+  const labReportSections: ChecklistSection[] = [
+    { id: "cls_intro", title: "Introduction", itemIds: ["clm_1", "clm_2", "clm_3", "clm_4"] },
+    { id: "cls_body", title: "Method & Data", itemIds: ["clm_5", "clm_6", "clm_7"] },
+  ];
+
+  const essayCriteriaChecklist: ChecklistItem[] = [
+    { id: "cle_1", label: "Clear thesis statement", required: true, points: 5 },
+    { id: "cle_2", label: "Textual evidence from primary source", required: true, points: 5, requireEvidence: true },
+    { id: "cle_3", label: "Textual evidence from secondary source", required: true, points: 4, requireEvidence: true },
+    { id: "cle_4", label: "Analysis of literary technique", required: true, points: 5, helpText: "e.g. metaphor, irony, narrative voice" },
+    { id: "cle_5", label: "Counter-argument addressed", required: false, points: 3 },
+    { id: "cle_6", label: "Logical paragraph structure", required: true, points: 3 },
+    { id: "cle_7", label: "Academic register maintained", required: false, points: 2 },
+    { id: "cle_8", label: "Works cited / bibliography", required: true, points: 3 },
+  ];
+  const essayCriteriaSections: ChecklistSection[] = [
+    { id: "ces_arg", title: "Argument & Evidence", itemIds: ["cle_1", "cle_2", "cle_3", "cle_4", "cle_5"] },
+    { id: "ces_form", title: "Structure & Formatting", itemIds: ["cle_6", "cle_7", "cle_8"] },
+  ];
+
+  // -----------------------------------------------------------------------
+  // Assessments (34)
   // -----------------------------------------------------------------------
   const assessmentConfigs: {
     title: string; desc: string; classId: string; mode: Assessment["gradingMode"];
     status: Assessment["status"]; dueDaysAgo: number; goalIds: string[];
     totalPoints?: number; rubric?: RubricCriterion[]; checklist?: ChecklistItem[];
+    checklistSections?: ChecklistSection[];
+    checklistResponseStyle?: ChecklistResponseStyle; checklistOutcomeModel?: ChecklistOutcomeModel;
     standardIds?: string[]; mypCriteria?: MYPCriterion[];
   }[] = [
     // MYP HR (10 assessments) - rubric & standards
@@ -257,14 +292,14 @@ export function generateSeedData() {
     { title: "Energy Transfer Investigation", desc: "Design an experiment to measure energy transfer efficiency.", classId: CLS_MYP_SCI, mode: "myp_criteria", status: "published", dueDaysAgo: 30, goalIds: [lgId(1), lgId(2), lgId(10)], mypCriteria: mypSciCriteria },
     { title: "Scientific Method Worksheet", desc: "Apply the scientific method to real-world scenarios.", classId: CLS_MYP_SCI, mode: "score", status: "published", dueDaysAgo: 22, goalIds: [lgId(1), lgId(9)], totalPoints: 25 },
     { title: "Climate Change Research Project", desc: "Research and present on a climate change topic.", classId: CLS_MYP_SCI, mode: "myp_criteria", status: "published", dueDaysAgo: 12, goalIds: [lgId(2), lgId(9), lgId(10)], mypCriteria: mypSciCriteria },
-    { title: "Lab Safety Assessment", desc: "Demonstrate knowledge of lab safety procedures.", classId: CLS_MYP_SCI, mode: "score", status: "published", dueDaysAgo: 3, goalIds: [lgId(1)], totalPoints: 20 },
+    { title: "Lab Safety Assessment", desc: "Demonstrate knowledge of lab safety procedures.", classId: CLS_MYP_SCI, mode: "score", status: "published", dueDaysAgo: -2, goalIds: [lgId(1)], totalPoints: 20 },
     { title: "IDU Collaboration Reflection", desc: "Reflect on the interdisciplinary unit collaboration.", classId: CLS_MYP_SCI, mode: "myp_criteria", status: "draft", dueDaysAgo: -5, goalIds: [lgId(1), lgId(7), lgId(10)], mypCriteria: mypSciCriteria },
 
     // DP ENG (11 assessments) - dp_scale & score
     { title: "Paper 1: Guided Textual Analysis", desc: "Unseen text analysis under timed conditions.", classId: CLS_DP_ENG, mode: "dp_scale", status: "published", dueDaysAgo: 32, goalIds: [lgId(3), lgId(4)] },
     { title: "Individual Oral Commentary", desc: "15-minute oral commentary on studied work.", classId: CLS_DP_ENG, mode: "dp_scale", status: "published", dueDaysAgo: 22, goalIds: [lgId(3), lgId(14)] },
     { title: "Written Task 1: Creative Response", desc: "Creative writing based on studied text.", classId: CLS_DP_ENG, mode: "score", status: "published", dueDaysAgo: 12, goalIds: [lgId(4), lgId(6)], totalPoints: 30, checklist },
-    { title: "Comparative Essay Draft", desc: "Compare two works from the reading list.", classId: CLS_DP_ENG, mode: "dp_scale", status: "published", dueDaysAgo: 4, goalIds: [lgId(3), lgId(4), lgId(10)] },
+    { title: "Comparative Essay Draft", desc: "Compare two works from the reading list.", classId: CLS_DP_ENG, mode: "dp_scale", status: "published", dueDaysAgo: -3, goalIds: [lgId(3), lgId(4), lgId(10)] },
     { title: "Unseen Poetry Analysis", desc: "Analyse an unseen poem under timed conditions.", classId: CLS_DP_ENG, mode: "dp_scale", status: "published", dueDaysAgo: 48, goalIds: [lgId(3), lgId(10)] },
     { title: "Reading Journal: Novel Study", desc: "Maintain a reflective reading journal on the class novel.", classId: CLS_DP_ENG, mode: "score", status: "published", dueDaysAgo: 40, goalIds: [lgId(3), lgId(4)], totalPoints: 25 },
     { title: "Dramatic Monologue Performance", desc: "Perform an original dramatic monologue based on a studied character.", classId: CLS_DP_ENG, mode: "dp_scale", status: "published", dueDaysAgo: 34, goalIds: [lgId(4), lgId(14)] },
@@ -272,6 +307,10 @@ export function generateSeedData() {
     { title: "Vocabulary & Grammar Test", desc: "Assess knowledge of literary terminology and grammar conventions.", classId: CLS_DP_ENG, mode: "score", status: "published", dueDaysAgo: 18, goalIds: [lgId(4)], totalPoints: 40 },
     { title: "Socratic Seminar Participation", desc: "Participate in a Socratic seminar on global issues in literature.", classId: CLS_DP_ENG, mode: "dp_scale", status: "published", dueDaysAgo: 8, goalIds: [lgId(3), lgId(14), lgId(6)] },
     { title: "HL Essay Outline", desc: "Submit the outline for your HL extended essay.", classId: CLS_DP_ENG, mode: "score", status: "draft", dueDaysAgo: -10, goalIds: [lgId(4), lgId(9)], totalPoints: 20 },
+
+    // Checklist-mode assessments
+    { title: "Lab Report Submission Checklist", desc: "Verify your lab report meets all required components before submission.", classId: CLS_MYP_SCI, mode: "checklist", status: "published", dueDaysAgo: 9, goalIds: [lgId(1), lgId(2), lgId(8)], checklist: labReportChecklist, checklistSections: labReportSections, checklistResponseStyle: "binary", checklistOutcomeModel: "feedback_only" },
+    { title: "Essay Criteria Checklist", desc: "Assessment of key essay criteria with point values for each component.", classId: CLS_DP_ENG, mode: "checklist", status: "published", dueDaysAgo: 6, goalIds: [lgId(3), lgId(4), lgId(10)], checklist: essayCriteriaChecklist, checklistSections: essayCriteriaSections, checklistResponseStyle: "ternary", checklistOutcomeModel: "score_contributing" },
   ];
 
   let publishedAsmtCount = 0;
@@ -292,6 +331,9 @@ export function generateSeedData() {
       totalPoints: cfg.totalPoints,
       rubric: cfg.rubric,
       checklist: cfg.checklist,
+      checklistSections: cfg.checklistSections,
+      checklistResponseStyle: cfg.checklistResponseStyle,
+      checklistOutcomeModel: cfg.checklistOutcomeModel,
       standardIds: cfg.standardIds,
       learningGoalIds: cfg.goalIds,
       distributedAt: isPublished ? isoTime(subDays(TODAY, cfg.dueDaysAgo + 5)) : undefined,
@@ -326,21 +368,39 @@ export function generateSeedData() {
     if (asmt.status === "draft") return; // no grades for draft assessments
     const sIds = studentsForClass(asmt.classId);
     sIds.forEach((sid, sIdx) => {
-      const isMissing = sIdx % 17 === 0 && sIdx > 0; // roughly 1 missing per assessment
       const seedVal = (aIdx * 100 + sIdx) % 100;
+
+      // Determine submission status with variety
+      let submissionStatus: SubmissionStatus = "submitted";
+      if (sIdx % 17 === 0 && sIdx > 0) {
+        submissionStatus = "missing";       // ~1 per assessment
+      } else if (sIdx % 23 === 0 && sIdx > 0) {
+        submissionStatus = "excused";       // ~1 per assessment
+      } else if (seedVal >= 85) {
+        // ~15% Pending — skip creating a grade record entirely
+        return;
+      } else if (seedVal >= 70) {
+        submissionStatus = "submitted";     // submitted but ungraded ("To mark")
+      } else {
+        submissionStatus = "submitted";     // submitted + graded (normal)
+      }
+
+      const isUngraded = submissionStatus === "submitted" && seedVal >= 70 && seedVal < 85;
+
       const grade: GradeRecord = {
         id: gradeId(aIdx + 1, sIdx + 1),
         assessmentId: asmt.id,
         studentId: sid,
         classId: asmt.classId,
         gradingMode: asmt.gradingMode,
-        isMissing,
-        feedback: isMissing ? undefined : feedbackPhrases[sIdx % feedbackPhrases.length],
-        submittedAt: isMissing ? undefined : isoTime(subDays(TODAY, (assessmentConfigs[aIdx].dueDaysAgo || 1) + 1)),
-        gradedAt: isMissing ? undefined : isoTime(subDays(TODAY, (assessmentConfigs[aIdx].dueDaysAgo || 1) - 1)),
+        submissionStatus,
+        feedback: (submissionStatus === "missing" || submissionStatus === "excused" || isUngraded) ? undefined : feedbackPhrases[sIdx % feedbackPhrases.length],
+        submittedAt: submissionStatus === "submitted" ? isoTime(subDays(TODAY, (assessmentConfigs[aIdx].dueDaysAgo || 1) + 1)) : undefined,
+        gradedAt: (submissionStatus === "missing" || submissionStatus === "excused" || isUngraded) ? undefined : isoTime(subDays(TODAY, (assessmentConfigs[aIdx].dueDaysAgo || 1) - 1)),
       };
 
-      if (isMissing) {
+      // Missing, excused, and submitted-but-ungraded records have no grade data
+      if (submissionStatus === "missing" || submissionStatus === "excused" || isUngraded) {
         grades.push(grade);
         return;
       }
@@ -373,6 +433,29 @@ export function generateSeedData() {
         case "dp_scale":
           grade.dpGrade = 1 + ((seedVal + sIdx) % 7); // 1-7
           break;
+        case "checklist": {
+          const items = asmt.checklist ?? [];
+          const isTernary = asmt.checklistResponseStyle === "ternary";
+          grade.checklistGradeResults = items.map((item, ci) => {
+            const statusSeed = (sIdx * 7 + ci * 3 + aIdx) % 10;
+            let status: ChecklistResultStatus;
+            if (isTernary) {
+              // 60% yes, 25% partly, 15% no
+              status = statusSeed < 6 ? "yes" : statusSeed < 8 ? "partly" : "no";
+            } else {
+              // 70% met, 30% not_yet
+              status = statusSeed < 7 ? "met" : "not_yet";
+            }
+            return {
+              itemId: item.id,
+              status,
+              evidence: item.requireEvidence && status !== "not_yet" && status !== "no"
+                ? `Evidence provided for "${item.label.slice(0, 20)}..."`
+                : undefined,
+            };
+          });
+          break;
+        }
       }
 
       if (asmt.checklist) {
@@ -392,7 +475,7 @@ export function generateSeedData() {
   // This gives the Standards & Skills tab data to display.
   // -----------------------------------------------------------------------
   grades.forEach((grade) => {
-    if (grade.isMissing || (grade.standardsMastery && grade.standardsMastery.length > 0)) return;
+    if (grade.submissionStatus === "missing" || grade.submissionStatus === "excused" || (grade.standardsMastery && grade.standardsMastery.length > 0)) return;
     const asmt = assessments.find((a) => a.id === grade.assessmentId);
     if (!asmt || asmt.gradingMode === "standards" || asmt.status === "draft") return;
     const goalIds = asmt.learningGoalIds.filter((gid) =>
@@ -800,7 +883,7 @@ export function generateSeedData() {
     const deriveGradeForClass = (classId: string): string => {
       const cls = classes.find(c => c.id === classId);
       if (!cls) return "-";
-      const classGrades = grades.filter(g => g.studentId === student.id && g.classId === classId && !g.isMissing);
+      const classGrades = grades.filter(g => g.studentId === student.id && g.classId === classId && g.submissionStatus !== "missing" && g.submissionStatus !== "excused");
       if (classGrades.length === 0) return "-";
 
       if (cls.programme === "DP") {
@@ -1025,8 +1108,9 @@ export function generateSeedData() {
     }
   }
 
-  // Assessment deadlines
+  // Assessment deadlines — only for published assessments
   assessments.forEach((asmt) => {
+    if (asmt.status !== "published") return;
     calCount++;
     const dueDate = new Date(asmt.dueDate + "T23:59:00.000Z");
     calendarEvents.push({

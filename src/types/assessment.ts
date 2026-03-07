@@ -12,6 +12,9 @@ export interface Assessment {
   totalPoints?: number;
   rubric?: RubricCriterion[];
   checklist?: ChecklistItem[];
+  checklistSections?: ChecklistSection[];
+  checklistResponseStyle?: ChecklistResponseStyle;
+  checklistOutcomeModel?: ChecklistOutcomeModel;
   standardIds?: ID[];
   learningGoalIds: ID[];
   distributedAt?: string;
@@ -43,10 +46,25 @@ export interface RubricLevel {
   description: string;
 }
 
+export type ChecklistResponseStyle = "binary" | "ternary";
+// binary = Met / Not yet (2 states)
+// ternary = Yes / Partly / No (3 states)
+
+export type ChecklistOutcomeModel = "feedback_only" | "score_contributing";
+
+export interface ChecklistSection {
+  id: ID;
+  title: string;
+  itemIds: ID[]; // ordered references — sole source of section membership
+}
+
 export interface ChecklistItem {
   id: ID;
   label: string;
   required: boolean;
+  helpText?: string; // optional guidance text
+  requireEvidence?: boolean; // soft prompt — show evidence textarea (non-blocking)
+  points?: number; // point value (for score-contributing outcome model)
 }
 
 export interface MYPCriterion {

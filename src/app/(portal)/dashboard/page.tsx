@@ -33,6 +33,7 @@ import { useRouter } from "next/navigation";
 import { format, isToday, parseISO, isBefore, addDays, getDay } from "date-fns";
 import { PERIODS } from "@/lib/timetable-constants";
 import { expandEventsForDate, getPeriodStatus, matchEventToPeriod } from "@/lib/calendar-utils";
+import { getToMarkCount, isGradeComplete } from "@/lib/grade-helpers";
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -127,12 +128,11 @@ export default function DashboardPage() {
     ? assessments.filter((a) => a.classId === activeClassId)
     : assessments;
   const publishedAssessments = filteredAssessments.filter((a) => a.status === "published");
-  const ungradedCount = publishedAssessments.reduce((count, asmt) => {
+  const toMarkCount = publishedAssessments.reduce((count, asmt) => {
     const classObj = classes.find((c) => c.id === asmt.classId);
     if (!classObj) return count;
-    const studentCount = classObj.studentIds.length;
-    const gradedCount = grades.filter((g) => g.assessmentId === asmt.id && !g.isMissing).length;
-    return count + Math.max(0, studentCount - gradedCount);
+    const asmtGrades = grades.filter((g) => g.assessmentId === asmt.id);
+    return count + getToMarkCount(classObj.studentIds, asmtGrades, asmt);
   }, 0);
 
   const filteredArtifacts = classStudentIds
@@ -176,10 +176,10 @@ export default function DashboardPage() {
       {/* Stats row */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <StatCard
-          label="Ungraded"
-          value={ungradedCount}
+          label="To mark"
+          value={toMarkCount}
           icon={ClipboardCheck}
-          trend={ungradedCount > 10 ? { direction: "up", label: "Needs attention" } : undefined}
+          trend={toMarkCount > 10 ? { direction: "up", label: "Needs attention" } : undefined}
         />
         <StatCard label="Students" value={classStudentIds ? classStudentIds.size : students.length} icon={Users} />
         <StatCard
@@ -382,8 +382,8 @@ export default function DashboardPage() {
             <h2 className="text-[16px] font-semibold flex items-center gap-2">
               <ClipboardCheck className="h-4 w-4 text-[#c24e3f]" />
               Grading tasks
-              {ungradedCount > 0 && (
-                <Badge variant="secondary" className="text-[11px]">{ungradedCount}</Badge>
+              {toMarkCount > 0 && (
+                <Badge variant="secondary" className="text-[11px]">{toMarkCount}</Badge>
               )}
             </h2>
             <Link href="/assessments" className="text-[13px] text-[#c24e3f] hover:underline flex items-center gap-1">
@@ -391,13 +391,15 @@ export default function DashboardPage() {
             </Link>
           </div>
           {publishedAssessments.length === 0 ? (
-            <p className="text-[13px] text-muted-foreground py-4">No assessments need grading</p>
+            <p className="text-[13px] text-muted-foreground py-4">No assessments to mark</p>
           ) : (
             <div className="space-y-2">
               {publishedAssessments.slice(0, 5).map((asmt) => {
                 const cls = classes.find((c) => c.id === asmt.classId);
-                const gradedCount = grades.filter((g) => g.assessmentId === asmt.id && !g.isMissing).length;
-                const totalStudents = cls?.studentIds.length || 0;
+                const asmtGrades = grades.filter((g) => g.assessmentId === asmt.id);
+                const gradedCount = asmtGrades.filter((g) => isGradeComplete(g, asmt)).length;
+                const excusedForAsmt = asmtGrades.filter((g) => g.submissionStatus === "excused").length;
+                const totalStudents = (cls?.studentIds.length || 0) - excusedForAsmt;
                 return (
                   <Link key={asmt.id} href={`/assessments/${asmt.id}`} className="flex items-center gap-3 py-2 border-b border-border/50 last:border-0 hover:bg-muted/50 -mx-2 px-2 rounded-lg transition-colors">
                     <div className="flex-1 min-w-0">

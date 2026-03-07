@@ -89,7 +89,7 @@ export default function CompliancePage() {
       const className = cls?.name || g.classId;
       const score = g.score !== undefined ? `${g.score}/${g.totalPoints || ""}` : g.dpGrade !== undefined ? `DP: ${g.dpGrade}` : "-";
       const gradedAt = g.gradedAt ? format(parseISO(g.gradedAt), "MMM d, yyyy") : "-";
-      return [studentName, assessmentTitle, className, g.gradingMode, score, gradedAt, g.isMissing ? "Yes" : "No"];
+      return [studentName, assessmentTitle, className, g.gradingMode, score, gradedAt, g.submissionStatus === "missing" ? "Yes" : "No"];
     });
     return { headers, rows, totalRows: grades.length };
   }, [grades, students, assessments, getClassById]);
@@ -144,7 +144,7 @@ export default function CompliancePage() {
       const className = cls?.name || g.classId;
       const score = g.score !== undefined ? `${g.score}/${g.totalPoints || ""}` : g.dpGrade !== undefined ? `DP: ${g.dpGrade}` : "-";
       const gradedAt = g.gradedAt ? format(parseISO(g.gradedAt), "MMM d, yyyy") : "-";
-      return [studentName, assessmentTitle, className, g.gradingMode, score, gradedAt, g.isMissing ? "Yes" : "No"];
+      return [studentName, assessmentTitle, className, g.gradingMode, score, gradedAt, g.submissionStatus === "missing" ? "Yes" : "No"];
     });
     downloadCsv(`grade-export-${format(new Date(), "yyyy-MM-dd")}.csv`, headers, rows);
     toast.success(`Exported ${grades.length} grade records`);
