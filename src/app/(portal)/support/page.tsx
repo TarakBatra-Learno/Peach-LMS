@@ -88,8 +88,12 @@ export default function SupportPage() {
   const updateTaxonomy = useStore((s) => s.updateTaxonomy);
   const getStudentById = useStore((s) => s.getStudentById);
 
+  // Active tab
+  const [activeTab, setActiveTab] = useState("incidents");
+
   // Dialog / Sheet state
   const [logDialogOpen, setLogDialogOpen] = useState(false);
+  const [createPlanDialogOpen, setCreatePlanDialogOpen] = useState(false);
   const [incidentSheetOpen, setIncidentSheetOpen] = useState(false);
   const [selectedIncident, setSelectedIncident] = useState<Incident | null>(
     null
@@ -115,6 +119,15 @@ export default function SupportPage() {
     category: "",
     severity: "medium" as "low" | "medium" | "high",
     tags: [] as string[],
+  });
+
+  // Create plan form
+  const [newPlan, setNewPlan] = useState({
+    studentId: "",
+    title: "",
+    description: "",
+    nextCheckIn: "",
+    incidentIds: [] as string[],
   });
 
   // Follow-up form
@@ -282,6 +295,34 @@ export default function SupportPage() {
     });
   };
 
+  const handleCreatePlan = () => {
+    if (!newPlan.studentId || !newPlan.title || !newPlan.nextCheckIn) {
+      toast.error("Please fill in required fields");
+      return;
+    }
+    const plan: SupportPlan = {
+      id: generateId("plan"),
+      studentId: newPlan.studentId,
+      title: newPlan.title,
+      description: newPlan.description,
+      nextCheckIn: new Date(newPlan.nextCheckIn).toISOString(),
+      notes: [],
+      status: "active",
+      incidentIds: newPlan.incidentIds,
+      createdAt: new Date().toISOString(),
+    };
+    addSupportPlan(plan);
+    toast.success("Support plan created");
+    setCreatePlanDialogOpen(false);
+    setNewPlan({
+      studentId: "",
+      title: "",
+      description: "",
+      nextCheckIn: "",
+      incidentIds: [],
+    });
+  };
+
   const handleAddFollowUp = () => {
     if (!selectedIncident || !followUpNote.trim()) return;
 
@@ -393,14 +434,22 @@ export default function SupportPage() {
       <PageHeader
         title="Student Support"
         description="Manage incidents, support plans, and student wellbeing"
-        primaryAction={{
-          label: "Log incident",
-          onClick: () => setLogDialogOpen(true),
-          icon: Plus,
-        }}
+        primaryAction={
+          activeTab === "plans"
+            ? {
+                label: "Create plan",
+                onClick: () => setCreatePlanDialogOpen(true),
+                icon: Plus,
+              }
+            : {
+                label: "Log incident",
+                onClick: () => setLogDialogOpen(true),
+                icon: Plus,
+              }
+        }
       />
 
-      <Tabs defaultValue="incidents" className="w-full">
+      <Tabs defaultValue="incidents" className="w-full" value={activeTab} onValueChange={setActiveTab}>
         <TabsList className="mb-6">
           <TabsTrigger value="incidents">Incidents</TabsTrigger>
           <TabsTrigger value="plans">Support Plans</TabsTrigger>
@@ -572,7 +621,11 @@ export default function SupportPage() {
             <EmptyState
               icon={Shield}
               title="No support plans"
-              description="Support plans will appear here when created."
+              description="Create a support plan to track ongoing student wellbeing goals."
+              action={{
+                label: "Create plan",
+                onClick: () => setCreatePlanDialogOpen(true),
+              }}
             />
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -916,6 +969,126 @@ export default function SupportPage() {
               Cancel
             </Button>
             <Button onClick={handleLogIncident}>Log incident</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Create Support Plan Dialog ── */}
+      <Dialog open={createPlanDialogOpen} onOpenChange={setCreatePlanDialogOpen}>
+        <DialogContent className="sm:max-w-[520px]">
+          <DialogHeader>
+            <DialogTitle>Create support plan</DialogTitle>
+            <DialogDescription>
+              Set up an ongoing support plan for a student
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2 overflow-y-auto min-h-0">
+            <div className="space-y-2">
+              <Label className="text-[13px]">Student *</Label>
+              <Select
+                value={newPlan.studentId}
+                onValueChange={(v) =>
+                  setNewPlan((prev) => ({ ...prev, studentId: v }))
+                }
+              >
+                <SelectTrigger className="text-[13px]">
+                  <SelectValue placeholder="Select student" />
+                </SelectTrigger>
+                <SelectContent>
+                  {students.map((s) => (
+                    <SelectItem key={s.id} value={s.id}>
+                      {s.firstName} {s.lastName}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label className="text-[13px]">Title *</Label>
+              <Input
+                value={newPlan.title}
+                onChange={(e) =>
+                  setNewPlan((prev) => ({ ...prev, title: e.target.value }))
+                }
+                placeholder="e.g. Behaviour support plan"
+                className="text-[13px]"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label className="text-[13px]">Description</Label>
+              <Textarea
+                value={newPlan.description}
+                onChange={(e) =>
+                  setNewPlan((prev) => ({ ...prev, description: e.target.value }))
+                }
+                placeholder="Goals, strategies, and expected outcomes..."
+                className="min-h-[80px] text-[13px]"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label className="text-[13px]">Next check-in date *</Label>
+              <Input
+                type="date"
+                value={newPlan.nextCheckIn}
+                onChange={(e) =>
+                  setNewPlan((prev) => ({ ...prev, nextCheckIn: e.target.value }))
+                }
+                className="text-[13px]"
+              />
+            </div>
+
+            {/* Link existing incidents */}
+            {incidents.length > 0 && (
+              <div className="space-y-2">
+                <Label className="text-[13px]">Link incidents</Label>
+                <div className="border rounded-md max-h-[140px] overflow-y-auto p-2 space-y-1">
+                  {incidents
+                    .filter((i) => !newPlan.studentId || i.studentId === newPlan.studentId)
+                    .slice(0, 20)
+                    .map((inc) => {
+                      const student = getStudentById(inc.studentId);
+                      return (
+                        <label
+                          key={inc.id}
+                          className="flex items-center gap-2 py-1 px-1 rounded hover:bg-muted cursor-pointer"
+                        >
+                          <Checkbox
+                            checked={newPlan.incidentIds.includes(inc.id)}
+                            onCheckedChange={(checked) => {
+                              setNewPlan((prev) => ({
+                                ...prev,
+                                incidentIds: checked
+                                  ? [...prev.incidentIds, inc.id]
+                                  : prev.incidentIds.filter((id) => id !== inc.id),
+                              }));
+                            }}
+                          />
+                          <span className="text-[12px] truncate">
+                            {inc.title}
+                            {!newPlan.studentId && student && (
+                              <span className="text-muted-foreground"> — {student.firstName} {student.lastName}</span>
+                            )}
+                          </span>
+                        </label>
+                      );
+                    })}
+                </div>
+                {newPlan.incidentIds.length > 0 && (
+                  <p className="text-[11px] text-muted-foreground">
+                    {newPlan.incidentIds.length} incident{newPlan.incidentIds.length !== 1 && "s"} linked
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCreatePlanDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleCreatePlan}>Create plan</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
