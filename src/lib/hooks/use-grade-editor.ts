@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useStore } from "@/stores";
 import { generateId } from "@/services/mock-service";
 import { toast } from "sonner";
-import type { GradeRecord } from "@/types/gradebook";
+import type { GradeRecord, SubmissionStatus, ChecklistResultItem } from "@/types/gradebook";
 
 const MYP_CRITERIA_LABELS = ["A", "B", "C", "D"] as const;
 
@@ -20,9 +20,12 @@ export function useGradeEditor() {
   const [gradingAssessmentId, setGradingAssessmentId] = useState("");
   const [gradingScore, setGradingScore] = useState("");
   const [gradingFeedback, setGradingFeedback] = useState("");
-  const [gradingIsMissing, setGradingIsMissing] = useState(false);
+  const [gradingSubmissionStatus, setGradingSubmissionStatus] = useState<SubmissionStatus>("none");
   const [gradingMypScores, setGradingMypScores] = useState<Record<string, number>>({});
   const [gradingDpGrade, setGradingDpGrade] = useState("4");
+  const [gradingChecklistResults, setGradingChecklistResults] = useState<
+    Record<string, ChecklistResultItem>
+  >({});
 
   const openGradingSheet = (studentId: string, assessmentId: string) => {
     const asmt = assessments.find((a) => a.id === assessmentId);
@@ -34,7 +37,7 @@ export function useGradeEditor() {
 
     setGradingStudentId(studentId);
     setGradingAssessmentId(assessmentId);
-    setGradingIsMissing(existingGrade?.isMissing ?? false);
+    setGradingSubmissionStatus(existingGrade?.submissionStatus ?? "none");
     setGradingFeedback(existingGrade?.feedback ?? "");
 
     if (asmt.gradingMode === "score") {
@@ -47,6 +50,12 @@ export function useGradeEditor() {
         existing[c.criterion] = c.level;
       });
       setGradingMypScores(existing);
+    } else if (asmt.gradingMode === "checklist") {
+      const existing: Record<string, ChecklistResultItem> = {};
+      existingGrade?.checklistGradeResults?.forEach((r) => {
+        existing[r.itemId] = r;
+      });
+      setGradingChecklistResults(existing);
     }
 
     setGradingOpen(true);
@@ -70,11 +79,12 @@ export function useGradeEditor() {
       classId: asmt.classId,
       gradingMode: asmt.gradingMode,
       feedback: gradingFeedback.trim() || undefined,
-      isMissing: gradingIsMissing,
+      submissionStatus: gradingSubmissionStatus,
       gradedAt: now,
     };
 
-    if (!gradingIsMissing) {
+    // Grade inputs are hidden when missing OR excused
+    if (gradingSubmissionStatus !== "missing" && gradingSubmissionStatus !== "excused") {
       if (asmt.gradingMode === "score") {
         baseGrade.score = parseInt(gradingScore) || 0;
         baseGrade.totalPoints = asmt.totalPoints;
@@ -86,7 +96,30 @@ export function useGradeEditor() {
           criterion: c,
           level: gradingMypScores[c] ?? 0,
         }));
+      } else if (asmt.gradingMode === "checklist") {
+        baseGrade.checklistGradeResults = (asmt.checklist ?? []).map(
+          (item) => {
+            const result = gradingChecklistResults[item.id];
+            return {
+              itemId: item.id,
+              status: result?.status ?? "unmarked",
+              evidence: result?.evidence,
+            };
+          }
+        );
       }
+    } else if (gradingSubmissionStatus === "excused") {
+      // Excused: explicitly clear ALL grade payloads, feedback, and submission artifacts
+      baseGrade.score = undefined;
+      baseGrade.dpGrade = undefined;
+      baseGrade.mypCriteriaScores = undefined;
+      baseGrade.rubricScores = undefined;
+      baseGrade.standardsMastery = undefined;
+      baseGrade.checklistGradeResults = undefined;
+      baseGrade.checklistResults = undefined;
+      baseGrade.feedback = undefined;
+      baseGrade.gradedAt = undefined;
+      baseGrade.submittedAt = undefined;
     }
 
     if (existingGrade) {
@@ -121,12 +154,14 @@ export function useGradeEditor() {
     setGradingScore,
     gradingFeedback,
     setGradingFeedback,
-    gradingIsMissing,
-    setGradingIsMissing,
+    gradingSubmissionStatus,
+    setGradingSubmissionStatus,
     gradingMypScores,
     setGradingMypScores,
     gradingDpGrade,
     setGradingDpGrade,
+    gradingChecklistResults,
+    setGradingChecklistResults,
     gradingAssessment,
     gradingStudentObj,
     openGradingSheet,

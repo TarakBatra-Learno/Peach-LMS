@@ -22,7 +22,9 @@ import {
   SheetDescription,
 } from "@/components/ui/sheet";
 import { GRADING_MODE_LABELS } from "@/lib/grade-helpers";
+import { ChecklistGrader } from "@/components/shared/checklist-grader";
 import type { useGradeEditor } from "@/lib/hooks/use-grade-editor";
+import type { ChecklistResultItem } from "@/types/gradebook";
 
 const MYP_CRITERIA_LABELS = ["A", "B", "C", "D"] as const;
 
@@ -31,6 +33,9 @@ export function GradingSheet({
 }: {
   editor: ReturnType<typeof useGradeEditor>;
 }) {
+  const isMissing = editor.gradingSubmissionStatus === "missing";
+  const isExcused = editor.gradingSubmissionStatus === "excused";
+
   return (
     <Sheet open={editor.gradingOpen} onOpenChange={editor.setGradingOpen}>
       <SheetContent className="w-[420px] sm:max-w-[420px]">
@@ -59,16 +64,36 @@ export function GradingSheet({
               </p>
             </div>
             <Switch
-              checked={editor.gradingIsMissing}
-              onCheckedChange={editor.setGradingIsMissing}
+              checked={isMissing}
+              onCheckedChange={(checked) =>
+                editor.setGradingSubmissionStatus(checked ? "missing" : "none")
+              }
+            />
+          </div>
+
+          {/* Mark as excused */}
+          <div className="flex items-center justify-between">
+            <div>
+              <Label className="text-[13px] font-medium">
+                Mark as excused
+              </Label>
+              <p className="text-[12px] text-muted-foreground">
+                Student is excused from this assessment
+              </p>
+            </div>
+            <Switch
+              checked={isExcused}
+              onCheckedChange={(checked) =>
+                editor.setGradingSubmissionStatus(checked ? "excused" : "none")
+              }
             />
           </div>
 
           <Separator />
 
-          {/* Score mode */}
+          {/* Score mode — hidden when missing or excused */}
           {editor.gradingAssessment?.gradingMode === "score" &&
-            !editor.gradingIsMissing && (
+            !isMissing && !isExcused && (
               <div className="space-y-1.5">
                 <Label className="text-[13px]">
                   Score{" "}
@@ -106,9 +131,9 @@ export function GradingSheet({
               </div>
             )}
 
-          {/* MYP Criteria mode */}
+          {/* MYP Criteria mode — hidden when missing or excused */}
           {editor.gradingAssessment?.gradingMode === "myp_criteria" &&
-            !editor.gradingIsMissing && (
+            !isMissing && !isExcused && (
               <div className="space-y-4">
                 <Label className="text-[13px] font-medium">
                   MYP Criteria levels (1-8)
@@ -159,9 +184,9 @@ export function GradingSheet({
               </div>
             )}
 
-          {/* DP Scale mode */}
+          {/* DP Scale mode — hidden when missing or excused */}
           {editor.gradingAssessment?.gradingMode === "dp_scale" &&
-            !editor.gradingIsMissing && (
+            !isMissing && !isExcused && (
               <div className="space-y-1.5">
                 <Label className="text-[13px]">DP Grade (1-7)</Label>
                 <Select
@@ -192,6 +217,28 @@ export function GradingSheet({
                   </SelectContent>
                 </Select>
               </div>
+            )}
+
+          {/* Checklist mode — hidden when missing or excused */}
+          {editor.gradingAssessment?.gradingMode === "checklist" &&
+            !isMissing && !isExcused && (
+              <ChecklistGrader
+                assessment={editor.gradingAssessment}
+                results={editor.gradingChecklistResults}
+                onResultChange={(itemId, update) => {
+                  editor.setGradingChecklistResults(
+                    (prev: Record<string, ChecklistResultItem>) => ({
+                      ...prev,
+                      [itemId]: {
+                        ...prev[itemId],
+                        itemId,
+                        status: prev[itemId]?.status ?? "unmarked",
+                        ...update,
+                      },
+                    })
+                  );
+                }}
+              />
             )}
 
           <Separator />

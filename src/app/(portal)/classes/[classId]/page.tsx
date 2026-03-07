@@ -35,10 +35,18 @@ import {
   ShieldAlert,
   ArrowRight,
   FileText,
+  AlertTriangle,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import Link from "next/link";
 import { format, parseISO, addDays, getDay } from "date-fns";
-import { getGradeCellDisplay, getGradePercentage, isGradeComplete, GRADING_MODE_LABELS } from "@/lib/grade-helpers";
+import { getGradeCellDisplay, getGradePercentage, isGradeComplete, getToMarkCount, getMissingCount, getExcusedCount, GRADING_MODE_LABELS } from "@/lib/grade-helpers";
+import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
+
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, Cell } from "recharts";
+import { AssessmentListItem } from "@/components/shared/assessment-list-item";
+import { FilterBar } from "@/components/shared/filter-bar";
 import { StandardsTab } from "@/components/class-tabs/standards-tab";
 import { PortfolioTab } from "@/components/class-tabs/portfolio-tab";
 import { AttendanceTab } from "@/components/class-tabs/attendance-tab";
@@ -134,13 +142,23 @@ export default function ClassHubPage() {
   const editor = useGradeEditor();
   const [scheduleAttendanceOpen, setScheduleAttendanceOpen] = useState(false);
   const [scheduleAttendanceDate, setScheduleAttendanceDate] = useState<string | undefined>();
+  // Analytics section state (Grades tab)
+  const [showAttention, setShowAttention] = useState(true);
+  const [showAllAttention, setShowAllAttention] = useState(false);
+  const [showInsights, setShowInsights] = useState(true);
+  const [showChart, setShowChart] = useState(true);
+  // Assessment filter state (Assessments tab)
+  const [assessmentSearch, setAssessmentSearch] = useState("");
+  const [assessmentStatusFilter, setAssessmentStatusFilter] = useState("all");
+  const [assessmentModeFilter, setAssessmentModeFilter] = useState("all");
+  const [assessmentDateSort, setAssessmentDateSort] = useState("newest");
 
   if (loading) return <DetailSkeleton />;
   if (!cls) return <EmptyState icon={AlertCircle} title="Class not found" description="This class doesn't exist." />;
 
   const publishedAssessments = assessments.filter((a) => a.status === "published");
   const avgGrade = (() => {
-    const classGrades = grades.filter((g) => g.classId === classId && !g.isMissing);
+    const classGrades = grades.filter((g) => g.classId === classId && g.submissionStatus !== "missing" && g.submissionStatus !== "excused");
     const percentages: number[] = [];
     classGrades.forEach((g) => {
       const asmt = assessments.find((a) => a.id === g.assessmentId);
@@ -236,49 +254,86 @@ export default function ClassHubPage() {
           {assessments.length === 0 ? (
             <EmptyState icon={ClipboardCheck} title="No assessments yet" description="Create your first assessment for this class." />
           ) : (() => {
-            // Compute needs-grading count per assessment
-            const withGradingInfo = assessments.map((asmt) => {
-              if (asmt.status !== "published") return { asmt, needsGrading: 0 };
-              const targetStudentIds = asmt.assignedStudentIds?.length
-                ? asmt.assignedStudentIds
-                : students.map((s) => s.id);
-              const needsGrading = targetStudentIds.filter((sid) => {
-                const grade = grades.find(
-                  (g) => g.studentId === sid && g.assessmentId === asmt.id
-                );
-                return !isGradeComplete(grade, asmt);
-              }).length;
-              return { asmt, needsGrading };
-            });
-            // Sort: needs-grading first (desc), then by due date desc
-            const sorted = [...withGradingInfo].sort((a, b) => {
-              if (a.needsGrading !== b.needsGrading) return b.needsGrading - a.needsGrading;
-              return b.asmt.dueDate.localeCompare(a.asmt.dueDate);
-            });
+            const studentIds = students.map((s) => s.id);
+            let filtered = [...assessments];
+            if (assessmentStatusFilter !== "all") {
+              filtered = filtered.filter((a) => a.status === assessmentStatusFilter);
+            }
+            if (assessmentModeFilter !== "all") {
+              filtered = filtered.filter((a) => a.gradingMode === assessmentModeFilter);
+            }
+            if (assessmentSearch) {
+              const q = assessmentSearch.toLowerCase();
+              filtered = filtered.filter((a) => a.title.toLowerCase().includes(q));
+            }
+            // Sort
+            if (assessmentDateSort === "newest") {
+              filtered.sort((a, b) => b.dueDate.localeCompare(a.dueDate));
+            } else if (assessmentDateSort === "oldest") {
+              filtered.sort((a, b) => a.dueDate.localeCompare(b.dueDate));
+            } else {
+              filtered.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+            }
             return (
               <div className="space-y-2">
-                {sorted.map(({ asmt, needsGrading }) => (
-                  <Link key={asmt.id} href={`/assessments/${asmt.id}?classId=${classId}`}>
-                    <Card className="p-4 gap-0 hover:shadow-[0_1px_2px_rgba(16,24,40,0.06)] transition-all cursor-pointer">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="text-[14px] font-medium">{asmt.title}</p>
-                          <p className="text-[12px] text-muted-foreground">
-                            Due {format(parseISO(asmt.dueDate), "MMM d, yyyy")} · {asmt.gradingMode.replace("_", " ")}
-                          </p>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          {needsGrading > 0 && (
-                            <Badge className="bg-[#fef3c7] text-[#b45309] border-[#b45309]/20 text-[11px] font-medium hover:bg-[#fef3c7]">
-                              {needsGrading} need grading
-                            </Badge>
-                          )}
-                          <StatusBadge status={asmt.status} />
-                        </div>
-                      </div>
-                    </Card>
-                  </Link>
-                ))}
+                <FilterBar
+                  filters={[
+                    {
+                      key: "status",
+                      label: "Status",
+                      options: [
+                        { value: "all", label: "All statuses" },
+                        { value: "draft", label: "Draft" },
+                        { value: "published", label: "Published" },
+                        { value: "archived", label: "Archived" },
+                      ],
+                      value: assessmentStatusFilter,
+                      onChange: setAssessmentStatusFilter,
+                    },
+                    {
+                      key: "mode",
+                      label: "Mode",
+                      options: [
+                        { value: "all", label: "All modes" },
+                        ...Object.entries(GRADING_MODE_LABELS).map(([k, v]) => ({
+                          value: k,
+                          label: v,
+                        })),
+                      ],
+                      value: assessmentModeFilter,
+                      onChange: setAssessmentModeFilter,
+                    },
+                    {
+                      key: "sort",
+                      label: "Sort",
+                      options: [
+                        { value: "newest", label: "Due date (newest)" },
+                        { value: "oldest", label: "Due date (oldest)" },
+                        { value: "created", label: "Recently created" },
+                      ],
+                      value: assessmentDateSort,
+                      onChange: setAssessmentDateSort,
+                    },
+                  ]}
+                  onSearch={setAssessmentSearch}
+                  searchPlaceholder="Search assessments..."
+                />
+                {filtered.length === 0 ? (
+                  <p className="text-[13px] text-muted-foreground text-center py-8">No assessments match your filters</p>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {filtered.map((asmt) => (
+                      <AssessmentListItem
+                        key={asmt.id}
+                        assessment={asmt}
+                        grades={grades.filter((g) => g.assessmentId === asmt.id)}
+                        studentIds={studentIds}
+                        href={`/assessments/${asmt.id}?classId=${classId}`}
+                        variant="card"
+                      />
+                    ))}
+                  </div>
+                )}
               </div>
             );
           })()}
@@ -291,7 +346,106 @@ export default function ClassHubPage() {
               title="No published assessments"
               description="This class has no published assessments to show in the gradebook."
             />
-          ) : (
+          ) : (() => {
+            const studentIds = students.map((s) => s.id);
+            const totalToMark = publishedAssessments.reduce((sum, a) => sum + getToMarkCount(studentIds, grades.filter((g) => g.assessmentId === a.id), a), 0);
+            const totalMissing = publishedAssessments.reduce((sum, a) => sum + getMissingCount(studentIds, grades.filter((g) => g.assessmentId === a.id), a), 0);
+            const totalExcused = publishedAssessments.reduce((sum, a) => sum + getExcusedCount(studentIds, grades.filter((g) => g.assessmentId === a.id), a), 0);
+
+            // Class average with guardrail: only when ≥3 assessments have comparable numeric percentages
+            const assessmentsWithNumericData = publishedAssessments.filter((asmt) => {
+              return students.some((s) => {
+                const g = grades.find((gr) => gr.studentId === s.id && gr.assessmentId === asmt.id);
+                return getGradePercentage(g, asmt) !== null;
+              });
+            });
+            const allPercentages = grades
+              .filter((g) => g.classId === classId)
+              .map((g) => {
+                const asmt = publishedAssessments.find((a) => a.id === g.assessmentId);
+                return asmt ? getGradePercentage(g, asmt) : null;
+              })
+              .filter((v): v is number => v !== null);
+            const classAvgNumeric = assessmentsWithNumericData.length >= 3 && allPercentages.length > 0
+              ? Math.round(allPercentages.reduce((a, b) => a + b, 0) / allPercentages.length)
+              : null;
+
+            // Students needing attention
+            const attentionStudents = students.map((student) => {
+              const reasons: string[] = [];
+              // Average below 50%
+              const pcts = publishedAssessments
+                .map((a) => {
+                  const g = grades.find((gr) => gr.studentId === student.id && gr.assessmentId === a.id);
+                  return getGradePercentage(g, a);
+                })
+                .filter((v): v is number => v !== null);
+              const avg = pcts.length > 0 ? pcts.reduce((a, b) => a + b, 0) / pcts.length : null;
+              if (avg !== null && avg < 50) reasons.push(`Below 50%`);
+
+              // Missing count ≥ 2
+              const missingForStudent = publishedAssessments.filter((a) => {
+                const g = grades.find((gr) => gr.studentId === student.id && gr.assessmentId === a.id);
+                return g?.submissionStatus === "missing" && !isGradeComplete(g, a);
+              }).length;
+              if (missingForStudent >= 2) reasons.push(`${missingForStudent} missing`);
+
+              // Beginning mastery levels
+              const beginningGoals: string[] = [];
+              grades
+                .filter((g) => g.studentId === student.id && g.classId === classId && g.submissionStatus !== "excused" && g.standardsMastery?.length)
+                .forEach((g) => {
+                  g.standardsMastery?.forEach((sm) => {
+                    if (sm.level === "beginning") {
+                      const goal = learningGoals.find((lg) => lg.id === sm.standardId);
+                      if (goal && !beginningGoals.includes(goal.code)) {
+                        beginningGoals.push(goal.code);
+                      }
+                    }
+                  });
+                });
+              if (beginningGoals.length > 0) reasons.push(`Beginning in ${beginningGoals.slice(0, 2).join(", ")}`);
+
+              return { student, reasons, avg };
+            }).filter((s) => s.reasons.length > 0).sort((a, b) => (a.avg ?? 100) - (b.avg ?? 100));
+
+            // Learning insights: weakest standards/criteria
+            const goalStats: Record<string, { code: string; title: string; below: number; total: number; levels: Record<string, number> }> = {};
+            publishedAssessments.forEach((asmt) => {
+              students.forEach((student) => {
+                const g = grades.find((gr) => gr.studentId === student.id && gr.assessmentId === asmt.id);
+                if (g?.submissionStatus === "excused") return;
+                g?.standardsMastery?.forEach((sm) => {
+                  const goal = learningGoals.find((lg) => lg.id === sm.standardId);
+                  if (!goal) return;
+                  if (!goalStats[goal.id]) goalStats[goal.id] = { code: goal.code, title: goal.title, below: 0, total: 0, levels: {} };
+                  goalStats[goal.id].total++;
+                  goalStats[goal.id].levels[sm.level] = (goalStats[goal.id].levels[sm.level] || 0) + 1;
+                  if (sm.level === "beginning" || sm.level === "approaching") goalStats[goal.id].below++;
+                });
+              });
+            });
+            const weakestGoals = Object.values(goalStats)
+              .filter((g) => g.total > 0)
+              .sort((a, b) => (b.below / b.total) - (a.below / a.total))
+              .slice(0, 5);
+
+            // Chart data: per-assessment class average
+            const chartData = assessmentsWithNumericData.map((asmt) => {
+              const pcts = students
+                .map((s) => {
+                  const g = grades.find((gr) => gr.studentId === s.id && gr.assessmentId === asmt.id);
+                  return getGradePercentage(g, asmt);
+                })
+                .filter((v): v is number => v !== null);
+              const avg = pcts.length > 0 ? Math.round(pcts.reduce((a, b) => a + b, 0) / pcts.length) : 0;
+              return { name: asmt.title.length > 12 ? asmt.title.slice(0, 12) + "..." : asmt.title, avg, fullName: asmt.title };
+            });
+            const strongest = chartData.length > 0 ? chartData.reduce((a, b) => a.avg > b.avg ? a : b) : null;
+            const weakest = chartData.length > 0 ? chartData.reduce((a, b) => a.avg < b.avg ? a : b) : null;
+
+            return (
+            <div className="space-y-4">
             <Card className="p-0 gap-0">
               <div className="overflow-x-auto">
                 <Table>
@@ -377,7 +531,7 @@ export default function ClassHubPage() {
                                     editor.openGradingSheet(student.id, asmt.id)
                                   }
                                   className={`text-[12px] font-medium px-2 py-1 rounded-md hover:bg-muted transition-colors cursor-pointer ${
-                                    grade?.isMissing
+                                    grade?.submissionStatus === "missing"
                                       ? "text-[#dc2626]"
                                       : grade
                                         ? "text-foreground"
@@ -411,7 +565,166 @@ export default function ClassHubPage() {
                 </Table>
               </div>
             </Card>
-          )}
+
+            {/* Section A — Teaching Snapshot */}
+            <div className="flex gap-3 flex-wrap">
+              <div className="flex items-center gap-2 rounded-lg border border-border px-3 py-2">
+                <AlertTriangle className={`h-4 w-4 ${totalToMark > 0 ? "text-[#b45309]" : "text-muted-foreground"}`} />
+                <span className={`text-[13px] font-semibold ${totalToMark > 0 ? "text-[#b45309]" : "text-muted-foreground"}`}>{totalToMark}</span>
+                <span className="text-[12px] text-muted-foreground">to mark</span>
+              </div>
+              <div className="flex items-center gap-2 rounded-lg border border-border px-3 py-2">
+                <span className={`text-[13px] font-semibold ${totalMissing > 0 ? "text-[#dc2626]" : "text-muted-foreground"}`}>{totalMissing}</span>
+                <span className="text-[12px] text-muted-foreground">missing</span>
+              </div>
+              <div className="flex items-center gap-2 rounded-lg border border-border px-3 py-2">
+                <span className="text-[13px] font-semibold text-muted-foreground">{totalExcused}</span>
+                <span className="text-[12px] text-muted-foreground">excused</span>
+              </div>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <div className="flex items-center gap-2 rounded-lg border border-border px-3 py-2">
+                      <span className={`text-[13px] font-semibold ${classAvgNumeric !== null ? (classAvgNumeric >= 70 ? "text-[#16a34a]" : classAvgNumeric >= 50 ? "text-[#b45309]" : "text-[#dc2626]") : "text-muted-foreground"}`}>
+                        {classAvgNumeric !== null ? `${classAvgNumeric}%` : "N/A"}
+                      </span>
+                      <span className="text-[12px] text-muted-foreground">class avg</span>
+                    </div>
+                  </TooltipTrigger>
+                  {classAvgNumeric === null && (
+                    <TooltipContent>Not enough comparable grades</TooltipContent>
+                  )}
+                </Tooltip>
+              </TooltipProvider>
+            </div>
+
+            {/* Section B — Students Needing Attention */}
+            {(() => {
+              const visible = showAllAttention ? attentionStudents : attentionStudents.slice(0, 5);
+              return (
+                <Card className="p-4 gap-0">
+                  <button className="flex items-center gap-2 w-full text-left" onClick={() => setShowAttention(!showAttention)}>
+                    <h3 className="text-[14px] font-semibold flex-1">Students needing attention</h3>
+                    {showAttention ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
+                  </button>
+                  {showAttention && (
+                    attentionStudents.length === 0 ? (
+                      <p className="text-[13px] text-[#16a34a] mt-2">All students on track</p>
+                    ) : (
+                      <div className="mt-3 space-y-2">
+                        {visible.map(({ student, reasons }) => (
+                          <div key={student.id} className="flex items-center gap-2">
+                            <div className="h-6 w-6 rounded-full bg-[#c24e3f]/10 flex items-center justify-center text-[10px] font-semibold text-[#c24e3f]">
+                              {student.firstName[0]}{student.lastName[0]}
+                            </div>
+                            <Link href={`/students/${student.id}?classId=${classId}`} className="text-[13px] font-medium hover:text-[#c24e3f] transition-colors min-w-[120px]">
+                              {student.firstName} {student.lastName}
+                            </Link>
+                            <div className="flex gap-1 flex-wrap">
+                              {reasons.map((r, i) => (
+                                <Badge key={i} variant="outline" className="text-[10px] font-normal h-5">
+                                  {r}
+                                </Badge>
+                              ))}
+                            </div>
+                          </div>
+                        ))}
+                        {attentionStudents.length > 5 && (
+                          <button className="text-[12px] text-[#c24e3f] hover:underline" onClick={() => setShowAllAttention(!showAllAttention)}>
+                            {showAllAttention ? "Show less" : `Show all (${attentionStudents.length})`}
+                          </button>
+                        )}
+                      </div>
+                    )
+                  )}
+                </Card>
+              );
+            })()}
+
+            {/* Section C — Learning Insights */}
+            {(() => {
+              return (
+                <Card className="p-4 gap-0">
+                  <button className="flex items-center gap-2 w-full text-left" onClick={() => setShowInsights(!showInsights)}>
+                    <h3 className="text-[14px] font-semibold flex-1">Learning insights</h3>
+                    {showInsights ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
+                  </button>
+                  {showInsights && (
+                    weakestGoals.length === 0 ? (
+                      <p className="text-[13px] text-muted-foreground mt-2">No standards or criteria data yet</p>
+                    ) : (
+                      <div className="mt-3 space-y-3">
+                        {weakestGoals.map((goal) => {
+                          const exceeding = goal.levels["exceeding"] || 0;
+                          const meeting = goal.levels["meeting"] || 0;
+                          const approaching = goal.levels["approaching"] || 0;
+                          const beginning = goal.levels["beginning"] || 0;
+                          return (
+                            <div key={goal.code}>
+                              <div className="flex items-center gap-2 mb-1">
+                                <Badge variant="outline" className="text-[10px] font-semibold h-5 shrink-0">{goal.code}</Badge>
+                                <span className="text-[12px] font-medium truncate">{goal.title}</span>
+                              </div>
+                              <div className="flex h-2 rounded-full overflow-hidden bg-muted">
+                                {exceeding > 0 && <div className="bg-[#16a34a] h-full" style={{ width: `${(exceeding / goal.total) * 100}%` }} />}
+                                {meeting > 0 && <div className="bg-[#2563eb] h-full" style={{ width: `${(meeting / goal.total) * 100}%` }} />}
+                                {approaching > 0 && <div className="bg-[#d97706] h-full" style={{ width: `${(approaching / goal.total) * 100}%` }} />}
+                                {beginning > 0 && <div className="bg-[#dc2626] h-full" style={{ width: `${(beginning / goal.total) * 100}%` }} />}
+                              </div>
+                              <p className="text-[11px] text-muted-foreground mt-0.5">
+                                {goal.below} of {goal.total} below proficient
+                              </p>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )
+                  )}
+                </Card>
+              );
+            })()}
+
+            {/* Section D — Class Performance Chart */}
+            {chartData.length >= 2 && (() => {
+              return (
+                <Card className="p-4 gap-0">
+                  <button className="flex items-center gap-2 w-full text-left" onClick={() => setShowChart(!showChart)}>
+                    <h3 className="text-[14px] font-semibold flex-1">Class performance</h3>
+                    {showChart ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
+                  </button>
+                  {showChart && (
+                    <>
+                      <p className="text-[12px] text-muted-foreground mt-1 mb-3">
+                        {strongest && weakest && strongest.fullName !== weakest.fullName
+                          ? `Strongest: ${strongest.fullName} (${strongest.avg}%) · Weakest: ${weakest.fullName} (${weakest.avg}%)`
+                          : `Class averaging ${classAvgNumeric ?? "N/A"}% across ${chartData.length} assessments`}
+                      </p>
+                      <div className="h-[200px]">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <BarChart data={chartData} margin={{ top: 5, right: 5, left: -10, bottom: 5 }}>
+                            <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                            <XAxis dataKey="name" tick={{ fontSize: 11 }} />
+                            <YAxis domain={[0, 100]} tick={{ fontSize: 11 }} />
+                            <RechartsTooltip
+                              formatter={(value) => [`${value}%`, "Class Avg"]}
+                              contentStyle={{ fontSize: 12 }}
+                            />
+                            <Bar dataKey="avg" radius={[4, 4, 0, 0]}>
+                              {chartData.map((entry, index) => (
+                                <Cell key={index} fill={entry.avg >= 70 ? "#16a34a" : entry.avg >= 50 ? "#d97706" : "#dc2626"} />
+                              ))}
+                            </Bar>
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </>
+                  )}
+                </Card>
+              );
+            })()}
+            </div>
+            );
+          })()}
         </TabsContent>
 
         <TabsContent value="standards">

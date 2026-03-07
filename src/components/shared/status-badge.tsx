@@ -61,6 +61,7 @@ const statusMap: Record<string, { variant: StatusVariant; label?: string }> = {
   absent: { variant: "danger" },
   late: { variant: "warning" },
   excused: { variant: "info" },
+  submitted: { variant: "warning", label: "To mark" },
   missing: { variant: "danger" },
   low: { variant: "info" },
   medium: { variant: "warning" },

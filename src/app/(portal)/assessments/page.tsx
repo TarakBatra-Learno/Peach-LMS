@@ -4,12 +4,10 @@ import { useState, useMemo, useCallback, useEffect } from "react";
 import { useStore } from "@/stores";
 import { PageHeader } from "@/components/shared/page-header";
 import { FilterBar } from "@/components/shared/filter-bar";
-import { StatusBadge } from "@/components/shared/status-badge";
 import { EmptyState } from "@/components/shared/empty-state";
 import { CardGridSkeleton } from "@/components/shared/skeleton-loader";
 import { useMockLoading } from "@/lib/hooks/use-mock-loading";
 import { generateId } from "@/services/mock-service";
-import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -31,11 +29,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
-import { ClipboardCheck, Plus, Calendar, Users } from "lucide-react";
-import Link from "next/link";
-import { format, parseISO } from "date-fns";
+import { AssessmentListItem } from "@/components/shared/assessment-list-item";
+import { ClipboardCheck, Plus } from "lucide-react";
 import { toast } from "sonner";
 import type { GradingMode, Status } from "@/types/common";
+import type { ChecklistResponseStyle, ChecklistOutcomeModel } from "@/types/assessment";
 import { RUBRIC_TEMPLATES } from "@/lib/constants";
 import { MYP_DEFAULT_CRITERIA } from "@/lib/myp-descriptors";
 
@@ -45,6 +43,7 @@ const GRADING_MODE_LABELS: Record<GradingMode, string> = {
   standards: "Standards",
   myp_criteria: "MYP Criteria",
   dp_scale: "DP Scale (1-7)",
+  checklist: "Checklist",
 };
 
 const GRADING_MODE_DESCRIPTIONS: Record<GradingMode, string> = {
@@ -53,6 +52,7 @@ const GRADING_MODE_DESCRIPTIONS: Record<GradingMode, string> = {
   standards: "Mastery levels mapped to learning standards",
   myp_criteria: "IB MYP criteria A-D, levels 1-8 per criterion",
   dp_scale: "IB DP 1-7 scale for final grades",
+  checklist: "Toggle-based checklist with Met/Not yet or Yes/Partly/No responses",
 };
 
 const STATUS_OPTIONS: { value: string; label: string }[] = [
@@ -89,6 +89,7 @@ export default function AssessmentsPage() {
   const addAssessment = useStore((s) => s.addAssessment);
   const addCalendarEvent = useStore((s) => s.addCalendarEvent);
   const getClassById = useStore((s) => s.getClassById);
+  const grades = useStore((s) => s.grades);
   const getStudentsByClassId = useStore((s) => s.getStudentsByClassId);
   const learningGoals = useStore((s) => s.learningGoals);
 
@@ -111,6 +112,8 @@ export default function AssessmentsPage() {
   const [formGoalIds, setFormGoalIds] = useState<string[]>([]);
   const [assignedStudentIds, setAssignedStudentIds] = useState<string[]>([]);
   const [selectedRubricTemplateId, setSelectedRubricTemplateId] = useState("custom");
+  const [newChecklistResponseStyle, setNewChecklistResponseStyle] = useState<ChecklistResponseStyle>("binary");
+  const [newChecklistOutcomeModel, setNewChecklistOutcomeModel] = useState<ChecklistOutcomeModel>("feedback_only");
 
   // Students for the selected class in create form
   const classStudents = useMemo(
@@ -191,6 +194,8 @@ export default function AssessmentsPage() {
     setFormGoalIds([]);
     setAssignedStudentIds([]);
     setSelectedRubricTemplateId("custom");
+    setNewChecklistResponseStyle("binary");
+    setNewChecklistOutcomeModel("feedback_only");
   };
 
   const handleCreate = () => {
@@ -240,6 +245,10 @@ export default function AssessmentsPage() {
       rubricCriteria: rubricTemplate?.rubricCriteria,
       rubric: rubricTemplate?.rubric,
       mypCriteria,
+      checklistResponseStyle:
+        newGradingMode === "checklist" ? newChecklistResponseStyle : undefined,
+      checklistOutcomeModel:
+        newGradingMode === "checklist" ? newChecklistOutcomeModel : undefined,
     });
 
     addCalendarEvent({
@@ -326,54 +335,17 @@ export default function AssessmentsPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {filtered.map((asmt) => {
             const cls = getClassById(asmt.classId);
+            const studentIds = cls?.studentIds ?? [];
+            const asmtGrades = grades.filter((g) => g.assessmentId === asmt.id);
             return (
-              <Link key={asmt.id} href={`/assessments/${asmt.id}`}>
-                <Card className="p-5 gap-0 hover:shadow-[0_1px_2px_rgba(16,24,40,0.06)] hover:border-border/80 transition-all cursor-pointer h-full">
-                  <div className="flex items-start justify-between mb-3">
-                    <div className="min-w-0 flex-1">
-                      <h3 className="text-[14px] font-semibold truncate">
-                        {asmt.title}
-                      </h3>
-                      {asmt.description && (
-                        <p className="text-[13px] text-muted-foreground line-clamp-2 mt-0.5">
-                          {asmt.description}
-                        </p>
-                      )}
-                    </div>
-                    <StatusBadge status={asmt.status} className="ml-2 shrink-0" />
-                  </div>
-
-                  <div className="flex items-center gap-3 text-[12px] text-muted-foreground mb-3">
-                    {cls && (
-                      <span className="flex items-center gap-1">
-                        <Users className="h-3.5 w-3.5" />
-                        {cls.name}
-                      </span>
-                    )}
-                    <span className="flex items-center gap-1">
-                      <Calendar className="h-3.5 w-3.5" />
-                      {format(parseISO(asmt.dueDate), "MMM d, yyyy")}
-                    </span>
-                  </div>
-
-                  <div className="flex items-center gap-1.5 mt-auto">
-                    <Badge
-                      variant="outline"
-                      className="text-[11px] font-medium"
-                    >
-                      {GRADING_MODE_LABELS[asmt.gradingMode]}
-                    </Badge>
-                    {asmt.totalPoints != null && asmt.gradingMode === "score" && (
-                      <Badge
-                        variant="secondary"
-                        className="text-[11px] font-medium"
-                      >
-                        {asmt.totalPoints} pts
-                      </Badge>
-                    )}
-                  </div>
-                </Card>
-              </Link>
+              <AssessmentListItem
+                key={asmt.id}
+                assessment={asmt}
+                grades={asmtGrades}
+                studentIds={studentIds}
+                className={cls?.name}
+                variant="card"
+              />
             );
           })}
         </div>
@@ -533,6 +505,57 @@ export default function AssessmentsPage() {
                 Configure standards mapping on the assessment detail page after
                 creation.
               </p>
+            )}
+
+            {newGradingMode === "checklist" && (
+              <div className="space-y-3">
+                <div className="space-y-1.5">
+                  <Label className="text-[13px]">Response style</Label>
+                  <Select
+                    value={newChecklistResponseStyle}
+                    onValueChange={(v) =>
+                      setNewChecklistResponseStyle(v as ChecklistResponseStyle)
+                    }
+                  >
+                    <SelectTrigger className="h-9 text-[13px]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="binary">
+                        Met / Not yet (binary)
+                      </SelectItem>
+                      <SelectItem value="ternary">
+                        Yes / Partly / No (ternary)
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-[13px]">Outcome model</Label>
+                  <Select
+                    value={newChecklistOutcomeModel}
+                    onValueChange={(v) =>
+                      setNewChecklistOutcomeModel(v as ChecklistOutcomeModel)
+                    }
+                  >
+                    <SelectTrigger className="h-9 text-[13px]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="feedback_only">
+                        Feedback only (no numeric score)
+                      </SelectItem>
+                      <SelectItem value="score_contributing">
+                        Score-contributing (items map to points)
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <p className="text-[12px] text-muted-foreground bg-muted/50 rounded-md p-3">
+                  Configure checklist items on the assessment detail page after
+                  creation.
+                </p>
+              </div>
             )}
 
             {/* Assign to students */}

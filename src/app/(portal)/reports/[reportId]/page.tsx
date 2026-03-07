@@ -374,7 +374,7 @@ export default function ReportDetailPage() {
         const gradeEntries = studentGrades.map((g) => ({
           assessmentId: g.assessmentId,
           assessmentName: getAssessmentName(g.assessmentId),
-          score: g.isMissing
+          score: g.submissionStatus === "missing"
             ? "Missing"
             : g.score != null
             ? `${g.score}%`
@@ -587,7 +587,7 @@ export default function ReportDetailPage() {
       ) {
         if (studentGrades.length > 0) {
           studentGrades.forEach((g) => {
-            const score = g.isMissing
+            const score = g.submissionStatus === "missing"
               ? "Missing"
               : g.score != null
               ? `${g.score}%`
@@ -1003,7 +1003,7 @@ export default function ReportDetailPage() {
                       {getAssessmentName(grade.assessmentId)}
                     </Link>
                     <span className="text-muted-foreground">
-                      {grade.isMissing
+                      {grade.submissionStatus === "missing"
                         ? "Missing"
                         : grade.mypCriteriaScores?.length
                         ? grade.mypCriteriaScores.map((c) => `${c.criterion}:${c.level}`).join(" ")
@@ -1048,7 +1048,7 @@ export default function ReportDetailPage() {
                       </Link>
                     </td>
                     <td className="text-center py-2 px-2">
-                      {grade.isMissing ? (
+                      {grade.submissionStatus === "missing" ? (
                         <span className="text-[#dc2626] font-medium">
                           Missing
                         </span>
@@ -1075,7 +1075,7 @@ export default function ReportDetailPage() {
                     <td className="text-center py-2 px-2">
                       <StatusBadge
                         status={
-                          grade.isMissing
+                          grade.submissionStatus === "missing"
                             ? "missing"
                             : grade.score != null ||
                               grade.dpGrade != null ||
@@ -1979,7 +1979,7 @@ export default function ReportDetailPage() {
                           <div key={g.id} className="flex items-center justify-between text-[13px]">
                             <span>{getAssessmentName(g.assessmentId)}</span>
                             <Badge variant="secondary" className="text-[12px]">
-                              {g.isMissing
+                              {g.submissionStatus === "missing"
                                 ? "Missing"
                                 : g.score != null
                                 ? `${g.score}%`
@@ -2170,7 +2170,7 @@ export default function ReportDetailPage() {
                         {studentGrades.map((g) => (
                           <li key={g.id}>
                             {getAssessmentName(g.assessmentId)}:{" "}
-                            {g.isMissing
+                            {g.submissionStatus === "missing"
                               ? "Missing"
                               : g.score != null
                               ? `${g.score}%`

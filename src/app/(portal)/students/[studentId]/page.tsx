@@ -54,7 +54,7 @@ import { format, parseISO } from "date-fns";
 import { generateId } from "@/services/mock-service";
 import type { PortfolioArtifact } from "@/types/portfolio";
 import type { GradeRecord } from "@/types/gradebook";
-import { getGradePercentage, getGradeCellDisplay } from "@/lib/grade-helpers";
+import { getGradePercentage, getGradeCellDisplay, isGradeComplete, getStudentAssessmentStatus } from "@/lib/grade-helpers";
 import { StudentStandardsTab } from "@/components/student-tabs/student-standards-tab";
 
 export default function StudentProfilePage() {
@@ -144,9 +144,9 @@ export default function StudentProfilePage() {
   const avgGrade = (() => {
     const percentages: number[] = [];
     filteredGrades.forEach((g) => {
-      if (g.isMissing) return;
       const asmt = assessments.find((a) => a.id === g.assessmentId);
       if (!asmt) return;
+      if (!isGradeComplete(g, asmt)) return;
       const pct = getGradePercentage(g, asmt);
       if (pct !== null) percentages.push(pct);
     });
@@ -452,20 +452,17 @@ export default function StudentProfilePage() {
                             </td>
                           )}
                           <td className="text-center py-2 px-2">
-                            <span className={`font-medium ${grade.isMissing ? "text-[#dc2626]" : "text-foreground"}`}>
+                            <span className={`font-medium ${grade.submissionStatus === "missing" ? "text-[#dc2626]" : "text-foreground"}`}>
                               {display}
                             </span>
                           </td>
                           <td className="text-center py-2 px-2">
-                            <StatusBadge
-                              status={
-                                grade.isMissing
-                                  ? "missing"
-                                  : display !== "-"
-                                  ? "graded"
-                                  : "pending"
-                              }
-                            />
+                            {(() => {
+                              const asmtForStatus = assessments.find((a) => a.id === grade.assessmentId);
+                              if (!asmtForStatus) return <StatusBadge status="pending" />;
+                              const status = getStudentAssessmentStatus(grade, asmtForStatus);
+                              return <StatusBadge status={status} />;
+                            })()}
                           </td>
                         </tr>
                       );
@@ -944,15 +941,12 @@ export default function StudentProfilePage() {
 
                 <div className="space-y-5 mt-6">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <StatusBadge
-                      status={
-                        detailGrade.isMissing
-                          ? "missing"
-                          : detailGrade.score != null || detailGrade.dpGrade != null || detailGrade.mypCriteriaScores?.length
-                          ? "graded"
-                          : "pending"
-                      }
-                    />
+                    {(() => {
+                      const dAsmt = assessments.find((a) => a.id === detailGrade.assessmentId);
+                      if (!dAsmt) return <StatusBadge status="pending" />;
+                      const status = getStudentAssessmentStatus(detailGrade, dAsmt);
+                      return <StatusBadge status={status} />;
+                    })()}
                     {asmt && (
                       <Badge variant="outline" className="text-[11px]">
                         {asmt.gradingMode.replace("_", " ")}
@@ -967,7 +961,7 @@ export default function StudentProfilePage() {
 
                   <Separator />
 
-                  {detailGrade.isMissing ? (
+                  {detailGrade.submissionStatus === "missing" ? (
                     <div className="rounded-lg bg-[#fee2e2] p-4">
                       <p className="text-[14px] font-semibold text-[#dc2626]">Missing</p>
                       <p className="text-[12px] text-[#dc2626]/80">This assessment was not submitted.</p>

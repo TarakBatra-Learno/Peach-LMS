@@ -70,10 +70,14 @@ import {
 import { format, parseISO, formatDistanceToNow } from "date-fns";
 import { toast } from "sonner";
 import Link from "next/link";
-import type { GradeRecord } from "@/types/gradebook";
+import type { GradeRecord, SubmissionStatus } from "@/types/gradebook";
 import type { Student } from "@/types/student";
 import type { SimpleCriterion } from "@/types/assessment";
 import { MYP_LEVEL_DESCRIPTORS } from "@/lib/myp-descriptors";
+import { isGradeComplete, getStudentAssessmentStatus, getToMarkCount, getMissingCount, getExcusedCount, getGradePercentage, getChecklistTotalPoints } from "@/lib/grade-helpers";
+import { ChecklistBuilder } from "@/components/shared/checklist-builder";
+import { ChecklistGrader } from "@/components/shared/checklist-grader";
+import type { ChecklistResultItem } from "@/types/gradebook";
 
 const GRADING_MODE_LABELS: Record<string, string> = {
   score: "Score",
@@ -81,6 +85,7 @@ const GRADING_MODE_LABELS: Record<string, string> = {
   standards: "Standards",
   myp_criteria: "MYP Criteria",
   dp_scale: "DP Scale (1-7)",
+  checklist: "Checklist",
 };
 
 const MYP_CRITERIA_LABELS = ["A", "B", "C", "D"] as const;
@@ -92,7 +97,9 @@ const GOAL_CATEGORY_LABELS: Record<string, string> = {
 };
 
 function getGradeDisplay(grade: GradeRecord): string {
-  if (grade.isMissing) return "Missing";
+  // Excused is terminal — always display "Excused" regardless of residual grade data
+  if (grade.submissionStatus === "excused") return "Excused";
+  if (grade.submissionStatus === "missing" && grade.score == null && grade.dpGrade == null && !grade.mypCriteriaScores?.length) return "Missing";
   if (grade.score != null && grade.totalPoints != null)
     return `${grade.score}/${grade.totalPoints}`;
   if (grade.score != null) return `${grade.score}%`;
@@ -102,6 +109,13 @@ function getGradeDisplay(grade: GradeRecord): string {
     if (assessed.length === 0) return "N/A";
     // Show per-criterion breakdown instead of averaged score (#18)
     return assessed.map((c) => `${c.criterion}:${c.level}`).join(" ");
+  }
+  if (grade.checklistGradeResults?.length) {
+    const metCount = grade.checklistGradeResults.filter(
+      (r) => r.status === "met" || r.status === "yes"
+    ).length;
+    const total = grade.checklistGradeResults.length;
+    return `${metCount}/${total}`;
   }
   return "-";
 }
@@ -172,11 +186,14 @@ export default function AssessmentDetailPage() {
   const [gradingStudent, setGradingStudent] = useState<Student | null>(null);
   const [gradingScore, setGradingScore] = useState("");
   const [gradingFeedback, setGradingFeedback] = useState("");
-  const [gradingIsMissing, setGradingIsMissing] = useState(false);
+  const [gradingSubmissionStatus, setGradingSubmissionStatus] = useState<SubmissionStatus>("none");
   const [gradingMypScores, setGradingMypScores] = useState<
     Record<string, number>
   >({});
   const [gradingDpGrade, setGradingDpGrade] = useState("4");
+  const [gradingChecklistResults, setGradingChecklistResults] = useState<
+    Record<string, ChecklistResultItem>
+  >({});
 
   // Confirm dialogs
   const [publishConfirm, setPublishConfirm] = useState(false);
@@ -194,7 +211,7 @@ export default function AssessmentDetailPage() {
   const [announceDraft, setAnnounceDraft] = useState("");
 
   // Grading filter (#8)
-  const [gradingFilter, setGradingFilter] = useState<"all" | "pending" | "completed" | "missing">("all");
+  const [gradingFilter, setGradingFilter] = useState<"all" | "pending" | "submitted" | "completed" | "missing" | "excused">("all");
 
   // Rubric criteria builder state
   const [rubricCriteria, setRubricCriteria] = useState<SimpleCriterion[]>(
@@ -243,13 +260,15 @@ export default function AssessmentDetailPage() {
     toast.success("Rubric saved");
   };
 
-  const gradedCount = grades.filter((g) => !g.isMissing).length;
-  const missingCount = grades.filter((g) => g.isMissing).length;
-  const ungradedCount = students.length - grades.length;
+  const gradedCount = assessment ? grades.filter((g) => g.submissionStatus !== "excused" && isGradeComplete(g, assessment)).length : 0;
+  const toMarkCount = assessment ? getToMarkCount(students.map((s) => s.id), grades, assessment) : 0;
+  const missingCount = assessment ? getMissingCount(students.map((s) => s.id), grades, assessment) : 0;
+  const excusedCount = assessment ? getExcusedCount(students.map((s) => s.id), grades, assessment) : 0;
+  const expectedCount = students.length - excusedCount;
 
   const classAvg = useMemo(() => {
     if (!assessment) return "N/A";
-    const validGrades = grades.filter((g) => !g.isMissing);
+    const validGrades = grades.filter((g) => isGradeComplete(g, assessment));
     if (validGrades.length === 0) return "N/A";
 
     if (assessment.gradingMode === "score") {
@@ -273,6 +292,33 @@ export default function AssessmentDetailPage() {
         allLevels.reduce((s, c) => s + c.level, 0) / allLevels.length;
       return `${avg.toFixed(1)}/8`;
     }
+    if (assessment.gradingMode === "checklist") {
+      if (assessment.checklistOutcomeModel === "score_contributing") {
+        const pcts = validGrades
+          .map((g) => getGradePercentage(g, assessment))
+          .filter((v): v is number => v !== null);
+        if (pcts.length === 0) return "N/A";
+        const avg = Math.round(
+          pcts.reduce((s, v) => s + v, 0) / pcts.length
+        );
+        return `${avg}%`;
+      }
+      // feedback_only: show met count summary
+      const totalItems = assessment.checklist?.length ?? 0;
+      const metCounts = validGrades.map(
+        (g) =>
+          g.checklistGradeResults?.filter(
+            (r) => r.status === "met" || r.status === "yes"
+          ).length ?? 0
+      );
+      const avgMet =
+        metCounts.length > 0
+          ? (
+              metCounts.reduce((s, v) => s + v, 0) / metCounts.length
+            ).toFixed(1)
+          : "0";
+      return `${avgMet}/${totalItems} avg met`;
+    }
     return `${validGrades.length} graded`;
   }, [assessment, grades]);
 
@@ -280,7 +326,7 @@ export default function AssessmentDetailPage() {
     if (!assessment) return;
     const existingGrade = grades.find((g) => g.studentId === student.id);
     setGradingStudent(student);
-    setGradingIsMissing(existingGrade?.isMissing ?? false);
+    setGradingSubmissionStatus(existingGrade?.submissionStatus ?? "none");
     setGradingFeedback(existingGrade?.feedback ?? "");
 
     if (assessment.gradingMode === "score") {
@@ -293,6 +339,12 @@ export default function AssessmentDetailPage() {
         existing[c.criterion] = c.level;
       });
       setGradingMypScores(existing);
+    } else if (assessment.gradingMode === "checklist") {
+      const existing: Record<string, ChecklistResultItem> = {};
+      existingGrade?.checklistGradeResults?.forEach((r) => {
+        existing[r.itemId] = r;
+      });
+      setGradingChecklistResults(existing);
     }
 
     setGradingOpen(true);
@@ -324,11 +376,11 @@ export default function AssessmentDetailPage() {
       classId: assessment.classId,
       gradingMode: assessment.gradingMode,
       feedback: gradingFeedback.trim() || undefined,
-      isMissing: gradingIsMissing,
+      submissionStatus: gradingSubmissionStatus,
       gradedAt: now,
     };
 
-    if (!gradingIsMissing) {
+    if (gradingSubmissionStatus !== "missing" && gradingSubmissionStatus !== "excused") {
       if (assessment.gradingMode === "score") {
         baseGrade.score = parseInt(gradingScore) || 0;
         baseGrade.totalPoints = assessment.totalPoints;
@@ -340,7 +392,30 @@ export default function AssessmentDetailPage() {
           criterion: c,
           level: gradingMypScores[c] ?? 0,
         }));
+      } else if (assessment.gradingMode === "checklist") {
+        baseGrade.checklistGradeResults = (assessment.checklist ?? []).map(
+          (item) => {
+            const result = gradingChecklistResults[item.id];
+            return {
+              itemId: item.id,
+              status: result?.status ?? "unmarked",
+              evidence: result?.evidence,
+            };
+          }
+        );
       }
+    } else if (gradingSubmissionStatus === "excused") {
+      // Excused: clear ALL grade payloads and submission artifacts
+      baseGrade.score = undefined;
+      baseGrade.dpGrade = undefined;
+      baseGrade.mypCriteriaScores = undefined;
+      baseGrade.rubricScores = undefined;
+      baseGrade.standardsMastery = undefined;
+      baseGrade.checklistGradeResults = undefined;
+      baseGrade.checklistResults = undefined;
+      baseGrade.feedback = undefined;
+      baseGrade.gradedAt = undefined;
+      baseGrade.submittedAt = undefined;
     }
 
     if (existingGrade) {
@@ -379,10 +454,10 @@ export default function AssessmentDetailPage() {
       classId: assessment.classId,
       gradingMode: assessment.gradingMode,
       feedback: gradingFeedback.trim() || undefined,
-      isMissing: gradingIsMissing,
+      submissionStatus: gradingSubmissionStatus,
       gradedAt: now,
     };
-    if (!gradingIsMissing) {
+    if (gradingSubmissionStatus !== "missing" && gradingSubmissionStatus !== "excused") {
       if (assessment.gradingMode === "score") {
         baseGrade.score = parseInt(gradingScore) || 0;
         baseGrade.totalPoints = assessment.totalPoints;
@@ -394,7 +469,30 @@ export default function AssessmentDetailPage() {
           criterion: c,
           level: gradingMypScores[c] ?? 0,
         }));
+      } else if (assessment.gradingMode === "checklist") {
+        baseGrade.checklistGradeResults = (assessment.checklist ?? []).map(
+          (item) => {
+            const result = gradingChecklistResults[item.id];
+            return {
+              itemId: item.id,
+              status: result?.status ?? "unmarked",
+              evidence: result?.evidence,
+            };
+          }
+        );
       }
+    } else if (gradingSubmissionStatus === "excused") {
+      // Excused: clear ALL grade payloads and submission artifacts
+      baseGrade.score = undefined;
+      baseGrade.dpGrade = undefined;
+      baseGrade.mypCriteriaScores = undefined;
+      baseGrade.rubricScores = undefined;
+      baseGrade.standardsMastery = undefined;
+      baseGrade.checklistGradeResults = undefined;
+      baseGrade.checklistResults = undefined;
+      baseGrade.feedback = undefined;
+      baseGrade.gradedAt = undefined;
+      baseGrade.submittedAt = undefined;
     }
     if (existingGrade) {
       updateGrade(existingGrade.id, { ...baseGrade, updatedAt: now });
@@ -477,6 +575,20 @@ export default function AssessmentDetailPage() {
   // Publish with announcement preview (#17)
   const handlePublish = () => {
     if (!assessment || !cls) return;
+    // Checklist publish guards
+    if (assessment.gradingMode === "checklist") {
+      if (!assessment.checklist?.length) {
+        toast.error("Add at least one checklist item before publishing");
+        return;
+      }
+      if (
+        assessment.checklistOutcomeModel === "score_contributing" &&
+        getChecklistTotalPoints(assessment) === 0
+      ) {
+        toast.error("Assign points to at least one item before publishing");
+        return;
+      }
+    }
     const draft = `A new assessment "${assessment.title}" has been published for ${cls.name}. Due date: ${format(parseISO(assessment.dueDate), "MMMM d, yyyy")}.${assessment.description ? ` Description: ${assessment.description}` : ""}`;
     setAnnounceDraft(draft);
     setAnnouncePreviewOpen(true);
@@ -639,6 +751,11 @@ export default function AssessmentDetailPage() {
           {assessment.gradingMode === "rubric" && assessment.rubric && (
             <TabsTrigger value="rubric">Rubric</TabsTrigger>
           )}
+          {assessment.gradingMode === "checklist" && (
+            <TabsTrigger value="checklist-builder">
+              Checklist Builder
+            </TabsTrigger>
+          )}
         </TabsList>
 
         {/* Details Tab */}
@@ -655,9 +772,9 @@ export default function AssessmentDetailPage() {
               icon={CheckCircle2}
             />
             <StatCard
-              label="Missing"
-              value={missingCount}
-              icon={XCircle}
+              label="To mark"
+              value={toMarkCount}
+              icon={ClipboardCheck}
             />
             <StatCard
               label="Class average"
@@ -816,7 +933,14 @@ export default function AssessmentDetailPage() {
 
         {/* Students Tab */}
         <TabsContent value="students">
-          {students.length === 0 ? (
+          {assessment.gradingMode === "checklist" &&
+          (!assessment.checklist || assessment.checklist.length === 0) ? (
+            <EmptyState
+              icon={ClipboardCheck}
+              title="Add checklist items before grading"
+              description="Use the Checklist Builder tab to add items to this checklist assessment."
+            />
+          ) : students.length === 0 ? (
             <EmptyState
               icon={Users}
               title="No students"
@@ -828,22 +952,30 @@ export default function AssessmentDetailPage() {
               <Card className="p-4 gap-0">
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-[13px] font-medium">
-                    {gradedCount} of {students.length} graded ({Math.round((gradedCount / students.length) * 100)}%)
+                    {gradedCount} of {expectedCount} graded ({expectedCount > 0 ? Math.round((gradedCount / expectedCount) * 100) : 0}%)
+                    {excusedCount > 0 && <span className="text-muted-foreground font-normal"> · {excusedCount} excused</span>}
                   </span>
                   <span className="text-[12px] text-muted-foreground">
+                    {toMarkCount > 0 && `${toMarkCount} to mark · `}
                     {missingCount > 0 && `${missingCount} missing · `}
-                    {students.length - gradedCount - missingCount} pending
+                    {Math.max(0, expectedCount - gradedCount - toMarkCount - missingCount)} pending
                   </span>
                 </div>
-                <div className="h-2 bg-muted rounded-full overflow-hidden">
+                <div className="h-2 bg-muted rounded-full overflow-hidden flex">
                   <div
-                    className="h-full bg-[#c24e3f] rounded-full transition-all"
-                    style={{ width: `${(gradedCount / students.length) * 100}%` }}
+                    className="h-full bg-[#c24e3f] transition-all"
+                    style={{ width: `${expectedCount > 0 ? (gradedCount / expectedCount) * 100 : 0}%` }}
                   />
+                  {excusedCount > 0 && (
+                    <div
+                      className="h-full bg-muted-foreground/20 transition-all"
+                      style={{ width: `${expectedCount > 0 ? (excusedCount / (expectedCount + excusedCount)) * 100 : 0}%` }}
+                    />
+                  )}
                 </div>
                 {/* Filter tabs */}
                 <div className="flex gap-1 mt-3">
-                  {(["all", "pending", "completed", "missing"] as const).map((filter) => (
+                  {(["all", "pending", "submitted", "completed", "missing", "excused"] as const).map((filter) => (
                     <Button
                       key={filter}
                       variant={gradingFilter === filter ? "default" : "outline"}
@@ -851,7 +983,7 @@ export default function AssessmentDetailPage() {
                       className="h-7 text-[11px] capitalize"
                       onClick={() => setGradingFilter(filter)}
                     >
-                      {filter}
+                      {filter === "submitted" ? "To mark" : filter}
                     </Button>
                   ))}
                 </div>
@@ -883,10 +1015,8 @@ export default function AssessmentDetailPage() {
                       .filter((student) => {
                         if (gradingFilter === "all") return true;
                         const grade = grades.find((g) => g.studentId === student.id);
-                        if (gradingFilter === "pending") return !grade;
-                        if (gradingFilter === "completed") return grade && !grade.isMissing;
-                        if (gradingFilter === "missing") return grade?.isMissing;
-                        return true;
+                        const status = assessment ? getStudentAssessmentStatus(grade, assessment) : "pending";
+                        return status === gradingFilter;
                       })
                       .map((student) => {
                       const grade = grades.find(
@@ -924,7 +1054,7 @@ export default function AssessmentDetailPage() {
                             <div className="flex flex-col gap-0.5">
                               <span
                                 className={`text-[13px] font-medium ${
-                                  grade?.isMissing
+                                  grade?.submissionStatus === "missing"
                                     ? "text-[#dc2626]"
                                     : grade
                                       ? "text-foreground"
@@ -952,19 +1082,11 @@ export default function AssessmentDetailPage() {
                             </div>
                           </TableCell>
                           <TableCell>
-                            {grade ? (
-                              grade.isMissing ? (
-                                <StatusBadge status="missing" />
-                              ) : (
-                                <StatusBadge status="completed" />
-                              )
-                            ) : (
-                              <StatusBadge status="pending" />
-                            )}
+                            <StatusBadge status={assessment ? getStudentAssessmentStatus(grade, assessment) : "pending"} />
                           </TableCell>
                           <TableCell>
                             <span className="text-[12px] text-muted-foreground truncate max-w-[150px] block">
-                              {grade?.feedback || "-"}
+                              {grade?.submissionStatus === "excused" ? "-" : (grade?.feedback || "-")}
                             </span>
                           </TableCell>
                           <TableCell className="text-right">
@@ -1168,6 +1290,25 @@ export default function AssessmentDetailPage() {
             </div>
           </TabsContent>
         )}
+        {/* Checklist Builder Tab */}
+        {assessment.gradingMode === "checklist" && (
+          <TabsContent value="checklist-builder">
+            <ChecklistBuilder
+              items={assessment.checklist ?? []}
+              sections={assessment.checklistSections ?? []}
+              outcomeModel={
+                assessment.checklistOutcomeModel ?? "feedback_only"
+              }
+              onSave={(items, sections) => {
+                updateAssessment(assessmentId, {
+                  checklist: items,
+                  checklistSections: sections,
+                });
+                toast.success("Checklist saved");
+              }}
+            />
+          </TabsContent>
+        )}
       </Tabs>
 
       {/* Grading Sheet */}
@@ -1229,15 +1370,35 @@ export default function AssessmentDetailPage() {
                 </p>
               </div>
               <Switch
-                checked={gradingIsMissing}
-                onCheckedChange={setGradingIsMissing}
+                checked={gradingSubmissionStatus === "missing"}
+                onCheckedChange={(checked) =>
+                  setGradingSubmissionStatus(checked ? "missing" : "none")
+                }
+              />
+            </div>
+
+            {/* Mark as excused */}
+            <div className="flex items-center justify-between">
+              <div>
+                <Label className="text-[13px] font-medium">
+                  Mark as excused
+                </Label>
+                <p className="text-[12px] text-muted-foreground">
+                  Student is excused from this assessment
+                </p>
+              </div>
+              <Switch
+                checked={gradingSubmissionStatus === "excused"}
+                onCheckedChange={(checked) =>
+                  setGradingSubmissionStatus(checked ? "excused" : "none")
+                }
               />
             </div>
 
             <Separator />
 
-            {/* Score mode */}
-            {assessment.gradingMode === "score" && !gradingIsMissing && (
+            {/* Score mode — hidden when missing or excused */}
+            {assessment.gradingMode === "score" && gradingSubmissionStatus !== "missing" && gradingSubmissionStatus !== "excused" && (
               <div className="space-y-1.5">
                 <Label className="text-[13px]">
                   Score{" "}
@@ -1273,8 +1434,8 @@ export default function AssessmentDetailPage() {
               </div>
             )}
 
-            {/* MYP Criteria mode */}
-            {assessment.gradingMode === "myp_criteria" && !gradingIsMissing && (
+            {/* MYP Criteria mode — hidden when missing or excused */}
+            {assessment.gradingMode === "myp_criteria" && gradingSubmissionStatus !== "missing" && gradingSubmissionStatus !== "excused" && (
               <div className="space-y-4">
                 <Label className="text-[13px] font-medium">
                   MYP Criteria levels (1-8)
@@ -1325,8 +1486,8 @@ export default function AssessmentDetailPage() {
               </div>
             )}
 
-            {/* DP Scale mode */}
-            {assessment.gradingMode === "dp_scale" && !gradingIsMissing && (
+            {/* DP Scale mode — hidden when missing or excused */}
+            {assessment.gradingMode === "dp_scale" && gradingSubmissionStatus !== "missing" && gradingSubmissionStatus !== "excused" && (
               <div className="space-y-1.5">
                 <Label className="text-[13px]">DP Grade (1-7)</Label>
                 <Select
@@ -1358,6 +1519,26 @@ export default function AssessmentDetailPage() {
                 </Select>
               </div>
             )}
+
+            {/* Checklist mode — hidden when missing or excused */}
+            {assessment.gradingMode === "checklist" &&
+              gradingSubmissionStatus !== "missing" && gradingSubmissionStatus !== "excused" && (
+                <ChecklistGrader
+                  assessment={assessment}
+                  results={gradingChecklistResults}
+                  onResultChange={(itemId, update) => {
+                    setGradingChecklistResults((prev) => ({
+                      ...prev,
+                      [itemId]: {
+                        ...prev[itemId],
+                        itemId,
+                        status: prev[itemId]?.status ?? "unmarked",
+                        ...update,
+                      },
+                    }));
+                  }}
+                />
+              )}
 
             <Separator />
 

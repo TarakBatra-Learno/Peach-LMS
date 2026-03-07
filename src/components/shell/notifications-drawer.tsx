@@ -21,6 +21,7 @@ import {
   FileText,
   X,
 } from "lucide-react";
+import { getPublishedDueAssessments } from "@/lib/grade-helpers";
 
 interface Notification {
   id: string;
@@ -35,14 +36,6 @@ interface Notification {
 interface NotificationsDrawerProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-}
-
-function isWithinDays(dateStr: string, days: number): boolean {
-  const now = new Date();
-  const date = new Date(dateStr);
-  const diffMs = date.getTime() - now.getTime();
-  const diffDays = diffMs / (1000 * 60 * 60 * 24);
-  return diffDays >= 0 && diffDays <= days;
 }
 
 function isWithinPastDays(dateStr: string, days: number): boolean {
@@ -98,19 +91,17 @@ export function NotificationsDrawer({ open, onOpenChange }: NotificationsDrawerP
   const notifications = useMemo<Notification[]>(() => {
     const items: Notification[] = [];
 
-    // Upcoming assessment deadlines (next 7 days)
-    assessments.forEach((asmt) => {
-      if (asmt.dueDate && isWithinDays(asmt.dueDate, 7)) {
-        items.push({
-          id: `deadline-${asmt.id}`,
-          icon: <ClipboardCheck className="h-4 w-4" />,
-          title: `Assessment deadline: ${asmt.title}`,
-          description: formatDueTime(asmt.dueDate),
-          timestamp: asmt.dueDate,
-          type: "deadline",
-          entityUrl: `/assessments/${asmt.id}`,
-        });
-      }
+    // Upcoming assessment deadlines (next 7 days) — published only
+    getPublishedDueAssessments(assessments, 7).forEach((asmt) => {
+      items.push({
+        id: `deadline-${asmt.id}`,
+        icon: <ClipboardCheck className="h-4 w-4" />,
+        title: `Assessment deadline: ${asmt.title}`,
+        description: formatDueTime(asmt.dueDate),
+        timestamp: asmt.dueDate,
+        type: "deadline",
+        entityUrl: `/assessments/${asmt.id}`,
+      });
     });
 
     // Pending portfolio reviews
@@ -292,12 +283,8 @@ export function useNotificationCount(): number {
   return useMemo(() => {
     let count = 0;
 
-    // Upcoming assessment deadlines (next 7 days)
-    assessments.forEach((asmt) => {
-      if (asmt.dueDate && isWithinDays(asmt.dueDate, 7)) {
-        count++;
-      }
-    });
+    // Upcoming assessment deadlines (next 7 days) — published only
+    count += getPublishedDueAssessments(assessments, 7).length;
 
     // Pending portfolio reviews
     artifacts.forEach((artifact) => {
