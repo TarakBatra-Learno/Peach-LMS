@@ -1,6 +1,8 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import { AppStore, AppState } from "./types";
+import { materializeTimetableOccurrences } from "@/lib/unit-planning-utils";
+import type { LessonSlotAssignment } from "@/types/unit-planning";
 
 const STORAGE_KEY = "peach-lms-store";
 
@@ -34,6 +36,9 @@ const emptyState: Omit<AppState, 'ui'> = {
   announcements: [],
   notificationSettings: { announcements: true, assignments: true, grades: true, attendance: true, incidents: true },
   calendarEvents: [],
+  unitPlans: [],
+  lessonPlans: [],
+  lessonSlotAssignments: [],
 };
 
 export const useStore = create<AppStore>()(
@@ -147,6 +152,125 @@ export const useStore = create<AppStore>()(
       })),
       deleteCalendarEvent: (id) => set((s) => ({
         calendarEvents: s.calendarEvents.filter((e) => e.id !== id),
+      })),
+
+      // Unit Plans
+      addUnitPlan: (unit) => set((s) => ({ unitPlans: [...s.unitPlans, unit] })),
+      updateUnitPlan: (id, updates) => set((s) => ({
+        unitPlans: s.unitPlans.map((u) => u.id === id ? { ...u, ...updates } : u),
+      })),
+      deleteUnitPlan: (id) => set((s) => {
+        const unit = s.unitPlans.find((u) => u.id === id);
+        if (!unit) return {};
+        const lessonPlanIds = new Set(unit.lessonPlanIds);
+        return {
+          unitPlans: s.unitPlans.filter((u) => u.id !== id),
+          lessonPlans: s.lessonPlans.filter((lp) => !lessonPlanIds.has(lp.id)),
+          lessonSlotAssignments: s.lessonSlotAssignments.filter((a) => a.unitId !== id),
+          assessments: s.assessments.map((a) => a.unitId === id ? { ...a, unitId: undefined } : a),
+        };
+      }),
+      getUnitPlansByClassId: (classId) => get().unitPlans.filter((u) => u.classId === classId),
+
+      // Lesson Plans
+      addLessonPlan: (lesson) => set((s) => ({
+        lessonPlans: [...s.lessonPlans, lesson],
+        unitPlans: s.unitPlans.map((u) =>
+          u.id === lesson.unitId ? { ...u, lessonPlanIds: [...u.lessonPlanIds, lesson.id] } : u
+        ),
+      })),
+      updateLessonPlan: (id, updates) => set((s) => ({
+        lessonPlans: s.lessonPlans.map((lp) => lp.id === id ? { ...lp, ...updates } : lp),
+      })),
+      deleteLessonPlan: (id) => set((s) => {
+        const lp = s.lessonPlans.find((l) => l.id === id);
+        if (!lp) return {};
+        return {
+          lessonPlans: s.lessonPlans.filter((l) => l.id !== id),
+          lessonSlotAssignments: s.lessonSlotAssignments.filter((a) => a.lessonPlanId !== id),
+          unitPlans: s.unitPlans.map((u) =>
+            u.id === lp.unitId ? { ...u, lessonPlanIds: u.lessonPlanIds.filter((lpId) => lpId !== id) } : u
+          ),
+        };
+      }),
+      getLessonPlansByUnitId: (unitId) => get().lessonPlans.filter((lp) => lp.unitId === unitId),
+
+      // Lesson Slot Assignments
+      assignLessonToSlot: (assignment) => set((s) => ({
+        lessonSlotAssignments: [...s.lessonSlotAssignments, assignment],
+        lessonPlans: s.lessonPlans.map((lp) =>
+          lp.id === assignment.lessonPlanId ? { ...lp, status: "assigned" as const } : lp
+        ),
+      })),
+      unassignLessonFromSlot: (lessonPlanId) => set((s) => ({
+        lessonSlotAssignments: s.lessonSlotAssignments.filter((a) => a.lessonPlanId !== lessonPlanId),
+        lessonPlans: s.lessonPlans.map((lp) =>
+          lp.id === lessonPlanId ? { ...lp, status: "ready" as const } : lp
+        ),
+      })),
+      getAssignmentsByUnitId: (unitId) => get().lessonSlotAssignments.filter((a) => a.unitId === unitId),
+      getAssignmentBySlot: (classId, date, slotStartTime) =>
+        get().lessonSlotAssignments.find(
+          (a) => a.classId === classId && a.date === date && a.slotStartTime === slotStartTime
+        ),
+      autoFillLessonSequence: (unitId) => {
+        const state = get();
+        const unit = state.unitPlans.find((u) => u.id === unitId);
+        if (!unit) return 0;
+        const cls = state.classes.find((c) => c.id === unit.classId);
+        if (!cls) return 0;
+
+        const occurrences = materializeTimetableOccurrences(cls.schedule, unit.startDate, unit.endDate);
+        const existingAssignments = state.lessonSlotAssignments.filter((a) => a.classId === unit.classId);
+        const assignedSlotKeys = new Set(existingAssignments.map((a) => `${a.date}_${a.slotStartTime}`));
+        const availableOccurrences = occurrences.filter(
+          (o) => !assignedSlotKeys.has(`${o.date}_${o.slotStartTime}`)
+        );
+
+        const readyLessons = state.lessonPlans
+          .filter((lp) => lp.unitId === unitId && lp.status === "ready")
+          .sort((a, b) => a.sequence - b.sequence);
+
+        const count = Math.min(readyLessons.length, availableOccurrences.length);
+        if (count === 0) return 0;
+
+        const newAssignments: LessonSlotAssignment[] = [];
+        const updatedLessonIds = new Set<string>();
+        for (let i = 0; i < count; i++) {
+          const lp = readyLessons[i];
+          const occ = availableOccurrences[i];
+          newAssignments.push({
+            id: `lsa_auto_${Date.now()}_${i}`,
+            lessonPlanId: lp.id,
+            unitId,
+            classId: unit.classId,
+            date: occ.date,
+            slotDay: occ.slotDay,
+            slotStartTime: occ.slotStartTime,
+            createdAt: new Date().toISOString(),
+          });
+          updatedLessonIds.add(lp.id);
+        }
+
+        set((s) => ({
+          lessonSlotAssignments: [...s.lessonSlotAssignments, ...newAssignments],
+          lessonPlans: s.lessonPlans.map((lp) =>
+            updatedLessonIds.has(lp.id) ? { ...lp, status: "assigned" as const } : lp
+          ),
+        }));
+        return count;
+      },
+
+      // Assessment ↔ Unit linking
+      linkAssessmentToUnit: (assessmentId, unitId) => set((s) => ({
+        assessments: s.assessments.map((a) =>
+          a.id === assessmentId ? { ...a, unitId } : a
+        ),
+      })),
+      unlinkAssessmentFromUnit: (assessmentId) => set((s) => ({
+        assessments: s.assessments.map((a) =>
+          a.id === assessmentId ? { ...a, unitId: undefined } : a
+        ),
       })),
 
       // Reset

@@ -23,6 +23,8 @@ export interface Assessment {
   rubricCriteria?: SimpleCriterion[];
   // MYP-specific
   mypCriteria?: MYPCriterion[];
+  // Unit planning (optional — assessments work standalone)
+  unitId?: ID;
 }
 
 export interface SimpleCriterion {

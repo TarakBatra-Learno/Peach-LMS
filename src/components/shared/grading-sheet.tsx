@@ -22,7 +22,10 @@ import {
   SheetDescription,
 } from "@/components/ui/sheet";
 import { GRADING_MODE_LABELS } from "@/lib/grade-helpers";
+import { MYP_LEVEL_DESCRIPTORS } from "@/lib/myp-descriptors";
 import { ChecklistGrader } from "@/components/shared/checklist-grader";
+import { RubricGrader } from "@/components/shared/rubric-grader";
+import { StandardsGrader } from "@/components/shared/standards-grader";
 import type { useGradeEditor } from "@/lib/hooks/use-grade-editor";
 import type { ChecklistResultItem } from "@/types/gradebook";
 
@@ -30,8 +33,10 @@ const MYP_CRITERIA_LABELS = ["A", "B", "C", "D"] as const;
 
 export function GradingSheet({
   editor,
+  onSaveAndNext,
 }: {
   editor: ReturnType<typeof useGradeEditor>;
+  onSaveAndNext?: () => void;
 }) {
   const isMissing = editor.gradingSubmissionStatus === "missing";
   const isExcused = editor.gradingSubmissionStatus === "excused";
@@ -173,7 +178,7 @@ export function GradingSheet({
                             <SelectItem key={i} value={i.toString()}>
                               {i === 0
                                 ? "Not assessed (0)"
-                                : `Level ${i}`}
+                                : `Level ${i}${MYP_LEVEL_DESCRIPTORS[criterion]?.[i] ? ` — ${MYP_LEVEL_DESCRIPTORS[criterion][i]}` : ""}`}
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -241,6 +246,36 @@ export function GradingSheet({
               />
             )}
 
+          {/* Rubric mode — hidden when missing or excused */}
+          {editor.gradingAssessment?.gradingMode === "rubric" &&
+            !isMissing && !isExcused && (
+              <RubricGrader
+                rubric={editor.gradingAssessment.rubric ?? []}
+                scores={editor.gradingRubricScores}
+                onScoreChange={(criterionId, levelId, points) => {
+                  editor.setGradingRubricScores((prev) => ({
+                    ...prev,
+                    [criterionId]: { criterionId, levelId, points },
+                  }));
+                }}
+              />
+            )}
+
+          {/* Standards mode — hidden when missing or excused */}
+          {editor.gradingAssessment?.gradingMode === "standards" &&
+            !isMissing && !isExcused && (
+              <StandardsGrader
+                learningGoalIds={editor.gradingAssessment.learningGoalIds ?? []}
+                mastery={editor.gradingStandardsMastery}
+                onMasteryChange={(goalId, level) => {
+                  editor.setGradingStandardsMastery((prev) => ({
+                    ...prev,
+                    [goalId]: level,
+                  }));
+                }}
+              />
+            )}
+
           <Separator />
 
           {/* Feedback */}
@@ -254,18 +289,26 @@ export function GradingSheet({
             />
           </div>
 
-          {/* Save button */}
+          {/* Save buttons */}
           <div className="flex gap-2 pt-2">
             <Button
               variant="outline"
-              className="flex-1"
               onClick={() => editor.setGradingOpen(false)}
             >
               Cancel
             </Button>
-            <Button className="flex-1" onClick={editor.handleSaveGrade}>
+            <Button
+              variant={onSaveAndNext ? "outline" : "default"}
+              className="flex-1"
+              onClick={editor.handleSaveGrade}
+            >
               Save grade
             </Button>
+            {onSaveAndNext && (
+              <Button className="flex-1" onClick={onSaveAndNext}>
+                Save & Next
+              </Button>
+            )}
           </div>
         </div>
       </SheetContent>

@@ -73,6 +73,10 @@ const statusMap: Record<string, { variant: StatusVariant; label?: string }> = {
   not_assessed: { variant: "neutral", label: "Not assessed" },
   paused: { variant: "neutral" },
   archived: { variant: "neutral" },
+  taught: { variant: "success" },
+  assigned: { variant: "info" },
+  skipped: { variant: "neutral" },
+  cancelled: { variant: "danger" },
 };
 
 interface StatusBadgeProps {

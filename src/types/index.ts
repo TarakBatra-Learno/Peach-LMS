@@ -9,3 +9,4 @@ export * from "./incident";
 export * from "./report";
 export * from "./communication";
 export * from "./calendar";
+export * from "./unit-planning";

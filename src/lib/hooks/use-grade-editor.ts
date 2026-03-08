@@ -4,9 +4,8 @@ import { useState } from "react";
 import { useStore } from "@/stores";
 import { generateId } from "@/services/mock-service";
 import { toast } from "sonner";
+import { buildGradePayload } from "@/lib/grade-save";
 import type { GradeRecord, SubmissionStatus, ChecklistResultItem } from "@/types/gradebook";
-
-const MYP_CRITERIA_LABELS = ["A", "B", "C", "D"] as const;
 
 export function useGradeEditor() {
   const assessments = useStore((s) => s.assessments);
@@ -25,6 +24,12 @@ export function useGradeEditor() {
   const [gradingDpGrade, setGradingDpGrade] = useState("4");
   const [gradingChecklistResults, setGradingChecklistResults] = useState<
     Record<string, ChecklistResultItem>
+  >({});
+  const [gradingRubricScores, setGradingRubricScores] = useState<
+    Record<string, { criterionId: string; levelId: string; points: number }>
+  >({});
+  const [gradingStandardsMastery, setGradingStandardsMastery] = useState<
+    Record<string, string>
   >({});
 
   const openGradingSheet = (studentId: string, assessmentId: string) => {
@@ -56,6 +61,18 @@ export function useGradeEditor() {
         existing[r.itemId] = r;
       });
       setGradingChecklistResults(existing);
+    } else if (asmt.gradingMode === "rubric") {
+      const existing: Record<string, { criterionId: string; levelId: string; points: number }> = {};
+      existingGrade?.rubricScores?.forEach((r) => {
+        existing[r.criterionId] = r;
+      });
+      setGradingRubricScores(existing);
+    } else if (asmt.gradingMode === "standards") {
+      const existing: Record<string, string> = {};
+      existingGrade?.standardsMastery?.forEach((s) => {
+        existing[s.standardId] = s.level;
+      });
+      setGradingStandardsMastery(existing);
     }
 
     setGradingOpen(true);
@@ -71,66 +88,27 @@ export function useGradeEditor() {
         g.studentId === gradingStudentId &&
         g.assessmentId === gradingAssessmentId
     );
-    const now = new Date().toISOString();
 
-    const baseGrade: Partial<GradeRecord> = {
-      assessmentId: asmt.id,
-      studentId: gradingStudentId,
-      classId: asmt.classId,
-      gradingMode: asmt.gradingMode,
-      feedback: gradingFeedback.trim() || undefined,
+    const payload = buildGradePayload(asmt, gradingStudentId, {
+      score: gradingScore,
+      dpGrade: gradingDpGrade,
+      mypScores: gradingMypScores,
+      checklistResults: gradingChecklistResults,
+      rubricScores: gradingRubricScores,
+      standardsMastery: gradingStandardsMastery,
+      feedback: gradingFeedback,
       submissionStatus: gradingSubmissionStatus,
-      gradedAt: now,
-    };
-
-    // Grade inputs are hidden when missing OR excused
-    if (gradingSubmissionStatus !== "missing" && gradingSubmissionStatus !== "excused") {
-      if (asmt.gradingMode === "score") {
-        baseGrade.score = parseInt(gradingScore) || 0;
-        baseGrade.totalPoints = asmt.totalPoints;
-      } else if (asmt.gradingMode === "dp_scale") {
-        baseGrade.dpGrade = parseInt(gradingDpGrade) || 4;
-      } else if (asmt.gradingMode === "myp_criteria") {
-        baseGrade.mypCriteriaScores = MYP_CRITERIA_LABELS.map((c) => ({
-          criterionId: `crit_${c}`,
-          criterion: c,
-          level: gradingMypScores[c] ?? 0,
-        }));
-      } else if (asmt.gradingMode === "checklist") {
-        baseGrade.checklistGradeResults = (asmt.checklist ?? []).map(
-          (item) => {
-            const result = gradingChecklistResults[item.id];
-            return {
-              itemId: item.id,
-              status: result?.status ?? "unmarked",
-              evidence: result?.evidence,
-            };
-          }
-        );
-      }
-    } else if (gradingSubmissionStatus === "excused") {
-      // Excused: explicitly clear ALL grade payloads, feedback, and submission artifacts
-      baseGrade.score = undefined;
-      baseGrade.dpGrade = undefined;
-      baseGrade.mypCriteriaScores = undefined;
-      baseGrade.rubricScores = undefined;
-      baseGrade.standardsMastery = undefined;
-      baseGrade.checklistGradeResults = undefined;
-      baseGrade.checklistResults = undefined;
-      baseGrade.feedback = undefined;
-      baseGrade.gradedAt = undefined;
-      baseGrade.submittedAt = undefined;
-    }
+    });
 
     if (existingGrade) {
-      updateGrade(existingGrade.id, baseGrade);
+      updateGrade(existingGrade.id, payload);
       toast.success(
         `Grade updated for ${student.firstName} ${student.lastName}`
       );
     } else {
       addGrade({
         id: generateId("grade"),
-        ...baseGrade,
+        ...payload,
       } as GradeRecord);
       toast.success(
         `Grade saved for ${student.firstName} ${student.lastName}`
@@ -162,6 +140,10 @@ export function useGradeEditor() {
     setGradingDpGrade,
     gradingChecklistResults,
     setGradingChecklistResults,
+    gradingRubricScores,
+    setGradingRubricScores,
+    gradingStandardsMastery,
+    setGradingStandardsMastery,
     gradingAssessment,
     gradingStudentObj,
     openGradingSheet,

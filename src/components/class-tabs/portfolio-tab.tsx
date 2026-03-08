@@ -34,6 +34,8 @@ import {
 import type { PortfolioArtifact } from "@/types/portfolio";
 import type { Student } from "@/types/student";
 import type { LearningGoal } from "@/types/assessment";
+import { useArtifactActions } from "@/lib/hooks/use-artifact-actions";
+import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 
 interface PortfolioTabProps {
   classId: string;
@@ -65,6 +67,10 @@ export function PortfolioTab({ classId, artifacts, students, learningGoals }: Po
   // Detail sheet
   const [detailArtifact, setDetailArtifact] = useState<PortfolioArtifact | null>(null);
   const [teacherComment, setTeacherComment] = useState("");
+
+  // Confirmation dialog state
+  const [revisionConfirm, setRevisionConfirm] = useState<string | null>(null);
+  const [resetConfirm, setResetConfirm] = useState<string | null>(null);
 
   // When opening detail sheet, prefill comment
   const openDetail = (artifact: PortfolioArtifact) => {
@@ -138,76 +144,33 @@ export function PortfolioTab({ classId, artifacts, students, learningGoals }: Po
     },
   ];
 
-  // Actions
-  const handleApprove = (id: string) => {
-    updateArtifact(id, { approvalStatus: "approved", updatedAt: new Date().toISOString() });
+  // Artifact approval actions (shared hook — fixes: revision now revokes family share, family share now creates student record)
+  const {
+    handleApprove,
+    handleRequestRevision,
+    handleResetApproval: handleResetToPending,
+    handleSaveTeacherComment: saveTeacherComment,
+    handleToggleFamilyShare: toggleFamilyShare,
+    handleToggleReportEligible: toggleReportEligible,
+  } = useArtifactActions((id, updates) => {
     if (detailArtifact?.id === id) {
-      setDetailArtifact({ ...detailArtifact, approvalStatus: "approved" });
+      setDetailArtifact({ ...detailArtifact, ...updates });
     }
-    toast.success("Artifact approved");
-  };
-
-  const handleRequestRevision = (id: string) => {
-    updateArtifact(id, { approvalStatus: "needs_revision", updatedAt: new Date().toISOString() });
-    if (detailArtifact?.id === id) {
-      setDetailArtifact({ ...detailArtifact, approvalStatus: "needs_revision" });
-    }
-    toast.info("Revision requested");
-  };
-
-  const handleResetToPending = (id: string) => {
-    updateArtifact(id, {
-      approvalStatus: "pending",
-      familyShareStatus: "not_shared",
-      updatedAt: new Date().toISOString(),
-    });
-    if (detailArtifact?.id === id) {
-      setDetailArtifact({ ...detailArtifact, approvalStatus: "pending", familyShareStatus: "not_shared" });
-    }
-    toast.info("Status reset to pending");
-  };
+  });
 
   const handleSaveTeacherComment = () => {
-    if (!detailArtifact || !teacherComment.trim()) return;
-    updateArtifact(detailArtifact.id, {
-      reflection: {
-        ...(detailArtifact.reflection || { text: "", submittedAt: "" }),
-        teacherComment: teacherComment.trim(),
-        teacherCommentAt: new Date().toISOString(),
-      },
-      updatedAt: new Date().toISOString(),
-    });
-    setDetailArtifact({
-      ...detailArtifact,
-      reflection: {
-        ...(detailArtifact.reflection || { text: "", submittedAt: "" }),
-        teacherComment: teacherComment.trim(),
-        teacherCommentAt: new Date().toISOString(),
-      },
-    });
-    toast.success("Comment saved");
+    if (!detailArtifact) return;
+    saveTeacherComment(detailArtifact, teacherComment);
   };
 
   const handleToggleFamilyShare = (checked: boolean) => {
     if (!detailArtifact) return;
-    const newStatus = checked ? "shared" as const : "not_shared" as const;
-    updateArtifact(detailArtifact.id, {
-      familyShareStatus: newStatus,
-      updatedAt: new Date().toISOString(),
-    });
-    setDetailArtifact({ ...detailArtifact, familyShareStatus: newStatus });
-    toast.success(checked ? "Shared with family" : "Sharing revoked");
+    toggleFamilyShare(detailArtifact, checked);
   };
 
   const handleToggleReportEligible = (checked: boolean) => {
     if (!detailArtifact) return;
-    updateArtifact(detailArtifact.id, {
-      isReportEligible: checked,
-      flaggedForReport: checked,
-      updatedAt: new Date().toISOString(),
-    });
-    setDetailArtifact({ ...detailArtifact, isReportEligible: checked, flaggedForReport: checked });
-    toast.success(checked ? "Added to report" : "Removed from report");
+    toggleReportEligible(detailArtifact.id, checked);
   };
 
   if (artifacts.length === 0) {
@@ -378,11 +341,16 @@ export function PortfolioTab({ classId, artifacts, students, learningGoals }: Po
                     <div className="flex items-center justify-between">
                       <div>
                         <p className="text-[13px] font-medium">Share with family</p>
-                        <p className="text-[12px] text-muted-foreground">Make visible to parents</p>
+                        <p className="text-[12px] text-muted-foreground">
+                          {detailArtifact.approvalStatus === "approved"
+                            ? "Make visible to parents"
+                            : "Approve this artifact before sharing with family"}
+                        </p>
                       </div>
                       <Switch
                         checked={detailArtifact.familyShareStatus !== "not_shared"}
                         onCheckedChange={handleToggleFamilyShare}
+                        disabled={detailArtifact.approvalStatus !== "approved"}
                       />
                     </div>
                     <div className="flex items-center justify-between">
@@ -406,7 +374,7 @@ export function PortfolioTab({ classId, artifacts, students, learningGoals }: Po
                         <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" />
                         Approve
                       </Button>
-                      <Button size="sm" variant="outline" onClick={() => handleRequestRevision(detailArtifact.id)}>
+                      <Button size="sm" variant="outline" onClick={() => setRevisionConfirm(detailArtifact.id)}>
                         Request revision
                       </Button>
                     </div>
@@ -416,7 +384,7 @@ export function PortfolioTab({ classId, artifacts, students, learningGoals }: Po
                       <Button
                         size="sm"
                         variant="outline"
-                        onClick={() => handleResetToPending(detailArtifact.id)}
+                        onClick={() => setResetConfirm(detailArtifact.id)}
                       >
                         Reset to pending
                       </Button>
@@ -438,6 +406,31 @@ export function PortfolioTab({ classId, artifacts, students, learningGoals }: Po
           })()}
         </SheetContent>
       </Sheet>
+
+      <ConfirmDialog
+        open={!!revisionConfirm}
+        onOpenChange={(open) => !open && setRevisionConfirm(null)}
+        title="Request revision"
+        description="This will notify the student to revise their work. If the artifact is shared with family, sharing will be revoked."
+        confirmLabel="Request revision"
+        destructive
+        onConfirm={() => {
+          if (revisionConfirm) handleRequestRevision(revisionConfirm);
+          setRevisionConfirm(null);
+        }}
+      />
+      <ConfirmDialog
+        open={!!resetConfirm}
+        onOpenChange={(open) => !open && setResetConfirm(null)}
+        title="Reset to pending"
+        description="This will reset the artifact status to pending. If the artifact is shared with family, sharing will be revoked."
+        confirmLabel="Reset"
+        destructive
+        onConfirm={() => {
+          if (resetConfirm) handleResetToPending(resetConfirm);
+          setResetConfirm(null);
+        }}
+      />
     </>
   );
 }

@@ -189,7 +189,7 @@ export default function ReportCycleDetailPage() {
                     >
                       <td className="py-2 pr-4">
                         <Link
-                          href={`/reports/${report.id}`}
+                          href={`/reports/${report.id}?cycleId=${cycleId}`}
                           className="text-[13px] font-medium hover:text-[#c24e3f] transition-colors"
                         >
                           {student
@@ -222,7 +222,7 @@ export default function ReportCycleDetailPage() {
                         <StatusBadge status={report.publishState} />
                       </td>
                       <td className="text-right py-2 pl-2">
-                        <Link href={`/reports/${report.id}`}>
+                        <Link href={`/reports/${report.id}?cycleId=${cycleId}`}>
                           <Button variant="outline" size="sm" className="h-7 text-[12px]">
                             Edit
                           </Button>
