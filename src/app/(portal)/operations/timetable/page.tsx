@@ -11,6 +11,8 @@ import { useMockLoading } from "@/lib/hooks/use-mock-loading";
 import { CardGridSkeleton } from "@/components/shared/skeleton-loader";
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import { AttendanceDialog } from "@/components/shared/attendance-dialog";
+import { StatusBadge } from "@/components/shared/status-badge";
+import { LessonPlanDrawer } from "@/components/unit-planning/lesson-plan-drawer";
 import { generateId } from "@/services/mock-service";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -43,6 +45,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+  TooltipProvider,
+} from "@/components/ui/tooltip";
+import {
   Clock,
   BookOpen,
   Users,
@@ -61,11 +69,28 @@ import {
   XCircle,
   ExternalLink,
   ArrowRight,
+  FileText,
 } from "lucide-react";
 import { toast } from "sonner";
 import type { CalendarEvent, RsvpStatus } from "@/types/calendar";
 import { format, addDays, isSameDay, parseISO, getDay } from "date-fns";
 import { PERIODS } from "@/lib/timetable-constants";
+
+// Colour palette for unit plan dots (assigned by order within class)
+const UNIT_DOT_COLORS = [
+  "#2563eb", // blue
+  "#16a34a", // green
+  "#d97706", // amber
+  "#7c3aed", // purple
+  "#dc2626", // red
+  "#0891b2", // cyan
+  "#be185d", // pink
+  "#65a30d", // lime
+];
+
+const DAY_ABBREV: Record<number, "mon" | "tue" | "wed" | "thu" | "fri"> = {
+  1: "mon", 2: "tue", 3: "wed", 4: "thu", 5: "fri",
+};
 
 const NON_CLASS_STYLES: Record<string, { bg: string; border: string; text: string }> = {
   meeting: { bg: "bg-[#fef3c7]", border: "border-[#b45309]/20", text: "text-[#b45309]" },
@@ -145,9 +170,90 @@ export default function TimetablePage() {
   const updateCalendarEvent = useStore((s) => s.updateCalendarEvent);
   const deleteCalendarEvent = useStore((s) => s.deleteCalendarEvent);
 
+  const unitPlans = useStore((s) => s.unitPlans);
+  const lessonPlans = useStore((s) => s.lessonPlans);
+  const lessonSlotAssignments = useStore((s) => s.lessonSlotAssignments);
+  const learningGoals = useStore((s) => s.learningGoals);
+
   const activeClassId = useStore((s) => s.ui.activeClassId);
 
   const [weekOffset, setWeekOffset] = useState(0);
+
+  // Lesson plan drawer state
+  const [lpDrawerOpen, setLpDrawerOpen] = useState(false);
+  const [lpDrawerLessonId, setLpDrawerLessonId] = useState<string | null>(null);
+
+  // Build per-class unit colour maps and lookup helpers
+  const unitColorMaps = useMemo(() => {
+    const maps: Record<string, Record<string, string>> = {};
+    const classIds = [...new Set(unitPlans.map((u) => u.classId))];
+    for (const cId of classIds) {
+      const classUnits = unitPlans
+        .filter((u) => u.classId === cId)
+        .sort((a, b) => a.order - b.order);
+      const map: Record<string, string> = {};
+      classUnits.forEach((u, i) => {
+        map[u.id] = UNIT_DOT_COLORS[i % UNIT_DOT_COLORS.length];
+      });
+      maps[cId] = map;
+    }
+    return maps;
+  }, [unitPlans]);
+
+  // Helper: find lesson assignment + related data for a class event on a specific day
+  const getSlotLessonInfo = useMemo(() => {
+    return (classId: string, dayDate: Date) => {
+      const dayOfWeek = getDay(dayDate); // 0=Sun, 1=Mon, ...
+      const slotDay = DAY_ABBREV[dayOfWeek];
+      if (!slotDay) return null;
+
+      // Find the class's schedule slot for this day to get the startTime
+      const cls = classes.find((c) => c.id === classId);
+      if (!cls) return null;
+
+      const dateStr = format(dayDate, "yyyy-MM-dd");
+
+      // A class can have multiple slots per day, so find all slots for this day
+      const daySlots = cls.schedule.filter((s) => s.day === slotDay);
+      if (daySlots.length === 0) return null;
+
+      // For each slot, find matching assignment for this exact date
+      for (const slot of daySlots) {
+        const assignment = lessonSlotAssignments.find(
+          (a) => a.classId === classId && a.date === dateStr && a.slotDay === slotDay && a.slotStartTime === slot.startTime
+        );
+        if (assignment) {
+          const lesson = lessonPlans.find((lp) => lp.id === assignment.lessonPlanId);
+          const unit = unitPlans.find((u) => u.id === assignment.unitId);
+          const dotColor = unit ? (unitColorMaps[classId]?.[unit.id] ?? null) : null;
+          return { assignment, lesson: lesson ?? null, unit: unit ?? null, dotColor };
+        }
+      }
+
+      // Also check for the nearest upcoming/past assignment matching slotDay + slotStartTime
+      // (same logic as class page schedule tab)
+      for (const slot of daySlots) {
+        const matchingAssignments = lessonSlotAssignments
+          .filter((a) => a.classId === classId && a.slotDay === slotDay && a.slotStartTime === slot.startTime)
+          .sort((a, b) => b.date.localeCompare(a.date));
+
+        const todayStr = format(new Date(), "yyyy-MM-dd");
+        const nearest = matchingAssignments.find((a) => a.date >= todayStr) ?? matchingAssignments[0];
+        if (nearest) {
+          const lesson = lessonPlans.find((lp) => lp.id === nearest.lessonPlanId);
+          const unit = unitPlans.find((u) => u.id === nearest.unitId);
+          const dotColor = unit ? (unitColorMaps[classId]?.[unit.id] ?? null) : null;
+          return { assignment: nearest, lesson: lesson ?? null, unit: unit ?? null, dotColor };
+        }
+      }
+
+      return null;
+    };
+  }, [classes, lessonSlotAssignments, lessonPlans, unitPlans, unitColorMaps]);
+
+  // Derive lesson plan for lesson plan drawer
+  const lpDrawerLesson = lpDrawerLessonId ? lessonPlans.find((lp) => lp.id === lpDrawerLessonId) ?? null : null;
+  const lpDrawerAssignment = lpDrawerLessonId ? lessonSlotAssignments.find((a) => a.lessonPlanId === lpDrawerLessonId) : undefined;
 
   // Sheet state
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -441,6 +547,7 @@ export default function TimetablePage() {
           description="Class events will appear here. Create calendar events with type 'Class' to populate the timetable."
         />
       ) : timetableEvents.length > 0 ? (
+        <TooltipProvider>
         <Card className="overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full table-fixed text-[13px]">
@@ -579,6 +686,7 @@ export default function TimetablePage() {
                                       (s) => s.classId === event.classId && s.date === cellDateStr
                                     )
                                   : false;
+                                const slotInfo = event.classId ? getSlotLessonInfo(event.classId, dayDate) : null;
                                 return (
                                   <button
                                     key={`${event.id}-${evtIdx}`}
@@ -588,6 +696,19 @@ export default function TimetablePage() {
                                   >
                                     <div className="rounded-md bg-[#fff2f0] border border-[#c24e3f]/20 px-1.5 py-1 mb-1 hover:bg-[#ffe8e5] transition-colors cursor-pointer min-w-0">
                                       <div className="flex items-center gap-1 min-w-0">
+                                        {slotInfo?.dotColor && (
+                                          <Tooltip>
+                                            <TooltipTrigger asChild>
+                                              <span
+                                                className="inline-block h-2 w-2 rounded-full shrink-0"
+                                                style={{ backgroundColor: slotInfo.dotColor }}
+                                              />
+                                            </TooltipTrigger>
+                                            <TooltipContent side="top" className="text-[11px]">
+                                              {slotInfo.unit?.title}
+                                            </TooltipContent>
+                                          </Tooltip>
+                                        )}
                                         <span className="font-medium text-[12px] text-[#c24e3f] truncate flex-1 min-w-0">
                                           {cls?.name || event.title}
                                         </span>
@@ -609,6 +730,11 @@ export default function TimetablePage() {
                                           </span>
                                         )}
                                       </div>
+                                      {slotInfo?.lesson && (
+                                        <p className="text-[10px] text-[#c24e3f]/70 font-medium truncate mt-0.5">
+                                          {slotInfo.lesson.title}
+                                        </p>
+                                      )}
                                     </div>
                                   </button>
                                 );
@@ -666,6 +792,7 @@ export default function TimetablePage() {
             </table>
           </div>
         </Card>
+        </TooltipProvider>
       ) : null}
 
       {/* Due Day Sheet (Section A) */}
@@ -762,6 +889,11 @@ export default function TimetablePage() {
               : false;
 
             if (isClassEvent) {
+              // Look up unit/lesson info for this class event on the selected date
+              const sheetSlotInfo = selectedEvent.classId && selectedEventDate
+                ? getSlotLessonInfo(selectedEvent.classId, selectedEventDate)
+                : null;
+
               return (
                 <>
                   <SheetHeader>
@@ -816,6 +948,71 @@ export default function TimetablePage() {
                       </div>
                     </div>
 
+                    {/* Unit plan section */}
+                    {sheetSlotInfo?.unit && (
+                      <>
+                        <Separator />
+                        <div>
+                          <span className="text-[12px] font-medium text-muted-foreground uppercase tracking-wide">
+                            Unit Plan
+                          </span>
+                          <div className="mt-1.5 flex items-center gap-2">
+                            {sheetSlotInfo.dotColor && (
+                              <span
+                                className="inline-block h-2.5 w-2.5 rounded-full shrink-0"
+                                style={{ backgroundColor: sheetSlotInfo.dotColor }}
+                              />
+                            )}
+                            <Link
+                              href={`/classes/${selectedEvent.classId}?tab=units`}
+                              className="text-[13px] font-medium text-[#c24e3f] hover:underline text-left"
+                              onClick={() => setSheetOpen(false)}
+                            >
+                              {sheetSlotInfo.unit.title}
+                            </Link>
+                          </div>
+                        </div>
+                      </>
+                    )}
+
+                    {/* Lesson plan section */}
+                    {sheetSlotInfo?.lesson && (
+                      <>
+                        <Separator />
+                        <div>
+                          <span className="text-[12px] font-medium text-muted-foreground uppercase tracking-wide">
+                            Lesson Plan
+                          </span>
+                          <div className="mt-1.5">
+                            <p className="text-[13px] font-medium">{sheetSlotInfo.lesson.title}</p>
+                            <div className="flex items-center gap-2 mt-0.5">
+                              <StatusBadge status={sheetSlotInfo.lesson.status} showIcon={false} />
+                              {sheetSlotInfo.lesson.estimatedDurationMinutes && (
+                                <span className="text-[11px] text-muted-foreground">
+                                  {sheetSlotInfo.lesson.estimatedDurationMinutes} min
+                                </span>
+                              )}
+                            </div>
+                            {sheetSlotInfo.lesson.objectives && sheetSlotInfo.lesson.objectives.length > 0 && (
+                              <ul className="mt-2 space-y-0.5">
+                                {sheetSlotInfo.lesson.objectives.slice(0, 2).map((obj, oi) => (
+                                  <li key={oi} className="text-[12px] text-muted-foreground flex items-start gap-1.5">
+                                    <span className="text-[10px] mt-0.5">•</span>
+                                    <span>{obj}</span>
+                                  </li>
+                                ))}
+                                {sheetSlotInfo.lesson.objectives.length > 2 && (
+                                  <li className="text-[11px] text-muted-foreground">
+                                    +{sheetSlotInfo.lesson.objectives.length - 2} more
+                                  </li>
+                                )}
+                              </ul>
+                            )}
+                          </div>
+                        </div>
+                      </>
+                    )}
+
                     {selectedEvent.description && (
                       <>
                         <Separator />
@@ -855,6 +1052,19 @@ export default function TimetablePage() {
                           </>
                         )}
                       </Button>
+                      {sheetSlotInfo?.lesson && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            setLpDrawerLessonId(sheetSlotInfo.lesson!.id);
+                            setLpDrawerOpen(true);
+                          }}
+                        >
+                          <FileText className="h-4 w-4 mr-1.5" />
+                          Open lesson plan
+                        </Button>
+                      )}
                       {selectedEvent.classId && (
                         <Link
                           href={`/classes/${selectedEvent.classId}`}
@@ -1273,6 +1483,15 @@ export default function TimetablePage() {
         onOpenChange={setAttendanceDialogOpen}
         prefilledClassId={attendanceClassId || undefined}
         prefilledDate={attendanceDate || undefined}
+      />
+
+      {/* Lesson Plan Drawer */}
+      <LessonPlanDrawer
+        open={lpDrawerOpen}
+        onOpenChange={setLpDrawerOpen}
+        lessonPlan={lpDrawerLesson}
+        learningGoals={learningGoals}
+        assignment={lpDrawerAssignment}
       />
     </div>
   );

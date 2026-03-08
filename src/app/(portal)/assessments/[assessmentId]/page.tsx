@@ -75,8 +75,12 @@ import type { Student } from "@/types/student";
 import type { SimpleCriterion } from "@/types/assessment";
 import { MYP_LEVEL_DESCRIPTORS } from "@/lib/myp-descriptors";
 import { isGradeComplete, getStudentAssessmentStatus, getToMarkCount, getMissingCount, getExcusedCount, getGradePercentage, getChecklistTotalPoints } from "@/lib/grade-helpers";
+import { buildGradePayload } from "@/lib/grade-save";
+import { computeAssessmentAverage } from "@/lib/selectors/grade-selectors";
 import { ChecklistBuilder } from "@/components/shared/checklist-builder";
 import { ChecklistGrader } from "@/components/shared/checklist-grader";
+import { RubricGrader } from "@/components/shared/rubric-grader";
+import { StandardsGrader } from "@/components/shared/standards-grader";
 import type { ChecklistResultItem } from "@/types/gradebook";
 
 const GRADING_MODE_LABELS: Record<string, string> = {
@@ -153,6 +157,7 @@ export default function AssessmentDetailPage() {
   const addCalendarEvent = useStore((s) => s.addCalendarEvent);
   const deleteCalendarEvent = useStore((s) => s.deleteCalendarEvent);
   const learningGoals = useStore((s) => s.learningGoals);
+  const unitPlans = useStore((s) => s.unitPlans);
 
   const assessment = assessments.find((a) => a.id === assessmentId);
   const cls = assessment ? getClassById(assessment.classId) : undefined;
@@ -193,6 +198,12 @@ export default function AssessmentDetailPage() {
   const [gradingDpGrade, setGradingDpGrade] = useState("4");
   const [gradingChecklistResults, setGradingChecklistResults] = useState<
     Record<string, ChecklistResultItem>
+  >({});
+  const [gradingRubricScores, setGradingRubricScores] = useState<
+    Record<string, { criterionId: string; levelId: string; points: number }>
+  >({});
+  const [gradingStandardsMastery, setGradingStandardsMastery] = useState<
+    Record<string, string>
   >({});
 
   // Confirm dialogs
@@ -268,58 +279,7 @@ export default function AssessmentDetailPage() {
 
   const classAvg = useMemo(() => {
     if (!assessment) return "N/A";
-    const validGrades = grades.filter((g) => isGradeComplete(g, assessment));
-    if (validGrades.length === 0) return "N/A";
-
-    if (assessment.gradingMode === "score") {
-      const avg =
-        validGrades.reduce((sum, g) => sum + (g.score || 0), 0) /
-        validGrades.length;
-      return assessment.totalPoints
-        ? `${Math.round(avg)}/${assessment.totalPoints}`
-        : `${Math.round(avg)}%`;
-    }
-    if (assessment.gradingMode === "dp_scale") {
-      const avg =
-        validGrades.reduce((sum, g) => sum + (g.dpGrade || 0), 0) /
-        validGrades.length;
-      return `${avg.toFixed(1)}/7`;
-    }
-    if (assessment.gradingMode === "myp_criteria") {
-      const allLevels = validGrades.flatMap((g) => g.mypCriteriaScores || []);
-      if (allLevels.length === 0) return "N/A";
-      const avg =
-        allLevels.reduce((s, c) => s + c.level, 0) / allLevels.length;
-      return `${avg.toFixed(1)}/8`;
-    }
-    if (assessment.gradingMode === "checklist") {
-      if (assessment.checklistOutcomeModel === "score_contributing") {
-        const pcts = validGrades
-          .map((g) => getGradePercentage(g, assessment))
-          .filter((v): v is number => v !== null);
-        if (pcts.length === 0) return "N/A";
-        const avg = Math.round(
-          pcts.reduce((s, v) => s + v, 0) / pcts.length
-        );
-        return `${avg}%`;
-      }
-      // feedback_only: show met count summary
-      const totalItems = assessment.checklist?.length ?? 0;
-      const metCounts = validGrades.map(
-        (g) =>
-          g.checklistGradeResults?.filter(
-            (r) => r.status === "met" || r.status === "yes"
-          ).length ?? 0
-      );
-      const avgMet =
-        metCounts.length > 0
-          ? (
-              metCounts.reduce((s, v) => s + v, 0) / metCounts.length
-            ).toFixed(1)
-          : "0";
-      return `${avgMet}/${totalItems} avg met`;
-    }
-    return `${validGrades.length} graded`;
+    return computeAssessmentAverage(grades, assessment);
   }, [assessment, grades]);
 
   const openGradingSheet = (student: Student) => {
@@ -345,6 +305,18 @@ export default function AssessmentDetailPage() {
         existing[r.itemId] = r;
       });
       setGradingChecklistResults(existing);
+    } else if (assessment.gradingMode === "rubric") {
+      const existing: Record<string, { criterionId: string; levelId: string; points: number }> = {};
+      existingGrade?.rubricScores?.forEach((r) => {
+        existing[r.criterionId] = r;
+      });
+      setGradingRubricScores(existing);
+    } else if (assessment.gradingMode === "standards") {
+      const existing: Record<string, string> = {};
+      existingGrade?.standardsMastery?.forEach((s) => {
+        existing[s.standardId] = s.level;
+      });
+      setGradingStandardsMastery(existing);
     }
 
     setGradingOpen(true);
@@ -368,65 +340,27 @@ export default function AssessmentDetailPage() {
     const existingGrade = grades.find(
       (g) => g.studentId === gradingStudent.id
     );
-    const now = new Date().toISOString();
 
-    const baseGrade: Partial<GradeRecord> = {
-      assessmentId: assessment.id,
-      studentId: gradingStudent.id,
-      classId: assessment.classId,
-      gradingMode: assessment.gradingMode,
-      feedback: gradingFeedback.trim() || undefined,
+    const payload = buildGradePayload(assessment, gradingStudent.id, {
+      score: gradingScore,
+      dpGrade: gradingDpGrade,
+      mypScores: gradingMypScores,
+      checklistResults: gradingChecklistResults,
+      rubricScores: gradingRubricScores,
+      standardsMastery: gradingStandardsMastery,
+      feedback: gradingFeedback,
       submissionStatus: gradingSubmissionStatus,
-      gradedAt: now,
-    };
-
-    if (gradingSubmissionStatus !== "missing" && gradingSubmissionStatus !== "excused") {
-      if (assessment.gradingMode === "score") {
-        baseGrade.score = parseInt(gradingScore) || 0;
-        baseGrade.totalPoints = assessment.totalPoints;
-      } else if (assessment.gradingMode === "dp_scale") {
-        baseGrade.dpGrade = parseInt(gradingDpGrade) || 4;
-      } else if (assessment.gradingMode === "myp_criteria") {
-        baseGrade.mypCriteriaScores = MYP_CRITERIA_LABELS.map((c) => ({
-          criterionId: `crit_${c}`,
-          criterion: c,
-          level: gradingMypScores[c] ?? 0,
-        }));
-      } else if (assessment.gradingMode === "checklist") {
-        baseGrade.checklistGradeResults = (assessment.checklist ?? []).map(
-          (item) => {
-            const result = gradingChecklistResults[item.id];
-            return {
-              itemId: item.id,
-              status: result?.status ?? "unmarked",
-              evidence: result?.evidence,
-            };
-          }
-        );
-      }
-    } else if (gradingSubmissionStatus === "excused") {
-      // Excused: clear ALL grade payloads and submission artifacts
-      baseGrade.score = undefined;
-      baseGrade.dpGrade = undefined;
-      baseGrade.mypCriteriaScores = undefined;
-      baseGrade.rubricScores = undefined;
-      baseGrade.standardsMastery = undefined;
-      baseGrade.checklistGradeResults = undefined;
-      baseGrade.checklistResults = undefined;
-      baseGrade.feedback = undefined;
-      baseGrade.gradedAt = undefined;
-      baseGrade.submittedAt = undefined;
-    }
+    });
 
     if (existingGrade) {
-      updateGrade(existingGrade.id, { ...baseGrade, updatedAt: now });
+      updateGrade(existingGrade.id, { ...payload, updatedAt: new Date().toISOString() });
       toast.success(
         `Grade updated for ${gradingStudent.firstName} ${gradingStudent.lastName}`
       );
     } else {
       addGrade({
         id: generateId("grade"),
-        ...baseGrade,
+        ...payload,
       } as GradeRecord);
       toast.success(
         `Grade saved for ${gradingStudent.firstName} ${gradingStudent.lastName}`
@@ -445,59 +379,23 @@ export default function AssessmentDetailPage() {
     );
     const currentIdx = sortedStudents.findIndex((s) => s.id === gradingStudent.id);
 
-    // Save current grade first (reuse handleSaveGrade logic inline)
+    // Save current grade
     const existingGrade = grades.find((g) => g.studentId === gradingStudent.id);
-    const now = new Date().toISOString();
-    const baseGrade: Partial<GradeRecord> = {
-      assessmentId: assessment.id,
-      studentId: gradingStudent.id,
-      classId: assessment.classId,
-      gradingMode: assessment.gradingMode,
-      feedback: gradingFeedback.trim() || undefined,
+    const payload = buildGradePayload(assessment, gradingStudent.id, {
+      score: gradingScore,
+      dpGrade: gradingDpGrade,
+      mypScores: gradingMypScores,
+      checklistResults: gradingChecklistResults,
+      rubricScores: gradingRubricScores,
+      standardsMastery: gradingStandardsMastery,
+      feedback: gradingFeedback,
       submissionStatus: gradingSubmissionStatus,
-      gradedAt: now,
-    };
-    if (gradingSubmissionStatus !== "missing" && gradingSubmissionStatus !== "excused") {
-      if (assessment.gradingMode === "score") {
-        baseGrade.score = parseInt(gradingScore) || 0;
-        baseGrade.totalPoints = assessment.totalPoints;
-      } else if (assessment.gradingMode === "dp_scale") {
-        baseGrade.dpGrade = parseInt(gradingDpGrade) || 4;
-      } else if (assessment.gradingMode === "myp_criteria") {
-        baseGrade.mypCriteriaScores = MYP_CRITERIA_LABELS.map((c) => ({
-          criterionId: `crit_${c}`,
-          criterion: c,
-          level: gradingMypScores[c] ?? 0,
-        }));
-      } else if (assessment.gradingMode === "checklist") {
-        baseGrade.checklistGradeResults = (assessment.checklist ?? []).map(
-          (item) => {
-            const result = gradingChecklistResults[item.id];
-            return {
-              itemId: item.id,
-              status: result?.status ?? "unmarked",
-              evidence: result?.evidence,
-            };
-          }
-        );
-      }
-    } else if (gradingSubmissionStatus === "excused") {
-      // Excused: clear ALL grade payloads and submission artifacts
-      baseGrade.score = undefined;
-      baseGrade.dpGrade = undefined;
-      baseGrade.mypCriteriaScores = undefined;
-      baseGrade.rubricScores = undefined;
-      baseGrade.standardsMastery = undefined;
-      baseGrade.checklistGradeResults = undefined;
-      baseGrade.checklistResults = undefined;
-      baseGrade.feedback = undefined;
-      baseGrade.gradedAt = undefined;
-      baseGrade.submittedAt = undefined;
-    }
+    });
+
     if (existingGrade) {
-      updateGrade(existingGrade.id, { ...baseGrade, updatedAt: now });
+      updateGrade(existingGrade.id, { ...payload, updatedAt: new Date().toISOString() });
     } else {
-      addGrade({ id: generateId("grade"), ...baseGrade } as GradeRecord);
+      addGrade({ id: generateId("grade"), ...payload } as GradeRecord);
     }
     toast.success(`Grade saved for ${gradingStudent.firstName} ${gradingStudent.lastName}`);
 
@@ -735,6 +633,16 @@ export default function AssessmentDetailPage() {
               {assessment.totalPoints} points
             </Badge>
           )}
+          {assessment.unitId && (() => {
+            const linkedUnit = unitPlans.find((u) => u.id === assessment.unitId);
+            return linkedUnit ? (
+              <Link href={`/classes/${assessment.classId}?tab=units`}>
+                <Badge variant="outline" className="text-[11px] cursor-pointer hover:bg-muted">
+                  Unit: {linkedUnit.title}
+                </Badge>
+              </Link>
+            ) : null;
+          })()}
         </div>
       </PageHeader>
 
@@ -1535,6 +1443,36 @@ export default function AssessmentDetailPage() {
                         status: prev[itemId]?.status ?? "unmarked",
                         ...update,
                       },
+                    }));
+                  }}
+                />
+              )}
+
+            {/* Rubric mode — hidden when missing or excused */}
+            {assessment.gradingMode === "rubric" &&
+              gradingSubmissionStatus !== "missing" && gradingSubmissionStatus !== "excused" && (
+                <RubricGrader
+                  rubric={assessment.rubric ?? []}
+                  scores={gradingRubricScores}
+                  onScoreChange={(criterionId, levelId, points) => {
+                    setGradingRubricScores((prev) => ({
+                      ...prev,
+                      [criterionId]: { criterionId, levelId, points },
+                    }));
+                  }}
+                />
+              )}
+
+            {/* Standards mode — hidden when missing or excused */}
+            {assessment.gradingMode === "standards" &&
+              gradingSubmissionStatus !== "missing" && gradingSubmissionStatus !== "excused" && (
+                <StandardsGrader
+                  learningGoalIds={assessment.learningGoalIds ?? []}
+                  mastery={gradingStandardsMastery}
+                  onMasteryChange={(goalId, level) => {
+                    setGradingStandardsMastery((prev) => ({
+                      ...prev,
+                      [goalId]: level,
                     }));
                   }}
                 />

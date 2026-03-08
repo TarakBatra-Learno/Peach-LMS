@@ -8,6 +8,7 @@ import { Incident, SupportPlan, IncidentTaxonomy } from "@/types/incident";
 import { ReportCycle, Report, ReportTemplate, TranscriptYear } from "@/types/report";
 import { Channel, Announcement, NotificationSettings } from "@/types/communication";
 import { CalendarEvent } from "@/types/calendar";
+import { UnitPlan, LessonPlan, LessonSlotAssignment } from "@/types/unit-planning";
 
 export interface UIState {
   sidebarCollapsed: boolean;
@@ -40,6 +41,9 @@ export interface AppState {
   announcements: Announcement[];
   notificationSettings: NotificationSettings;
   calendarEvents: CalendarEvent[];
+  unitPlans: UnitPlan[];
+  lessonPlans: LessonPlan[];
+  lessonSlotAssignments: LessonSlotAssignment[];
 
   // UI State
   ui: UIState;
@@ -120,6 +124,29 @@ export interface AppActions {
   addCalendarEvent: (event: CalendarEvent) => void;
   updateCalendarEvent: (id: string, updates: Partial<CalendarEvent>) => void;
   deleteCalendarEvent: (id: string) => void;
+
+  // Unit Plans
+  addUnitPlan: (unit: UnitPlan) => void;
+  updateUnitPlan: (id: string, updates: Partial<UnitPlan>) => void;
+  deleteUnitPlan: (id: string) => void;
+  getUnitPlansByClassId: (classId: string) => UnitPlan[];
+
+  // Lesson Plans
+  addLessonPlan: (lesson: LessonPlan) => void;
+  updateLessonPlan: (id: string, updates: Partial<LessonPlan>) => void;
+  deleteLessonPlan: (id: string) => void;
+  getLessonPlansByUnitId: (unitId: string) => LessonPlan[];
+
+  // Lesson Slot Assignments
+  assignLessonToSlot: (assignment: LessonSlotAssignment) => void;
+  unassignLessonFromSlot: (lessonPlanId: string) => void;
+  getAssignmentsByUnitId: (unitId: string) => LessonSlotAssignment[];
+  getAssignmentBySlot: (classId: string, date: string, slotStartTime: string) => LessonSlotAssignment | undefined;
+  autoFillLessonSequence: (unitId: string) => number;
+
+  // Assessment ↔ Unit linking
+  linkAssessmentToUnit: (assessmentId: string, unitId: string) => void;
+  unlinkAssessmentFromUnit: (assessmentId: string) => void;
 
   // Reset
   resetAllData: (data: Omit<AppState, 'ui'>) => void;

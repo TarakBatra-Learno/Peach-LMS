@@ -20,6 +20,8 @@ interface AssessmentListItemProps {
   href?: string;
   /** Card layout: "card" (grid card with full info) or "row" (compact list row) */
   variant?: "card" | "row";
+  /** Optional unit title to show a unit tag */
+  unitTitle?: string;
 }
 
 export function AssessmentListItem({
@@ -29,6 +31,7 @@ export function AssessmentListItem({
   className,
   href,
   variant = "row",
+  unitTitle,
 }: AssessmentListItemProps) {
   const toMark = assessment.status === "published"
     ? getToMarkCount(studentIds, grades, assessment)
@@ -70,10 +73,15 @@ export function AssessmentListItem({
             </span>
           </div>
 
-          <div className="flex items-center gap-1.5 mt-auto">
+          <div className="flex items-center gap-1.5 mt-auto flex-wrap">
             <Badge variant="outline" className="text-[11px] font-medium">
               {GRADING_MODE_LABELS[assessment.gradingMode]}
             </Badge>
+            {unitTitle && (
+              <Badge variant="secondary" className="text-[11px] font-medium bg-[#f0f4ff] text-[#3b5998] border-[#3b5998]/20">
+                {unitTitle}
+              </Badge>
+            )}
             {assessment.totalPoints != null && assessment.gradingMode === "score" && (
               <Badge variant="secondary" className="text-[11px] font-medium">
                 {assessment.totalPoints} pts
@@ -107,6 +115,11 @@ export function AssessmentListItem({
             </p>
           </div>
           <div className="flex items-center gap-2">
+            {unitTitle && (
+              <Badge variant="secondary" className="text-[11px] font-medium bg-[#f0f4ff] text-[#3b5998] border-[#3b5998]/20">
+                {unitTitle}
+              </Badge>
+            )}
             {toMark > 0 && (
               <Badge className="bg-[#fef3c7] text-[#b45309] border-[#b45309]/20 text-[11px] font-medium hover:bg-[#fef3c7]">
                 {toMark} to mark

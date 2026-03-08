@@ -10,6 +10,7 @@ import type { ReportCycle, Report, ReportTemplate, TranscriptYear } from "@/type
 import type { Channel, Announcement, NotificationSettings } from "@/types/communication";
 import type { CalendarEvent } from "@/types/calendar";
 import type { AttendanceStatus, MasteryLevel } from "@/types/common";
+import { generateUnitPlanningData } from "./unit-planning-seed";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -1233,6 +1234,19 @@ export function generateSeedData() {
   }
 
   // -----------------------------------------------------------------------
+  // Unit Planning Data
+  // -----------------------------------------------------------------------
+  const unitPlanningData = generateUnitPlanningData();
+
+  // Apply assessment-unit links (Assessment.unitId is the single source of truth)
+  for (const link of unitPlanningData.assessmentUnitLinks) {
+    const asmt = assessments.find((a) => a.id === link.assessmentId);
+    if (asmt) {
+      (asmt as Assessment & { unitId?: string }).unitId = link.unitId;
+    }
+  }
+
+  // -----------------------------------------------------------------------
   // Return complete seed data
   // -----------------------------------------------------------------------
   return {
@@ -1254,5 +1268,8 @@ export function generateSeedData() {
     announcements,
     notificationSettings,
     calendarEvents,
+    unitPlans: unitPlanningData.unitPlans,
+    lessonPlans: unitPlanningData.lessonPlans,
+    lessonSlotAssignments: unitPlanningData.lessonSlotAssignments,
   };
 }

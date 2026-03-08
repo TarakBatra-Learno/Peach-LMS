@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo, useCallback, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import { useStore } from "@/stores";
 import { PageHeader } from "@/components/shared/page-header";
 import { FilterBar } from "@/components/shared/filter-bar";
@@ -84,6 +85,10 @@ const GOAL_CATEGORY_LABELS: Record<string, string> = {
 
 export default function AssessmentsPage() {
   const loading = useMockLoading();
+  const searchParams = useSearchParams();
+  const createForClassId = searchParams.get("createFor");
+  const createForUnitId = searchParams.get("unitId");
+
   const classes = useStore((s) => s.classes);
   const assessments = useStore((s) => s.assessments);
   const addAssessment = useStore((s) => s.addAssessment);
@@ -92,6 +97,8 @@ export default function AssessmentsPage() {
   const grades = useStore((s) => s.grades);
   const getStudentsByClassId = useStore((s) => s.getStudentsByClassId);
   const learningGoals = useStore((s) => s.learningGoals);
+  const linkAssessmentToUnit = useStore((s) => s.linkAssessmentToUnit);
+  const unitPlans = useStore((s) => s.unitPlans);
 
   const activeClassId = useStore((s) => s.ui.activeClassId);
 
@@ -99,6 +106,7 @@ export default function AssessmentsPage() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [gradingModeFilter, setGradingModeFilter] = useState("all");
   const [dueFilter, setDueFilter] = useState("all");
+  const [unitFilter, setUnitFilter] = useState("all");
   const [search, setSearch] = useState("");
 
   // Create dialog state
@@ -131,7 +139,31 @@ export default function AssessmentsPage() {
     }
   }, [newClassId, getStudentsByClassId]);
 
+  // Auto-open create dialog when navigated from Unit Plans with createFor param
+  useEffect(() => {
+    if (createForClassId) {
+      setNewClassId(createForClassId);
+      setCreateOpen(true);
+    }
+  }, [createForClassId]);
+
   const handleSearch = useCallback((q: string) => setSearch(q), []);
+
+  // Build unit filter options dynamically based on available units
+  const unitFilterOptions = useMemo(() => {
+    const opts: { value: string; label: string }[] = [
+      { value: "all", label: "All units" },
+      { value: "none", label: "No unit" },
+    ];
+    // Show units that belong to the active class (if one is selected), otherwise all
+    const relevantUnits = activeClassId
+      ? unitPlans.filter((u) => u.classId === activeClassId)
+      : unitPlans;
+    for (const unit of relevantUnits) {
+      opts.push({ value: unit.id, label: unit.title });
+    }
+    return opts;
+  }, [unitPlans, activeClassId]);
 
   const filtered = useMemo(() => {
     let result = assessments;
@@ -143,6 +175,13 @@ export default function AssessmentsPage() {
     }
     if (gradingModeFilter !== "all") {
       result = result.filter((a) => a.gradingMode === gradingModeFilter);
+    }
+    if (unitFilter !== "all") {
+      if (unitFilter === "none") {
+        result = result.filter((a) => !a.unitId);
+      } else {
+        result = result.filter((a) => a.unitId === unitFilter);
+      }
     }
     if (dueFilter !== "all") {
       const now = new Date();
@@ -163,7 +202,7 @@ export default function AssessmentsPage() {
       (a, b) =>
         new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
     );
-  }, [assessments, activeClassId, statusFilter, gradingModeFilter, dueFilter, search]);
+  }, [assessments, activeClassId, statusFilter, gradingModeFilter, unitFilter, dueFilter, search]);
 
   // Group learning goals by category
   const goalsByCategory = useMemo(() => {
@@ -249,7 +288,13 @@ export default function AssessmentsPage() {
         newGradingMode === "checklist" ? newChecklistResponseStyle : undefined,
       checklistOutcomeModel:
         newGradingMode === "checklist" ? newChecklistOutcomeModel : undefined,
+      unitId: createForUnitId || undefined,
     });
+
+    // If created from a unit context, link the assessment to the unit
+    if (createForUnitId) {
+      linkAssessmentToUnit(newAssessmentId, createForUnitId);
+    }
 
     addCalendarEvent({
       id: generateId("cal"),
@@ -305,6 +350,13 @@ export default function AssessmentsPage() {
             onChange: setGradingModeFilter,
           },
           {
+            key: "unit",
+            label: "Unit",
+            options: unitFilterOptions,
+            value: unitFilter,
+            onChange: setUnitFilter,
+          },
+          {
             key: "due",
             label: "Due date",
             options: DUE_OPTIONS,
@@ -345,6 +397,7 @@ export default function AssessmentsPage() {
                 studentIds={studentIds}
                 className={cls?.name}
                 variant="card"
+                unitTitle={asmt.unitId ? unitPlans.find((u) => u.id === asmt.unitId)?.title : undefined}
               />
             );
           })}
@@ -362,6 +415,14 @@ export default function AssessmentsPage() {
           </DialogHeader>
 
           <div className="space-y-4 py-2 overflow-y-auto min-h-0">
+            {createForUnitId && (() => {
+              const linkedUnit = unitPlans.find((u) => u.id === createForUnitId);
+              return linkedUnit ? (
+                <div className="rounded-lg border bg-muted/30 p-2.5 text-[12px] text-muted-foreground">
+                  Creating for unit: <span className="font-medium text-foreground">{linkedUnit.title}</span>
+                </div>
+              ) : null;
+            })()}
             <div className="space-y-1.5">
               <Label className="text-[13px]">Title *</Label>
               <Input

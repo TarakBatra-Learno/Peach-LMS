@@ -15,6 +15,14 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card } from "@/components/ui/card";
 import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetDescription,
+} from "@/components/ui/sheet";
+import { Separator } from "@/components/ui/separator";
+import {
   Table,
   TableBody,
   TableCell,
@@ -38,10 +46,17 @@ import {
   AlertTriangle,
   ChevronDown,
   ChevronUp,
+  MapPin,
+  CheckCircle2,
+  CalendarDays,
+  ExternalLink,
+  Pencil,
 } from "lucide-react";
 import Link from "next/link";
+import { toast } from "sonner";
 import { format, parseISO, addDays, getDay } from "date-fns";
-import { getGradeCellDisplay, getGradePercentage, isGradeComplete, getToMarkCount, getMissingCount, getExcusedCount, GRADING_MODE_LABELS } from "@/lib/grade-helpers";
+import { getGradeCellDisplay, getGradePercentage, getToMarkCount, getMissingCount, getExcusedCount, GRADING_MODE_LABELS } from "@/lib/grade-helpers";
+import { computeClassAveragePercent, computeAttentionStudents, computeWeakestGoals, computeAssessmentChartData } from "@/lib/selectors/grade-selectors";
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, Cell } from "recharts";
@@ -51,8 +66,22 @@ import { StandardsTab } from "@/components/class-tabs/standards-tab";
 import { PortfolioTab } from "@/components/class-tabs/portfolio-tab";
 import { AttendanceTab } from "@/components/class-tabs/attendance-tab";
 import { AttendanceDialog } from "@/components/shared/attendance-dialog";
+import { UnitPlansTab } from "@/components/class-tabs/unit-plans-tab";
+import { LessonPlanDrawer } from "@/components/unit-planning/lesson-plan-drawer";
 
-const VALID_TABS = new Set(["overview", "assessments", "grades", "attendance", "portfolio", "reports", "communication", "schedule", "standards"]);
+const VALID_TABS = new Set(["overview", "assessments", "grades", "attendance", "portfolio", "reports", "communication", "schedule", "standards", "units"]);
+
+// Colour palette for unit plan dots (assigned by order within class)
+const UNIT_DOT_COLORS = [
+  "#2563eb", // blue
+  "#16a34a", // green
+  "#d97706", // amber
+  "#7c3aed", // purple
+  "#dc2626", // red
+  "#0891b2", // cyan
+  "#be185d", // pink
+  "#65a30d", // lime
+];
 
 const DAY_INDEX: Record<string, number> = { mon: 1, tue: 2, wed: 3, thu: 4, fri: 5 };
 
@@ -106,6 +135,9 @@ export default function ClassHubPage() {
   const learningGoals = useStore((s) => s.learningGoals);
   const allReports = useStore((s) => s.reports);
   const reportCycles = useStore((s) => s.reportCycles);
+  const allUnitPlans = useStore((s) => s.unitPlans);
+  const allLessonPlans = useStore((s) => s.lessonPlans);
+  const allLessonSlotAssignments = useStore((s) => s.lessonSlotAssignments);
 
   const cls = getClassById(classId);
   const students = useMemo(() => {
@@ -137,11 +169,62 @@ export default function ClassHubPage() {
     () => reportCycles.find((c) => c.status === "open" && c.classIds.includes(classId)),
     [reportCycles, classId]
   );
+  const unitPlans = useMemo(
+    () => allUnitPlans.filter((u) => u.classId === classId),
+    [allUnitPlans, classId]
+  );
+  const unitLessonPlans = useMemo(
+    () => allLessonPlans.filter((lp) => lp.classId === classId),
+    [allLessonPlans, classId]
+  );
+  const unitSlotAssignments = useMemo(
+    () => allLessonSlotAssignments.filter((a) => a.classId === classId),
+    [allLessonSlotAssignments, classId]
+  );
+
+  // Map each unit plan to a stable colour from the palette
+  const unitColorMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    unitPlans
+      .slice()
+      .sort((a, b) => a.order - b.order)
+      .forEach((u, i) => {
+        map[u.id] = UNIT_DOT_COLORS[i % UNIT_DOT_COLORS.length];
+      });
+    return map;
+  }, [unitPlans]);
 
   const [incidentDialogOpen, setIncidentDialogOpen] = useState(false);
   const editor = useGradeEditor();
+
+  const handleSaveAndNext = () => {
+    if (!editor.gradingStudentId || !editor.gradingAssessmentId) return;
+    const sorted = [...students].sort((a, b) =>
+      `${a.lastName} ${a.firstName}`.localeCompare(`${b.lastName} ${b.firstName}`)
+    );
+    const currentIdx = sorted.findIndex((s) => s.id === editor.gradingStudentId);
+    editor.handleSaveGrade();
+    if (currentIdx < sorted.length - 1) {
+      editor.openGradingSheet(sorted[currentIdx + 1].id, editor.gradingAssessmentId);
+    } else {
+      toast.success("All students graded!");
+    }
+  };
   const [scheduleAttendanceOpen, setScheduleAttendanceOpen] = useState(false);
   const [scheduleAttendanceDate, setScheduleAttendanceDate] = useState<string | undefined>();
+  // Schedule tab detail sheet state
+  const [scheduleSheetOpen, setScheduleSheetOpen] = useState(false);
+  const [scheduleSheetSlot, setScheduleSheetSlot] = useState<{
+    slot: { day: string; startTime: string; endTime: string; room?: string };
+    day: string;
+    nextDate: string;
+    assignedLesson: (typeof unitLessonPlans)[number] | null;
+    assignedUnit: (typeof unitPlans)[number] | null;
+    unitColor: string | null;
+  } | null>(null);
+  // Lesson plan drawer state (opened from inside the schedule sheet)
+  const [scheduleLessonDrawerOpen, setScheduleLessonDrawerOpen] = useState(false);
+  const [scheduleLessonId, setScheduleLessonId] = useState<string | null>(null);
   // Analytics section state (Grades tab)
   const [showAttention, setShowAttention] = useState(true);
   const [showAllAttention, setShowAllAttention] = useState(false);
@@ -157,19 +240,8 @@ export default function ClassHubPage() {
   if (!cls) return <EmptyState icon={AlertCircle} title="Class not found" description="This class doesn't exist." />;
 
   const publishedAssessments = assessments.filter((a) => a.status === "published");
-  const avgGrade = (() => {
-    const classGrades = grades.filter((g) => g.classId === classId && g.submissionStatus !== "missing" && g.submissionStatus !== "excused");
-    const percentages: number[] = [];
-    classGrades.forEach((g) => {
-      const asmt = assessments.find((a) => a.id === g.assessmentId);
-      if (!asmt) return;
-      const pct = getGradePercentage(g, asmt);
-      if (pct !== null) percentages.push(pct);
-    });
-    if (percentages.length === 0) return "N/A";
-    const avg = percentages.reduce((a, b) => a + b, 0) / percentages.length;
-    return `${Math.round(avg)}%`;
-  })();
+  const classAvgPct = computeClassAveragePercent(grades, assessments, classId);
+  const avgGrade = classAvgPct !== null ? `${classAvgPct}%` : "N/A";
 
   const totalSessions = sessions.length;
   const attendanceRate = (() => {
@@ -201,6 +273,7 @@ export default function ClassHubPage() {
           <TabsTrigger value="assessments">Assessments</TabsTrigger>
           <TabsTrigger value="grades">Gradebook</TabsTrigger>
           <TabsTrigger value="standards">Standards & Skills</TabsTrigger>
+          <TabsTrigger value="units">Unit Plans</TabsTrigger>
           <TabsTrigger value="attendance">Attendance</TabsTrigger>
           <TabsTrigger value="portfolio">Portfolio</TabsTrigger>
           <TabsTrigger value="reports">Reports</TabsTrigger>
@@ -330,6 +403,7 @@ export default function ClassHubPage() {
                         studentIds={studentIds}
                         href={`/assessments/${asmt.id}?classId=${classId}`}
                         variant="card"
+                        unitTitle={asmt.unitId ? unitPlans.find((u) => u.id === asmt.unitId)?.title : undefined}
                       />
                     ))}
                   </div>
@@ -352,95 +426,16 @@ export default function ClassHubPage() {
             const totalMissing = publishedAssessments.reduce((sum, a) => sum + getMissingCount(studentIds, grades.filter((g) => g.assessmentId === a.id), a), 0);
             const totalExcused = publishedAssessments.reduce((sum, a) => sum + getExcusedCount(studentIds, grades.filter((g) => g.assessmentId === a.id), a), 0);
 
-            // Class average with guardrail: only when ≥3 assessments have comparable numeric percentages
-            const assessmentsWithNumericData = publishedAssessments.filter((asmt) => {
-              return students.some((s) => {
-                const g = grades.find((gr) => gr.studentId === s.id && gr.assessmentId === asmt.id);
-                return getGradePercentage(g, asmt) !== null;
-              });
-            });
-            const allPercentages = grades
-              .filter((g) => g.classId === classId)
-              .map((g) => {
-                const asmt = publishedAssessments.find((a) => a.id === g.assessmentId);
-                return asmt ? getGradePercentage(g, asmt) : null;
-              })
-              .filter((v): v is number => v !== null);
-            const classAvgNumeric = assessmentsWithNumericData.length >= 3 && allPercentages.length > 0
-              ? Math.round(allPercentages.reduce((a, b) => a + b, 0) / allPercentages.length)
-              : null;
+            // Class average with guardrail: only show when ≥3 assessments have numeric data
+            const chartData = computeAssessmentChartData(students, grades, publishedAssessments);
+            const classAvgNumeric = chartData.length >= 3 ? computeClassAveragePercent(grades, assessments, classId) : null;
 
-            // Students needing attention
-            const attentionStudents = students.map((student) => {
-              const reasons: string[] = [];
-              // Average below 50%
-              const pcts = publishedAssessments
-                .map((a) => {
-                  const g = grades.find((gr) => gr.studentId === student.id && gr.assessmentId === a.id);
-                  return getGradePercentage(g, a);
-                })
-                .filter((v): v is number => v !== null);
-              const avg = pcts.length > 0 ? pcts.reduce((a, b) => a + b, 0) / pcts.length : null;
-              if (avg !== null && avg < 50) reasons.push(`Below 50%`);
+            // Students needing attention (centralized selector)
+            const attentionStudents = computeAttentionStudents(students, grades, publishedAssessments, learningGoals, classId);
 
-              // Missing count ≥ 2
-              const missingForStudent = publishedAssessments.filter((a) => {
-                const g = grades.find((gr) => gr.studentId === student.id && gr.assessmentId === a.id);
-                return g?.submissionStatus === "missing" && !isGradeComplete(g, a);
-              }).length;
-              if (missingForStudent >= 2) reasons.push(`${missingForStudent} missing`);
+            // Learning insights: weakest standards/criteria (centralized selector)
+            const weakestGoals = computeWeakestGoals(students, grades, publishedAssessments, learningGoals);
 
-              // Beginning mastery levels
-              const beginningGoals: string[] = [];
-              grades
-                .filter((g) => g.studentId === student.id && g.classId === classId && g.submissionStatus !== "excused" && g.standardsMastery?.length)
-                .forEach((g) => {
-                  g.standardsMastery?.forEach((sm) => {
-                    if (sm.level === "beginning") {
-                      const goal = learningGoals.find((lg) => lg.id === sm.standardId);
-                      if (goal && !beginningGoals.includes(goal.code)) {
-                        beginningGoals.push(goal.code);
-                      }
-                    }
-                  });
-                });
-              if (beginningGoals.length > 0) reasons.push(`Beginning in ${beginningGoals.slice(0, 2).join(", ")}`);
-
-              return { student, reasons, avg };
-            }).filter((s) => s.reasons.length > 0).sort((a, b) => (a.avg ?? 100) - (b.avg ?? 100));
-
-            // Learning insights: weakest standards/criteria
-            const goalStats: Record<string, { code: string; title: string; below: number; total: number; levels: Record<string, number> }> = {};
-            publishedAssessments.forEach((asmt) => {
-              students.forEach((student) => {
-                const g = grades.find((gr) => gr.studentId === student.id && gr.assessmentId === asmt.id);
-                if (g?.submissionStatus === "excused") return;
-                g?.standardsMastery?.forEach((sm) => {
-                  const goal = learningGoals.find((lg) => lg.id === sm.standardId);
-                  if (!goal) return;
-                  if (!goalStats[goal.id]) goalStats[goal.id] = { code: goal.code, title: goal.title, below: 0, total: 0, levels: {} };
-                  goalStats[goal.id].total++;
-                  goalStats[goal.id].levels[sm.level] = (goalStats[goal.id].levels[sm.level] || 0) + 1;
-                  if (sm.level === "beginning" || sm.level === "approaching") goalStats[goal.id].below++;
-                });
-              });
-            });
-            const weakestGoals = Object.values(goalStats)
-              .filter((g) => g.total > 0)
-              .sort((a, b) => (b.below / b.total) - (a.below / a.total))
-              .slice(0, 5);
-
-            // Chart data: per-assessment class average
-            const chartData = assessmentsWithNumericData.map((asmt) => {
-              const pcts = students
-                .map((s) => {
-                  const g = grades.find((gr) => gr.studentId === s.id && gr.assessmentId === asmt.id);
-                  return getGradePercentage(g, asmt);
-                })
-                .filter((v): v is number => v !== null);
-              const avg = pcts.length > 0 ? Math.round(pcts.reduce((a, b) => a + b, 0) / pcts.length) : 0;
-              return { name: asmt.title.length > 12 ? asmt.title.slice(0, 12) + "..." : asmt.title, avg, fullName: asmt.title };
-            });
             const strongest = chartData.length > 0 ? chartData.reduce((a, b) => a.avg > b.avg ? a : b) : null;
             const weakest = chartData.length > 0 ? chartData.reduce((a, b) => a.avg < b.avg ? a : b) : null;
 
@@ -737,6 +732,21 @@ export default function ClassHubPage() {
           />
         </TabsContent>
 
+        <TabsContent value="units">
+          <UnitPlansTab
+            classId={classId}
+            programme={cls.programme}
+            units={unitPlans}
+            lessonPlans={unitLessonPlans}
+            lessonSlotAssignments={unitSlotAssignments}
+            assessments={assessments}
+            learningGoals={learningGoals}
+            timetableSlots={cls.schedule}
+            students={students}
+            grades={grades}
+          />
+        </TabsContent>
+
         <TabsContent value="attendance">
           <AttendanceTab
             classId={classId}
@@ -897,6 +907,7 @@ export default function ClassHubPage() {
             {cls.schedule.length === 0 ? (
               <p className="text-[13px] text-muted-foreground">No schedule configured</p>
             ) : (
+              <TooltipProvider>
               <div className="grid grid-cols-5 gap-2">
                 {(["mon", "tue", "wed", "thu", "fri"] as const).map((day) => {
                   const daySlots = cls.schedule.filter((s) => s.day === day);
@@ -910,35 +921,93 @@ export default function ClassHubPage() {
                           <span className="text-[11px] text-muted-foreground">Free</span>
                         </div>
                       ) : (
-                        daySlots.map((slot, i) => (
-                          <button
-                            key={i}
-                            className="w-full rounded-lg bg-[#fff2f0] border border-[#ffc1b7] p-2 mb-1 text-left cursor-pointer hover:bg-[#ffe8e4] transition-colors"
-                            onClick={() => {
-                              setScheduleAttendanceDate(getNextDateForDay(slot.day));
-                              setScheduleAttendanceOpen(true);
-                            }}
-                            title="Click to take attendance"
-                          >
-                            <p className="text-[11px] font-medium text-[#c24e3f]">
-                              {slot.startTime} - {slot.endTime}
-                            </p>
-                            {slot.room && (
-                              <p className="text-[10px] text-muted-foreground">{slot.room}</p>
-                            )}
-                          </button>
-                        ))
+                        daySlots.map((slot, i) => {
+                          const nextDate = getNextDateForDay(slot.day);
+                          // Find the most relevant lesson assignment for this slot
+                          const matchingAssignments = unitSlotAssignments
+                            .filter(
+                              (a) => a.slotDay === slot.day && a.slotStartTime === slot.startTime
+                            )
+                            .sort((a, b) => b.date.localeCompare(a.date));
+
+                          const todayStr = format(new Date(), "yyyy-MM-dd");
+                          const slotAssignment =
+                            matchingAssignments.find((a) => a.date >= todayStr) ??
+                            matchingAssignments[0] ??
+                            null;
+
+                          const assignedLesson = slotAssignment
+                            ? unitLessonPlans.find((lp) => lp.id === slotAssignment.lessonPlanId)
+                            : null;
+                          const assignedUnit = slotAssignment
+                            ? unitPlans.find((u) => u.id === slotAssignment.unitId)
+                            : null;
+                          const dotColor = assignedUnit ? unitColorMap[assignedUnit.id] ?? null : null;
+
+                          // Check attendance for next occurrence
+                          const attTaken = sessions.some((s) => s.date === nextDate);
+
+                          return (
+                            <button
+                              key={i}
+                              type="button"
+                              className="w-full rounded-lg bg-[#fff2f0] border border-[#ffc1b7] p-2 mb-1 text-left hover:bg-[#ffe8e5] transition-colors cursor-pointer"
+                              onClick={() => {
+                                setScheduleSheetSlot({
+                                  slot,
+                                  day: slot.day,
+                                  nextDate,
+                                  assignedLesson: assignedLesson ?? null,
+                                  assignedUnit: assignedUnit ?? null,
+                                  unitColor: dotColor,
+                                });
+                                setScheduleSheetOpen(true);
+                              }}
+                            >
+                              <div className="flex items-center gap-1.5">
+                                {dotColor && (
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <span
+                                        className="inline-block h-2 w-2 rounded-full shrink-0"
+                                        style={{ backgroundColor: dotColor }}
+                                      />
+                                    </TooltipTrigger>
+                                    <TooltipContent side="top" className="text-[11px]">
+                                      {assignedUnit?.title}
+                                    </TooltipContent>
+                                  </Tooltip>
+                                )}
+                                <p className="text-[11px] font-medium text-[#c24e3f]">
+                                  {slot.startTime} – {slot.endTime}
+                                </p>
+                                {attTaken && (
+                                  <CheckCircle2 className="h-3 w-3 text-[#16a34a] shrink-0 ml-auto" />
+                                )}
+                              </div>
+                              {slot.room && (
+                                <p className="text-[10px] text-muted-foreground">{slot.room}</p>
+                              )}
+                              {assignedLesson && (
+                                <p className="text-[10px] text-[#c24e3f]/70 font-medium truncate mt-0.5">
+                                  {assignedLesson.title}
+                                </p>
+                              )}
+                            </button>
+                          );
+                        })
                       )}
                     </div>
                   );
                 })}
               </div>
+              </TooltipProvider>
             )}
           </Card>
         </TabsContent>
       </Tabs>
 
-      <GradingSheet editor={editor} />
+      <GradingSheet editor={editor} onSaveAndNext={handleSaveAndNext} />
 
       <IncidentDialog
         open={incidentDialogOpen}
@@ -951,6 +1020,199 @@ export default function ClassHubPage() {
         onOpenChange={setScheduleAttendanceOpen}
         prefilledClassId={classId}
         prefilledDate={scheduleAttendanceDate}
+      />
+
+      {/* Schedule slot detail sheet */}
+      <Sheet open={scheduleSheetOpen} onOpenChange={setScheduleSheetOpen}>
+        <SheetContent className="sm:max-w-[420px]">
+          {scheduleSheetSlot && (() => {
+            const { slot, nextDate, assignedLesson, assignedUnit, unitColor } = scheduleSheetSlot;
+            const attTaken = sessions.some((s) => s.date === nextDate);
+
+            return (
+              <>
+                <SheetHeader>
+                  <SheetTitle className="text-[18px]">{cls.name}</SheetTitle>
+                  <SheetDescription>
+                    <Badge
+                      variant="outline"
+                      className="text-[11px] border-transparent bg-[#dbeafe] text-[#2563eb]"
+                    >
+                      Class
+                    </Badge>
+                  </SheetDescription>
+                </SheetHeader>
+
+                <div className="mt-6 space-y-4">
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-3 text-[13px]">
+                      <CalendarDays className="h-4 w-4 text-muted-foreground shrink-0" />
+                      <span>
+                        {(() => {
+                          try { return format(parseISO(nextDate), "EEEE, MMMM d, yyyy"); }
+                          catch { return nextDate; }
+                        })()}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-3 text-[13px]">
+                      <Clock className="h-4 w-4 text-muted-foreground shrink-0" />
+                      <span>{slot.startTime} – {slot.endTime}</span>
+                    </div>
+                    {slot.room && (
+                      <div className="flex items-center gap-3 text-[13px]">
+                        <MapPin className="h-4 w-4 text-muted-foreground shrink-0" />
+                        <span>{slot.room}</span>
+                      </div>
+                    )}
+                    <div className="flex items-center gap-3 text-[13px]">
+                      <Users className="h-4 w-4 text-muted-foreground shrink-0" />
+                      <span>{students.length} students</span>
+                    </div>
+                    <div className="flex items-center gap-3 text-[13px]">
+                      <CheckCircle2 className="h-4 w-4 text-muted-foreground shrink-0" />
+                      {attTaken ? (
+                        <Badge variant="outline" className="text-[11px] bg-[#dcfce7] text-[#16a34a] border-transparent">
+                          <CheckCircle2 className="h-3 w-3 mr-1" />
+                          Taken
+                        </Badge>
+                      ) : (
+                        <span className="text-muted-foreground">Not taken</span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Unit plan section */}
+                  {assignedUnit && (
+                    <>
+                      <Separator />
+                      <div>
+                        <span className="text-[12px] font-medium text-muted-foreground uppercase tracking-wide">
+                          Unit Plan
+                        </span>
+                        <div className="mt-1.5 flex items-center gap-2">
+                          {unitColor && (
+                            <span
+                              className="inline-block h-2.5 w-2.5 rounded-full shrink-0"
+                              style={{ backgroundColor: unitColor }}
+                            />
+                          )}
+                          <button
+                            className="text-[13px] font-medium text-[#c24e3f] hover:underline text-left"
+                            onClick={() => {
+                              setScheduleSheetOpen(false);
+                              setActiveTab("units");
+                            }}
+                          >
+                            {assignedUnit.title}
+                          </button>
+                        </div>
+                      </div>
+                    </>
+                  )}
+
+                  {/* Lesson plan section */}
+                  {assignedLesson && (
+                    <>
+                      <Separator />
+                      <div>
+                        <span className="text-[12px] font-medium text-muted-foreground uppercase tracking-wide">
+                          Lesson Plan
+                        </span>
+                        <div className="mt-1.5">
+                          <p className="text-[13px] font-medium">{assignedLesson.title}</p>
+                          <div className="flex items-center gap-2 mt-0.5">
+                            <StatusBadge status={assignedLesson.status} showIcon={false} />
+                            {assignedLesson.estimatedDurationMinutes && (
+                              <span className="text-[11px] text-muted-foreground">
+                                {assignedLesson.estimatedDurationMinutes} min
+                              </span>
+                            )}
+                          </div>
+                          {assignedLesson.objectives && assignedLesson.objectives.length > 0 && (
+                            <ul className="mt-2 space-y-0.5">
+                              {assignedLesson.objectives.slice(0, 2).map((obj, oi) => (
+                                <li key={oi} className="text-[12px] text-muted-foreground flex items-start gap-1.5">
+                                  <span className="text-[10px] mt-0.5">•</span>
+                                  <span>{obj}</span>
+                                </li>
+                              ))}
+                              {assignedLesson.objectives.length > 2 && (
+                                <li className="text-[11px] text-muted-foreground">
+                                  +{assignedLesson.objectives.length - 2} more
+                                </li>
+                              )}
+                            </ul>
+                          )}
+                        </div>
+                      </div>
+                    </>
+                  )}
+
+                  <Separator />
+
+                  <div className="flex flex-col gap-2">
+                    <Button
+                      size="sm"
+                      onClick={() => {
+                        setScheduleAttendanceDate(nextDate);
+                        setScheduleAttendanceOpen(true);
+                      }}
+                    >
+                      {attTaken ? (
+                        <>
+                          <Pencil className="h-4 w-4 mr-1.5" />
+                          Edit attendance
+                        </>
+                      ) : (
+                        <>
+                          <CheckCircle2 className="h-4 w-4 mr-1.5" />
+                          Take attendance
+                        </>
+                      )}
+                    </Button>
+                    {assignedLesson && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setScheduleLessonId(assignedLesson.id);
+                          setScheduleLessonDrawerOpen(true);
+                        }}
+                      >
+                        <FileText className="h-4 w-4 mr-1.5" />
+                        Open lesson plan
+                      </Button>
+                    )}
+                    <Link
+                      href={`/classes/${classId}`}
+                      className="inline-flex items-center gap-1.5 text-[13px] text-[#c24e3f] hover:underline"
+                      onClick={() => setScheduleSheetOpen(false)}
+                    >
+                      View class
+                      <ExternalLink className="h-3.5 w-3.5" />
+                    </Link>
+                  </div>
+                </div>
+              </>
+            );
+          })()}
+        </SheetContent>
+      </Sheet>
+
+      <LessonPlanDrawer
+        open={scheduleLessonDrawerOpen}
+        onOpenChange={setScheduleLessonDrawerOpen}
+        lessonPlan={
+          scheduleLessonId
+            ? unitLessonPlans.find((lp) => lp.id === scheduleLessonId) ?? null
+            : null
+        }
+        learningGoals={learningGoals}
+        assignment={
+          scheduleLessonId
+            ? unitSlotAssignments.find((a) => a.lessonPlanId === scheduleLessonId)
+            : undefined
+        }
       />
     </div>
   );

@@ -165,8 +165,31 @@ export function BreadcrumbNav() {
     }
   }
 
+  // /reports/{id}?cycleId= → Home > Reports > CycleName > Report - StudentName
+  const contextCycleId = searchParams.get("cycleId");
+  if (pathname.match(/^\/reports\/[^/]+$/) && contextCycleId && !pathname.includes("cycles")) {
+    const cycle = reportCycles.find((c) => c.id === contextCycleId);
+    if (cycle) {
+      const rptIdx = entries.findIndex((e) => e.href.startsWith("/reports"));
+      if (rptIdx !== -1) {
+        // Replace "Reports" entry with Reports > CycleName hierarchy
+        if (entries[rptIdx].label === "Reports") {
+          entries.splice(rptIdx + 1, 0,
+            { label: cycle.name, href: `/reports/cycles/${cycle.id}` },
+          );
+        } else {
+          // It's the report detail entry — insert Reports + CycleName before it
+          entries.splice(rptIdx, 0,
+            { label: cycle.name, href: `/reports/cycles/${cycle.id}` },
+          );
+        }
+      }
+    }
+  }
+
   // /reports/{id}?classId= → Home > Classes > ClassName > Report - StudentName
-  if (pathname.match(/^\/reports\/[^/]+$/) && contextClassId && !pathname.includes("cycles")) {
+  // (only if no cycleId context — cycleId takes priority)
+  if (pathname.match(/^\/reports\/[^/]+$/) && contextClassId && !contextCycleId && !pathname.includes("cycles")) {
     const cls = classes.find((c) => c.id === contextClassId);
     const rptIdx = entries.findIndex((e) => e.href.startsWith("/reports"));
     if (rptIdx !== -1) {

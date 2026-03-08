@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import { useStore } from "@/stores";
 import { PageHeader } from "@/components/shared/page-header";
 import { StatusBadge } from "@/components/shared/status-badge";
@@ -29,6 +29,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import {
+  ArrowLeft,
   AlertCircle,
   FileText,
   Printer,
@@ -169,7 +170,9 @@ const ADDABLE_SECTION_TYPES = [
 
 export default function ReportDetailPage() {
   const params = useParams();
+  const searchParams = useSearchParams();
   const reportId = params.reportId as string;
+  const cycleIdFromUrl = searchParams.get("cycleId");
   const loading = useMockLoading([reportId]);
 
   const reports = useStore((s) => s.reports);
@@ -1514,8 +1517,22 @@ export default function ReportDetailPage() {
     }
   };
 
+  // Resolve cycle context from URL param (graceful fallback if missing or invalid)
+  const cycleFromUrl = cycleIdFromUrl
+    ? reportCycles.find((c) => c.id === cycleIdFromUrl)
+    : null;
+
   return (
     <div>
+      {cycleFromUrl && (
+        <Link
+          href={`/reports/cycles/${cycleFromUrl.id}`}
+          className="inline-flex items-center gap-1.5 text-[13px] text-muted-foreground hover:text-foreground transition-colors mb-3"
+        >
+          <ArrowLeft className="h-3.5 w-3.5" />
+          Back to {cycleFromUrl.name}
+        </Link>
+      )}
       <PageHeader
         title={`Report: ${studentName}`}
         description={`${cls?.name || "Unknown Class"} \u00b7 ${cycle?.name || "Unknown Cycle"} \u00b7 ${cycle?.term || ""}`}
