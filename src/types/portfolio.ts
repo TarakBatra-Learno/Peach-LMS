@@ -19,6 +19,10 @@ export interface PortfolioArtifact {
   isReportEligible: boolean;
   linkedReportId?: ID;
   flaggedForReport?: boolean;
+  /** Source of artifact content */
+  sourceType?: "manual" | "submission" | "drive_import";
+  /** Reference ID when sourced from a submission */
+  sourceId?: ID;
 }
 
 export interface Reflection {

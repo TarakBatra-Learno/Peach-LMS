@@ -3,6 +3,7 @@ import { persist, createJSONStorage } from "zustand/middleware";
 import { AppStore, AppState } from "./types";
 import { materializeTimetableOccurrences } from "@/lib/unit-planning-utils";
 import type { LessonSlotAssignment } from "@/types/unit-planning";
+import { generateId } from "@/services/mock-service";
 
 const STORAGE_KEY = "peach-lms-store";
 
@@ -39,6 +40,12 @@ const emptyState: Omit<AppState, 'ui'> = {
   unitPlans: [],
   lessonPlans: [],
   lessonSlotAssignments: [],
+  // Student Portal
+  currentUser: null,
+  submissions: [],
+  studentGoals: [],
+  goalEvidenceLinks: [],
+  studentNotifications: [],
 };
 
 export const useStore = create<AppStore>()(
@@ -56,6 +63,19 @@ export const useStore = create<AppStore>()(
       setSimulateLatency: (v) => set((s) => ({ ui: { ...s.ui, simulateLatency: v } })),
       setSimulateErrors: (v) => set((s) => ({ ui: { ...s.ui, simulateErrors: v } })),
       setHasHydrated: (v) => set((s) => ({ ui: { ...s.ui, hasHydrated: v } })),
+
+      // Persona
+      setCurrentUser: (user) => set({ currentUser: user }),
+      switchPersona: (user) => set((s) => ({
+        currentUser: user,
+        ui: {
+          ...s.ui,
+          sidebarCollapsed: false,
+          activeClassId: null,
+          drawerOpen: false,
+          drawerContent: null,
+        },
+      })),
 
       // Classes
       getClassById: (id) => get().classes.find((c) => c.id === id),
@@ -135,12 +155,20 @@ export const useStore = create<AppStore>()(
       })),
 
       // Communication
+      addChannel: (channel) => set((s) => ({ channels: [...s.channels, channel] })),
       addAnnouncement: (announcement) => set((s) => ({ announcements: [...s.announcements, announcement] })),
       updateAnnouncement: (id, updates) => set((s) => ({
         announcements: s.announcements.map((a) => a.id === id ? { ...a, ...updates } : a),
       })),
       getAnnouncementsByChannel: (channelId) => get().announcements.filter((a) => a.channelId === channelId),
       getAnnouncementsByClass: (classId) => get().announcements.filter((a) => a.classId === classId),
+      addThreadReply: (announcementId, reply) => set((s) => ({
+        announcements: s.announcements.map((a) =>
+          a.id === announcementId
+            ? { ...a, threadReplies: [...a.threadReplies, reply] }
+            : a
+        ),
+      })),
       updateNotificationSettings: (settings) => set((s) => ({
         notificationSettings: { ...s.notificationSettings, ...settings },
       })),
@@ -272,6 +300,140 @@ export const useStore = create<AppStore>()(
           a.id === assessmentId ? { ...a, unitId: undefined } : a
         ),
       })),
+
+      // Submissions
+      addSubmission: (submission) => set((s) => ({ submissions: [...s.submissions, submission] })),
+      updateSubmission: (id, updates) => {
+        const state = get();
+        const oldSub = state.submissions.find((sub) => sub.id === id);
+
+        // Apply the submission update
+        set((s) => ({
+          submissions: s.submissions.map((sub) => sub.id === id ? { ...sub, ...updates } : sub),
+        }));
+
+        // ── Sync side-effect: Submission.status → GradeRecord.submissionStatus ──
+        // Only fires when status transitions to "submitted" (first submit).
+        // Deferred: returned, resubmitted, and draft transitions do nothing.
+        // Guardrails:
+        //   - Never touch excused GradeRecords
+        //   - Never clear grade data fields (score, rubric, feedback, etc.)
+        //   - Teacher manual overrides still win after sync
+        if (
+          updates.status === "submitted" &&
+          oldSub &&
+          oldSub.status !== "submitted"
+        ) {
+          const currentState = get();
+          const assessment = currentState.assessments.find(
+            (a) => a.id === oldSub.assessmentId
+          );
+          if (!assessment) return;
+
+          const existingGrade = currentState.grades.find(
+            (g) =>
+              g.assessmentId === oldSub.assessmentId &&
+              g.studentId === oldSub.studentId
+          );
+
+          if (!existingGrade) {
+            // Create a minimal shell GradeRecord
+            set((s) => ({
+              grades: [
+                ...s.grades,
+                {
+                  id: generateId("grade"),
+                  assessmentId: oldSub.assessmentId,
+                  studentId: oldSub.studentId,
+                  classId: oldSub.classId,
+                  gradingMode: assessment.gradingMode,
+                  submissionStatus: "submitted" as const,
+                  submittedAt: new Date().toISOString(),
+                },
+              ],
+            }));
+          } else if (
+            existingGrade.submissionStatus === "none" ||
+            existingGrade.submissionStatus === "missing"
+          ) {
+            // Update existing — only change submissionStatus, preserve all grade data
+            set((s) => ({
+              grades: s.grades.map((g) =>
+                g.id === existingGrade.id
+                  ? { ...g, submissionStatus: "submitted" as const, submittedAt: new Date().toISOString() }
+                  : g
+              ),
+            }));
+          }
+          // If excused or already "submitted" → do nothing (idempotent, respects terminal state)
+        }
+      },
+      getSubmissionsByAssessment: (assessmentId) => get().submissions.filter((s) => s.assessmentId === assessmentId),
+      getSubmissionsByStudent: (studentId) => get().submissions.filter((s) => s.studentId === studentId),
+
+      // Student Goals
+      addStudentGoal: (goal) => set((s) => ({ studentGoals: [...s.studentGoals, goal] })),
+      updateStudentGoal: (id, updates) => set((s) => ({
+        studentGoals: s.studentGoals.map((g) =>
+          g.id === id ? { ...g, ...updates, updatedAt: new Date().toISOString() } : g
+        ),
+      })),
+      deleteStudentGoal: (id) => set((s) => ({
+        studentGoals: s.studentGoals.filter((g) => g.id !== id),
+        goalEvidenceLinks: s.goalEvidenceLinks.filter((l) => l.goalId !== id),
+      })),
+      getStudentGoalsByStudent: (studentId) => get().studentGoals.filter((g) => g.studentId === studentId),
+
+      // Goal Evidence Links
+      addGoalEvidenceLink: (link) => set((s) => ({
+        goalEvidenceLinks: [...s.goalEvidenceLinks, link],
+        studentGoals: s.studentGoals.map((g) =>
+          g.id === link.goalId ? { ...g, updatedAt: new Date().toISOString() } : g
+        ),
+      })),
+      updateGoalEvidenceLink: (id, updates) => set((s) => ({
+        goalEvidenceLinks: s.goalEvidenceLinks.map((l) =>
+          l.id === id ? { ...l, ...updates } : l
+        ),
+      })),
+      deleteGoalEvidenceLink: (id) => set((s) => {
+        const link = s.goalEvidenceLinks.find((l) => l.id === id);
+        return {
+          goalEvidenceLinks: s.goalEvidenceLinks.filter((l) => l.id !== id),
+          studentGoals: link
+            ? s.studentGoals.map((g) =>
+                g.id === link.goalId ? { ...g, updatedAt: new Date().toISOString() } : g
+              )
+            : s.studentGoals,
+        };
+      }),
+      getGoalEvidenceLinksByGoal: (goalId) => get().goalEvidenceLinks.filter((l) => l.goalId === goalId),
+      getGoalEvidenceLinksBySource: (sourceType, sourceId) =>
+        get().goalEvidenceLinks.filter((l) => l.sourceType === sourceType && l.sourceId === sourceId),
+
+      // Student Notifications
+      addStudentNotification: (notification) => set((s) => {
+        // Deduplication: check if notification with same dedupeKey already exists
+        if (notification.dedupeKey) {
+          const exists = s.studentNotifications.some(
+            (n) => n.dedupeKey === notification.dedupeKey
+          );
+          if (exists) return {};
+        }
+        return { studentNotifications: [...s.studentNotifications, notification] };
+      }),
+      markNotificationRead: (id) => set((s) => ({
+        studentNotifications: s.studentNotifications.map((n) =>
+          n.id === id ? { ...n, read: true } : n
+        ),
+      })),
+      markAllNotificationsRead: (studentId) => set((s) => ({
+        studentNotifications: s.studentNotifications.map((n) =>
+          n.studentId === studentId ? { ...n, read: true } : n
+        ),
+      })),
+      getNotificationsByStudent: (studentId) =>
+        get().studentNotifications.filter((n) => n.studentId === studentId),
 
       // Reset
       resetAllData: (data) => set({ ...data }),

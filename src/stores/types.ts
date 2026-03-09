@@ -9,6 +9,11 @@ import { ReportCycle, Report, ReportTemplate, TranscriptYear } from "@/types/rep
 import { Channel, Announcement, NotificationSettings } from "@/types/communication";
 import { CalendarEvent } from "@/types/calendar";
 import { UnitPlan, LessonPlan, LessonSlotAssignment } from "@/types/unit-planning";
+import { CurrentUser } from "@/types/auth";
+import { Submission } from "@/types/submission";
+import { StudentGoal } from "@/types/student-goal";
+import { GoalEvidenceLink } from "@/types/goal-evidence";
+import { StudentNotification } from "@/types/notification";
 
 export interface UIState {
   sidebarCollapsed: boolean;
@@ -45,6 +50,13 @@ export interface AppState {
   lessonPlans: LessonPlan[];
   lessonSlotAssignments: LessonSlotAssignment[];
 
+  // Student Portal Data
+  currentUser: CurrentUser | null;
+  submissions: Submission[];
+  studentGoals: StudentGoal[];
+  goalEvidenceLinks: GoalEvidenceLink[];
+  studentNotifications: StudentNotification[];
+
   // UI State
   ui: UIState;
 }
@@ -59,6 +71,10 @@ export interface AppActions {
   setSimulateLatency: (v: boolean) => void;
   setSimulateErrors: (v: boolean) => void;
   setHasHydrated: (v: boolean) => void;
+
+  // Persona
+  setCurrentUser: (user: CurrentUser | null) => void;
+  switchPersona: (user: CurrentUser) => void;
 
   // Classes
   getClassById: (id: string) => Class | undefined;
@@ -114,10 +130,12 @@ export interface AppActions {
   updateReportCycle: (id: string, updates: Partial<ReportCycle>) => void;
 
   // Communication
+  addChannel: (channel: Channel) => void;
   addAnnouncement: (announcement: Announcement) => void;
   updateAnnouncement: (id: string, updates: Partial<Announcement>) => void;
   getAnnouncementsByChannel: (channelId: string) => Announcement[];
   getAnnouncementsByClass: (classId: string) => Announcement[];
+  addThreadReply: (announcementId: string, reply: { id: string; authorName: string; authorId?: string; authorRole?: "teacher" | "student"; body: string; createdAt: string }) => void;
   updateNotificationSettings: (settings: Partial<NotificationSettings>) => void;
 
   // Calendar
@@ -147,6 +165,31 @@ export interface AppActions {
   // Assessment ↔ Unit linking
   linkAssessmentToUnit: (assessmentId: string, unitId: string) => void;
   unlinkAssessmentFromUnit: (assessmentId: string) => void;
+
+  // Submissions
+  addSubmission: (submission: Submission) => void;
+  updateSubmission: (id: string, updates: Partial<Submission>) => void;
+  getSubmissionsByAssessment: (assessmentId: string) => Submission[];
+  getSubmissionsByStudent: (studentId: string) => Submission[];
+
+  // Student Goals
+  addStudentGoal: (goal: StudentGoal) => void;
+  updateStudentGoal: (id: string, updates: Partial<StudentGoal>) => void;
+  deleteStudentGoal: (id: string) => void;
+  getStudentGoalsByStudent: (studentId: string) => StudentGoal[];
+
+  // Goal Evidence Links
+  addGoalEvidenceLink: (link: GoalEvidenceLink) => void;
+  updateGoalEvidenceLink: (id: string, updates: Partial<GoalEvidenceLink>) => void;
+  deleteGoalEvidenceLink: (id: string) => void;
+  getGoalEvidenceLinksByGoal: (goalId: string) => GoalEvidenceLink[];
+  getGoalEvidenceLinksBySource: (sourceType: GoalEvidenceLink["sourceType"], sourceId: string) => GoalEvidenceLink[];
+
+  // Student Notifications
+  addStudentNotification: (notification: StudentNotification) => void;
+  markNotificationRead: (id: string) => void;
+  markAllNotificationsRead: (studentId: string) => void;
+  getNotificationsByStudent: (studentId: string) => StudentNotification[];
 
   // Reset
   resetAllData: (data: Omit<AppState, 'ui'>) => void;

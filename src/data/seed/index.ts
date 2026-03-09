@@ -11,6 +11,7 @@ import type { Channel, Announcement, NotificationSettings } from "@/types/commun
 import type { CalendarEvent } from "@/types/calendar";
 import type { AttendanceStatus, MasteryLevel } from "@/types/common";
 import { generateUnitPlanningData } from "./unit-planning-seed";
+import { generateSeedSubmissions, generateSeedStudentGoals, generateSeedGoalEvidenceLinks, generateSeedNotifications } from "./student-seed";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -1013,6 +1014,37 @@ export function generateSeedData() {
     }
   }
 
+  // DM channels (student → teacher of enrolled class)
+  chCount++;
+  channels.push({
+    id: chId(chCount),
+    classId: CLS_MYP_HR,
+    name: "DM: Aarav Patel ↔ Ms. Mitchell",
+    type: "dm",
+    participantIds: ["stu_01", "tchr_01"],
+    createdAt: isoTime(subDays(TODAY, 5)),
+  });
+  chCount++;
+  channels.push({
+    id: chId(chCount),
+    classId: CLS_MYP_SCI,
+    name: "DM: Mei Chen ↔ Ms. Mitchell",
+    type: "dm",
+    participantIds: ["stu_02", "tchr_01"],
+    createdAt: isoTime(subDays(TODAY, 3)),
+  });
+
+  // Project channel (small group)
+  chCount++;
+  channels.push({
+    id: chId(chCount),
+    classId: CLS_MYP_SCI,
+    name: "Lab Project: Ecosystems Team A",
+    type: "project",
+    participantIds: ["stu_01", "stu_02", "stu_03", "tchr_01"],
+    createdAt: isoTime(subDays(TODAY, 7)),
+  });
+
   // -----------------------------------------------------------------------
   // Announcements (14 - one linked per published assessment + extras)
   // -----------------------------------------------------------------------
@@ -1064,6 +1096,68 @@ export function generateSeedData() {
       sentAt: isoTime(subDays(TODAY, annCount)),
       createdAt: isoTime(subDays(TODAY, annCount + 1)),
       threadReplies: [],
+    });
+  }
+
+  // DM thread messages (using announcement model for messages)
+  const dmChannel1 = channels.find(c => c.type === "dm" && c.participantIds?.includes("stu_01"))!;
+  const dmChannel2 = channels.find(c => c.type === "dm" && c.participantIds?.includes("stu_02"))!;
+  const projectChannel = channels.find(c => c.type === "project")!;
+
+  if (dmChannel1) {
+    annCount++;
+    announcements.push({
+      id: annId(annCount),
+      channelId: dmChannel1.id,
+      classId: dmChannel1.classId,
+      title: "Question about homework",
+      body: "Hi Ms. Mitchell, I had a question about the essay requirements. Do we need to include a bibliography?",
+      attachments: [],
+      status: "sent",
+      sentAt: isoTime(subDays(TODAY, 4)),
+      createdAt: isoTime(subDays(TODAY, 4)),
+      threadReplies: [
+        { id: "tr_dm_01", authorName: "Ms. Mitchell", authorId: "tchr_01", authorRole: "teacher", body: "Yes, please include a bibliography with at least 3 sources. APA or MLA format is fine.", createdAt: isoTime(subDays(TODAY, 4)) },
+        { id: "tr_dm_02", authorName: "Aarav Patel", authorId: "stu_01", authorRole: "student", body: "Thank you! I'll use APA format.", createdAt: isoTime(subDays(TODAY, 3)) },
+      ],
+    });
+  }
+
+  if (dmChannel2) {
+    annCount++;
+    announcements.push({
+      id: annId(annCount),
+      channelId: dmChannel2.id,
+      classId: dmChannel2.classId,
+      title: "Extension request",
+      body: "Ms. Mitchell, could I get an extension on the lab report? I've been unwell this week.",
+      attachments: [],
+      status: "sent",
+      sentAt: isoTime(subDays(TODAY, 2)),
+      createdAt: isoTime(subDays(TODAY, 2)),
+      threadReplies: [
+        { id: "tr_dm_03", authorName: "Ms. Mitchell", authorId: "tchr_01", authorRole: "teacher", body: "Of course, Mei. I hope you feel better soon. You can submit by next Wednesday.", createdAt: isoTime(subDays(TODAY, 2)) },
+      ],
+    });
+  }
+
+  if (projectChannel) {
+    annCount++;
+    announcements.push({
+      id: annId(annCount),
+      channelId: projectChannel.id,
+      classId: projectChannel.classId,
+      title: "Project planning",
+      body: "Team, let's divide up the research areas for our ecosystems project. I can take the freshwater section.",
+      attachments: [],
+      status: "sent",
+      sentAt: isoTime(subDays(TODAY, 6)),
+      createdAt: isoTime(subDays(TODAY, 6)),
+      threadReplies: [
+        { id: "tr_proj_01", authorName: "Mei Chen", authorId: "stu_02", authorRole: "student", body: "I'll cover marine ecosystems. Does anyone want to do the terrestrial section?", createdAt: isoTime(subDays(TODAY, 6)) },
+        { id: "tr_proj_02", authorName: "Liam Nakamura", authorId: "stu_03", authorRole: "student", body: "I can handle terrestrial! When should we aim to have our research done?", createdAt: isoTime(subDays(TODAY, 5)) },
+        { id: "tr_proj_03", authorName: "Ms. Mitchell", authorId: "tchr_01", authorRole: "teacher", body: "Great teamwork! Try to have your individual research completed by next Friday so you have time to combine everything.", createdAt: isoTime(subDays(TODAY, 5)) },
+      ],
     });
   }
 
@@ -1271,5 +1365,11 @@ export function generateSeedData() {
     unitPlans: unitPlanningData.unitPlans,
     lessonPlans: unitPlanningData.lessonPlans,
     lessonSlotAssignments: unitPlanningData.lessonSlotAssignments,
+    // Student Portal
+    currentUser: null,
+    submissions: generateSeedSubmissions(assessments),
+    studentGoals: generateSeedStudentGoals(),
+    goalEvidenceLinks: generateSeedGoalEvidenceLinks(),
+    studentNotifications: generateSeedNotifications(),
   };
 }

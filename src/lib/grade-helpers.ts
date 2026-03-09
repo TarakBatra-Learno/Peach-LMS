@@ -398,3 +398,68 @@ export function getGradePercentage(
   }
   return null;
 }
+
+// ---------------------------------------------------------------------------
+// Student-facing display helpers
+// ---------------------------------------------------------------------------
+// These provide student-appropriate labels where the teacher-facing helpers
+// use abbreviations or teacher-centric language.
+
+/**
+ * Student-friendly grade cell display.
+ * Identical to `getGradeCellDisplay()` except:
+ *   - "E" → "Excused" (spelled out for student clarity)
+ *   - "M" → "Missing" (spelled out for student clarity)
+ *   - "-" → "—" (em-dash for visual distinction on student surfaces)
+ *
+ * Use this on student-facing surfaces instead of `getGradeCellDisplay()`.
+ */
+export function getStudentGradeCellDisplay(
+  grade: GradeRecord | undefined,
+  assessment: Assessment
+): string {
+  if (!grade) return "—";
+
+  if (grade.submissionStatus === "excused") return "Excused";
+
+  const graded = isGradeComplete(grade, assessment);
+
+  if (!graded) {
+    if (grade.submissionStatus === "missing") return "Missing";
+    return "—";
+  }
+
+  // For graded values, delegate to the shared implementation
+  // (numeric/mode-specific values are the same for both personas)
+  return getGradeCellDisplay(grade, assessment);
+}
+
+/**
+ * Student-friendly status label for StatusBadge overrides.
+ * Maps internal status values to student-appropriate display labels.
+ *
+ * Returns undefined when no override is needed (default StatusBadge label is fine).
+ */
+export function getStudentStatusLabel(status: string): string | undefined {
+  switch (status) {
+    case "submitted":
+      return "Submitted";
+    default:
+      return undefined;
+  }
+}
+
+/**
+ * Student-friendly StatusBadge variant override.
+ * Returns a variant override when the default is inappropriate for students.
+ *
+ * Returns undefined when no override is needed.
+ */
+export function getStudentStatusVariant(status: string): "success" | "warning" | "danger" | "info" | "neutral" | "primary" | undefined {
+  switch (status) {
+    case "submitted":
+      return "success"; // Student: submitting is positive (green), not "needs action" (amber)
+    default:
+      return undefined;
+  }
+}

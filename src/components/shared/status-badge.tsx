@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-type StatusVariant = "success" | "warning" | "danger" | "info" | "neutral" | "primary";
+export type StatusVariant = "success" | "warning" | "danger" | "info" | "neutral" | "primary";
 
 const variantStyles: Record<StatusVariant, string> = {
   success: "bg-[#dcfce7] text-[#16a34a] border-transparent",
@@ -81,15 +81,18 @@ const statusMap: Record<string, { variant: StatusVariant; label?: string }> = {
 
 interface StatusBadgeProps {
   status: string;
+  /** Override the auto-mapped variant (color/icon). Use to change persona-specific styling. */
   variant?: StatusVariant;
+  /** Override the auto-mapped label text. Use when the same status needs different labels by persona (e.g. student sees "Submitted" while teacher sees "To mark"). */
+  label?: string;
   showIcon?: boolean;
   className?: string;
 }
 
-export function StatusBadge({ status, variant, showIcon = true, className }: StatusBadgeProps) {
+export function StatusBadge({ status, variant, label: labelOverride, showIcon = true, className }: StatusBadgeProps) {
   const mapped = statusMap[status];
   const resolvedVariant = variant || mapped?.variant || "neutral";
-  const label = mapped?.label || status.charAt(0).toUpperCase() + status.slice(1).replace(/_/g, " ");
+  const label = labelOverride || mapped?.label || status.charAt(0).toUpperCase() + status.slice(1).replace(/_/g, " ");
   const Icon = variantIcons[resolvedVariant];
 
   return (

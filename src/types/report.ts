@@ -39,6 +39,8 @@ export interface Report {
   distributionStatus: DistributionStatus;
   publishedAt?: string;
   distributedAt?: string;
+  /** Timestamp of when the student first viewed this report */
+  viewedByStudentAt?: string;
 }
 
 export interface ReportSection {

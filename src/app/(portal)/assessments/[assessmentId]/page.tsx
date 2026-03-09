@@ -8,6 +8,7 @@ import { StatusBadge } from "@/components/shared/status-badge";
 import { StatCard } from "@/components/shared/stat-card";
 import { EmptyState } from "@/components/shared/empty-state";
 import { DetailSkeleton } from "@/components/shared/skeleton-loader";
+import { SubmissionPreviewDrawer } from "@/components/shared/submission-preview-drawer";
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import {
   Dialog,
@@ -17,6 +18,7 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { useMockLoading } from "@/lib/hooks/use-mock-loading";
+import { createGradeReleasedNotification } from "@/lib/notification-events";
 import { generateId } from "@/services/mock-service";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -158,6 +160,9 @@ export default function AssessmentDetailPage() {
   const deleteCalendarEvent = useStore((s) => s.deleteCalendarEvent);
   const learningGoals = useStore((s) => s.learningGoals);
   const unitPlans = useStore((s) => s.unitPlans);
+  const getSubmissionsByAssessment = useStore((s) => s.getSubmissionsByAssessment);
+  const updateSubmission = useStore((s) => s.updateSubmission);
+  const addStudentNotification = useStore((s) => s.addStudentNotification);
 
   const assessment = assessments.find((a) => a.id === assessmentId);
   const cls = assessment ? getClassById(assessment.classId) : undefined;
@@ -210,6 +215,12 @@ export default function AssessmentDetailPage() {
   const [publishConfirm, setPublishConfirm] = useState(false);
   const [archiveConfirm, setArchiveConfirm] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
+  const [releaseGradesConfirm, setReleaseGradesConfirm] = useState(false);
+
+  // Student instructions state
+  const [studentInstructionsDraft, setStudentInstructionsDraft] = useState(
+    () => assessment?.studentInstructions ?? ""
+  );
 
   // Edit & Duplicate (#15)
   const [editDialogOpen, setEditDialogOpen] = useState(false);
@@ -223,6 +234,11 @@ export default function AssessmentDetailPage() {
 
   // Grading filter (#8)
   const [gradingFilter, setGradingFilter] = useState<"all" | "pending" | "submitted" | "completed" | "missing" | "excused">("all");
+
+  // Submissions tab state
+  const [submissionPreviewOpen, setSubmissionPreviewOpen] = useState(false);
+  const [previewSubmissionId, setPreviewSubmissionId] = useState<string | null>(null);
+  const allSubmissions = getSubmissionsByAssessment(assessmentId);
 
   // Rubric criteria builder state
   const [rubricCriteria, setRubricCriteria] = useState<SimpleCriterion[]>(
@@ -571,6 +587,37 @@ export default function AssessmentDetailPage() {
     window.history.back();
   };
 
+  const handleReleaseGrades = () => {
+    updateAssessment(assessmentId, { gradesReleasedAt: new Date().toISOString() });
+    setReleaseGradesConfirm(false);
+
+    // Notify each graded student
+    let notifiedCount = 0;
+    if (assessment && cls) {
+      for (const grade of grades) {
+        addStudentNotification(
+          createGradeReleasedNotification({
+            studentId: grade.studentId,
+            assessmentId: assessment.id,
+            assessmentTitle: assessment.title,
+            className: cls.name,
+            classId: cls.id,
+          })
+        );
+        notifiedCount++;
+      }
+    }
+
+    toast.success(`Grades released — ${notifiedCount} student${notifiedCount !== 1 ? "s" : ""} notified`, {
+      description: `Students can now see their grades for "${assessment?.title}".`,
+    });
+  };
+
+  const handleSaveStudentInstructions = () => {
+    updateAssessment(assessmentId, { studentInstructions: studentInstructionsDraft.trim() || undefined });
+    toast.success("Student instructions saved");
+  };
+
   if (loading) return <DetailSkeleton />;
 
   if (!assessment)
@@ -662,6 +709,11 @@ export default function AssessmentDetailPage() {
           {assessment.gradingMode === "checklist" && (
             <TabsTrigger value="checklist-builder">
               Checklist Builder
+            </TabsTrigger>
+          )}
+          {allSubmissions.length > 0 && (
+            <TabsTrigger value="submissions">
+              Submissions ({allSubmissions.length})
             </TabsTrigger>
           )}
         </TabsList>
@@ -836,6 +888,65 @@ export default function AssessmentDetailPage() {
                 </div>
               </>
             )}
+          </Card>
+
+          {/* Student Instructions & Grade Release */}
+          <Card className="p-5 gap-0 mt-4">
+            <h3 className="text-[16px] font-semibold mb-4">Student instructions & grade release</h3>
+
+            <div className="space-y-4">
+              {/* Student Instructions */}
+              <div>
+                <Label className="text-[13px]">Student instructions</Label>
+                <Textarea
+                  value={studentInstructionsDraft}
+                  onChange={(e) => setStudentInstructionsDraft(e.target.value)}
+                  placeholder="Enter instructions visible to students when they view this assessment..."
+                  className="mt-1.5 text-[13px] min-h-[100px]"
+                />
+                <p className="text-[12px] text-muted-foreground mt-1">
+                  Students will see these instructions when viewing this assessment.
+                </p>
+                <Button
+                  size="sm"
+                  className="mt-2 h-8 text-[12px]"
+                  onClick={handleSaveStudentInstructions}
+                  disabled={studentInstructionsDraft === (assessment.studentInstructions ?? "")}
+                >
+                  Save instructions
+                </Button>
+              </div>
+
+              <Separator />
+
+              {/* Grade Release */}
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-[13px] font-medium">Grade release</p>
+                  <p className="text-[12px] text-muted-foreground">
+                    {assessment.gradesReleasedAt
+                      ? `Released on ${format(parseISO(assessment.gradesReleasedAt), "MMM d, yyyy 'at' h:mm a")}`
+                      : "Grades have not been released to students yet."}
+                  </p>
+                </div>
+                {!assessment.gradesReleasedAt ? (
+                  <Button
+                    size="sm"
+                    className="h-8 text-[12px]"
+                    onClick={() => setReleaseGradesConfirm(true)}
+                    disabled={gradedCount === 0}
+                  >
+                    <Send className="h-3.5 w-3.5 mr-1.5" />
+                    Release grades
+                  </Button>
+                ) : (
+                  <Badge className="bg-[#dcfce7] text-[#16a34a] border-transparent text-[11px]">
+                    <CheckCircle2 className="h-3 w-3 mr-1" />
+                    Released
+                  </Badge>
+                )}
+              </div>
+            </div>
           </Card>
         </TabsContent>
 
@@ -1217,7 +1328,131 @@ export default function AssessmentDetailPage() {
             />
           </TabsContent>
         )}
+
+        {/* Submissions Tab */}
+        {allSubmissions.length > 0 && (
+          <TabsContent value="submissions">
+            <Card className="p-0 gap-0 overflow-hidden">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="text-[12px] font-medium">Student</TableHead>
+                    <TableHead className="text-[12px] font-medium">Status</TableHead>
+                    <TableHead className="text-[12px] font-medium">Submitted</TableHead>
+                    <TableHead className="text-[12px] font-medium">Attachments</TableHead>
+                    <TableHead className="text-[12px] font-medium text-right">Action</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {students.map((student) => {
+                    const sub = allSubmissions.find((s) => s.studentId === student.id);
+                    if (!sub) return null;
+                    return (
+                      <TableRow key={student.id}>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <div className="h-7 w-7 rounded-full bg-[#c24e3f]/10 flex items-center justify-center text-[11px] font-semibold text-[#c24e3f]">
+                              {student.firstName[0]}{student.lastName[0]}
+                            </div>
+                            <span className="text-[13px] font-medium">
+                              {student.firstName} {student.lastName}
+                            </span>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <StatusBadge
+                            status={sub.status}
+                            variant={
+                              sub.status === "submitted" || sub.status === "resubmitted"
+                                ? "success"
+                                : sub.status === "returned"
+                                ? "warning"
+                                : "info"
+                            }
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <span className="text-[12px] text-muted-foreground">
+                            {sub.submittedAt
+                              ? format(parseISO(sub.submittedAt), "MMM d, h:mm a")
+                              : sub.draftSavedAt
+                              ? `Draft: ${format(parseISO(sub.draftSavedAt), "MMM d, h:mm a")}`
+                              : "-"}
+                          </span>
+                        </TableCell>
+                        <TableCell>
+                          <span className="text-[12px] text-muted-foreground">
+                            {sub.attachments.length > 0
+                              ? `${sub.attachments.length} file${sub.attachments.length !== 1 ? "s" : ""}`
+                              : "-"}
+                          </span>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-7 text-[12px]"
+                            onClick={() => {
+                              setPreviewSubmissionId(sub.id);
+                              setSubmissionPreviewOpen(true);
+                            }}
+                          >
+                            View
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </Card>
+          </TabsContent>
+        )}
       </Tabs>
+
+      {/* Submission Preview Drawer */}
+      <SubmissionPreviewDrawer
+        open={submissionPreviewOpen}
+        onOpenChange={setSubmissionPreviewOpen}
+        submission={allSubmissions.find((s) => s.id === previewSubmissionId) ?? null}
+        student={(() => {
+          const sub = allSubmissions.find((s) => s.id === previewSubmissionId);
+          return sub ? students.find((st) => st.id === sub.studentId) ?? null : null;
+        })()}
+        onReturnWithFeedback={(submissionId, comment) => {
+          const sub = allSubmissions.find((s) => s.id === submissionId);
+          if (!sub) return;
+          updateSubmission(submissionId, {
+            status: "returned",
+            teacherComment: comment,
+            returnedAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          });
+          // Create notification for student
+          if (assessment && cls) {
+            addStudentNotification({
+              id: `notif_return_${submissionId}`,
+              studentId: sub.studentId,
+              type: "submission_returned",
+              title: "Submission returned",
+              body: `Your submission for "${assessment.title}" in ${cls.name} has been returned with feedback.`,
+              read: false,
+              createdAt: new Date().toISOString(),
+              linkTo: `/student/classes/${assessment.classId}/assessments/${assessment.id}`,
+              dedupeKey: `${sub.studentId}:${assessment.id}:submission_returned:${Date.now()}`,
+            });
+          }
+        }}
+        onGradeStudent={() => {
+          const sub = allSubmissions.find((s) => s.id === previewSubmissionId);
+          if (!sub) return;
+          const student = students.find((st) => st.id === sub.studentId);
+          if (student) {
+            setSubmissionPreviewOpen(false);
+            openGradingSheet(student);
+          }
+        }}
+      />
 
       {/* Grading Sheet */}
       <Sheet open={gradingOpen} onOpenChange={setGradingOpen}>
@@ -1538,6 +1773,15 @@ export default function AssessmentDetailPage() {
         confirmLabel="Delete"
         onConfirm={handleDelete}
         destructive
+      />
+
+      <ConfirmDialog
+        open={releaseGradesConfirm}
+        onOpenChange={setReleaseGradesConfirm}
+        title="Release grades to students"
+        description={`Students will be able to see their grades for "${assessment.title}". ${gradedCount} of ${students.length} students have been graded.`}
+        confirmLabel="Release grades"
+        onConfirm={handleReleaseGrades}
       />
 
       {/* Announcement Preview Dialog (#17) */}

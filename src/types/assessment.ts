@@ -1,30 +1,66 @@
 import { ID, GradingMode, Status } from "./common";
 
+/**
+ * Assessment — teacher-owned entity that serves as grading configuration,
+ * student work item, calendar trigger, and announcement trigger.
+ *
+ * Persona ownership: TEACHER (students see a projected view via `projectStudentAssessment()`).
+ *
+ * Status semantics:
+ * - `status: "draft"` → teacher-only, not visible to students
+ * - `status: "published"` → visible to students + open for grading
+ *   ⚠️ NOTE: "published" means STUDENT-VISIBLE for Assessment but NOT for Report.
+ *   Always use gate functions (`canStudentViewGrade()`, etc.) instead of checking status directly.
+ * - `status: "archived"` → hidden from active views, read-only
+ *
+ * Student visibility gate: `Assessment.status === "published"` + `assignedStudentIds` (if set)
+ * Grade visibility gate: `Assessment.gradesReleasedAt` (must be set by teacher)
+ */
 export interface Assessment {
   id: ID;
   title: string;
   description: string;
   classId: ID;
+  /** Determines grade data shape, grading UI, and display format. Set at creation, do not change after grading begins. */
   gradingMode: GradingMode;
+  /** Teacher-owned lifecycle: draft → published → archived. "published" = student-visible. */
   status: Status;
   dueDate: string;
   createdAt: string;
+  /** Denominator for score mode. Student sees this as "X/totalPoints". */
   totalPoints?: number;
   rubric?: RubricCriterion[];
   checklist?: ChecklistItem[];
   checklistSections?: ChecklistSection[];
   checklistResponseStyle?: ChecklistResponseStyle;
+  /**
+   * ⚠️ When set to "feedback_only", checklists are excluded from ALL numeric averages.
+   * UX does not currently surface this consequence during configuration.
+   */
   checklistOutcomeModel?: ChecklistOutcomeModel;
   standardIds?: ID[];
   learningGoalIds: ID[];
+  /** Audit trail: ISO timestamp when assessment was published (set alongside status: "published"). */
   distributedAt?: string;
+  /** Forward ref to auto-created announcement on publish. */
   linkedAnnouncementId?: ID;
+  /** If set, only these students see the assessment. Seed-only — no UI for teacher to set this yet. */
   assignedStudentIds?: ID[];
   rubricCriteria?: SimpleCriterion[];
-  // MYP-specific
+  /** MYP-specific criteria (A-D, max level 8). */
   mypCriteria?: MYPCriterion[];
-  // Unit planning (optional — assessments work standalone)
+  /** Optional unit grouping. ⚠️ Can reference draft UnitPlan — student projections should filter. */
   unitId?: ID;
+  /** Student-facing instructions (teacher sets when publishing). */
+  studentInstructions?: string;
+  /** Student-facing resource links (teacher sets when publishing). */
+  studentResources?: { label: string; url: string }[];
+  /**
+   * Grade release gate — ISO timestamp when teacher explicitly releases grades.
+   * Per-assessment, all-or-nothing (no per-student release).
+   * Use `canStudentViewGrade(assessment)` to check.
+   */
+  gradesReleasedAt?: string;
 }
 
 export interface SimpleCriterion {
