@@ -195,7 +195,7 @@ export function StudentCalendar({ studentId }: StudentCalendarProps) {
 
           {selectedEvents.length === 0 ? (
             <p className="text-[13px] text-muted-foreground">
-              No events on this day.
+              No deadlines or events on this day.
             </p>
           ) : (
             <div className="space-y-3">

@@ -79,10 +79,17 @@ export function SubmissionPreviewDrawer({
             {student.firstName} {student.lastName}&apos;s Submission
           </SheetTitle>
           <SheetDescription className="text-[13px]">
-            <StatusBadge
-              status={submission.status}
-              variant={statusVariant}
-            />
+            <span className="flex items-center gap-2">
+              <StatusBadge
+                status={submission.status}
+                variant={statusVariant}
+              />
+              {submission.isLate && (
+                <Badge className="bg-[#fee2e2] text-[#dc2626] border-transparent text-[10px]">
+                  Late
+                </Badge>
+              )}
+            </span>
           </SheetDescription>
         </SheetHeader>
 

@@ -11,8 +11,9 @@ import {
   getStudentAssessments,
   getStudentUnitPlans,
   getStudentSubmission,
+  getStudentReleasedGrades,
 } from "@/lib/student-selectors";
-import { isAssessmentOpenForSubmission } from "@/lib/student-permissions";
+import { isAssessmentPastDue } from "@/lib/student-permissions";
 import type { StudentAssessmentView, StudentUnitPlanView } from "@/lib/student-permissions";
 import { Calendar, ClipboardCheck, ChevronDown, ChevronUp } from "lucide-react";
 import { format } from "date-fns";
@@ -34,7 +35,11 @@ function AssessmentCard({
 }) {
   const state = useStore((s) => s);
   const submission = getStudentSubmission(state, studentId, assessment.id);
-  const isPastDue = new Date(assessment.dueDate) < new Date();
+  const isPastDue = isAssessmentPastDue(assessment);
+  const releasedGrade = assessment.gradesReleased
+    ? getStudentReleasedGrades(state, studentId).find((g) => g.assessmentId === assessment.id)
+    : undefined;
+  const isExcused = releasedGrade?.submissionStatus === "excused";
 
   const submissionStatus = submission?.status ?? (isPastDue ? "overdue" : "not_started");
   const statusLabel =
@@ -80,8 +85,8 @@ function AssessmentCard({
           </div>
           <div className="flex items-center gap-2 shrink-0">
             {assessment.gradesReleased && (
-              <Badge variant="secondary" className="text-[11px] bg-[#dcfce7] text-[#16a34a]">
-                Graded
+              <Badge variant="secondary" className={`text-[11px] ${isExcused ? "bg-muted text-muted-foreground" : "bg-[#dcfce7] text-[#16a34a]"}`}>
+                {isExcused ? "Excused" : "Graded"}
               </Badge>
             )}
             <StatusBadge

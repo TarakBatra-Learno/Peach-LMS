@@ -201,7 +201,10 @@ export default function StudentHomePage() {
               {releasedGrades.slice(0, 5).map((grade) => {
                 const assessment = state.assessments.find((a) => a.id === grade.assessmentId);
                 const cls = classes.find((c) => c.id === grade.classId);
-                const display = grade.score !== undefined && grade.totalPoints
+                const isExcused = grade.submissionStatus === "excused";
+                const display = isExcused
+                  ? "Excused"
+                  : grade.score !== undefined && grade.totalPoints
                   ? `${grade.score}/${grade.totalPoints}`
                   : grade.dpGrade !== undefined
                     ? `${grade.dpGrade}/7`

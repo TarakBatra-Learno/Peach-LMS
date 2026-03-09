@@ -53,6 +53,8 @@ export interface Submission {
   teacherComment?: string;
   /** Student's reflection (required on resubmission after return) */
   reflection?: string;
+  /** Auto-set to true when the student submits/resubmits after the assessment due date */
+  isLate?: boolean;
   createdAt: string;
   updatedAt: string;
 }

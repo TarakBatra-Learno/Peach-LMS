@@ -18,7 +18,7 @@ import {
   getStudentSubmission,
   getStudentReleasedGrades,
 } from "@/lib/student-selectors";
-import { isAssessmentOpenForSubmission } from "@/lib/student-permissions";
+import { isAssessmentOpenForSubmission, isAssessmentPastDue } from "@/lib/student-permissions";
 import { AddToGoalDialog } from "@/components/student/add-to-goal-dialog";
 import { Button } from "@/components/ui/button";
 import {
@@ -83,7 +83,7 @@ export default function StudentAssessmentDetailPage() {
   const [addToGoalOpen, setAddToGoalOpen] = useState(false);
 
   const isOpen = rawAssessment ? isAssessmentOpenForSubmission(rawAssessment) : false;
-  const isPastDue = rawAssessment ? new Date(rawAssessment.dueDate) < new Date() : false;
+  const isPastDue = rawAssessment ? isAssessmentPastDue(rawAssessment) : false;
 
   if (loading) return <DetailSkeleton />;
 
@@ -122,12 +122,12 @@ export default function StudentAssessmentDetailPage() {
               {projectedAssessment.totalPoints} points
             </Badge>
           )}
-          {isPastDue && !isOpen && (
+          {isPastDue && (
             <Badge className="bg-[#fee2e2] text-[#dc2626] border-transparent text-[11px]">
               Past due
             </Badge>
           )}
-          {isOpen && (
+          {isOpen && !isPastDue && (
             <Badge className="bg-[#dcfce7] text-[#16a34a] border-transparent text-[11px]">
               Open for submission
             </Badge>
@@ -175,6 +175,7 @@ export default function StudentAssessmentDetailPage() {
             studentId={studentId}
             classId={classId}
             isOpen={isOpen || submission?.status === "returned"}
+            isPastDue={isPastDue}
           />
 
           {/* Add to Goal button — primarily surfaced for returned work */}

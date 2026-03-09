@@ -1372,12 +1372,17 @@ export default function AssessmentDetailPage() {
                           />
                         </TableCell>
                         <TableCell>
-                          <span className="text-[12px] text-muted-foreground">
+                          <span className="text-[12px] text-muted-foreground flex items-center gap-1.5">
                             {sub.submittedAt
                               ? format(parseISO(sub.submittedAt), "MMM d, h:mm a")
                               : sub.draftSavedAt
                               ? `Draft: ${format(parseISO(sub.draftSavedAt), "MMM d, h:mm a")}`
                               : "-"}
+                            {sub.isLate && (
+                              <Badge className="bg-[#fee2e2] text-[#dc2626] border-transparent text-[10px] px-1.5 py-0">
+                                Late
+                              </Badge>
+                            )}
                           </span>
                         </TableCell>
                         <TableCell>

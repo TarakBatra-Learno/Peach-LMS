@@ -16,7 +16,6 @@ import {
   getStudentAssessments,
   getStudentClasses,
   getStudentReports,
-  getStudentSubmissions,
   computeStudentGoalProgress,
   type StudentGoalProgress,
 } from "@/lib/student-selectors";
@@ -32,7 +31,6 @@ import {
   CheckCircle2,
   AlertCircle,
   BookOpen,
-  ClipboardCheck,
   ChevronDown,
   ChevronRight,
 } from "lucide-react";
@@ -82,11 +80,6 @@ export default function StudentProgressPage() {
     [state, studentId]
   );
 
-  const allSubmissions = useMemo(
-    () => (studentId ? getStudentSubmissions(state, studentId) : []),
-    [state, studentId]
-  );
-
   const reports = useMemo(
     () => (studentId ? getStudentReports(state, studentId) : []),
     [state, studentId]
@@ -98,7 +91,9 @@ export default function StudentProgressPage() {
     [state, studentId]
   );
 
-  const goalsWithData = goalProgress.filter((g) => g.assessmentCount > 0).length;
+  // Only count standards (not ATL skills / learner profile) for the stat card
+  const standards = goalProgress.filter((g) => g.goalCategory === "standard");
+  const standardsWithData = standards.filter((g) => g.assessmentCount > 0).length;
 
   // Raw assessment map for grade calculation
   const rawAssessmentMap = useMemo(() => {
@@ -121,10 +116,6 @@ export default function StudentProgressPage() {
     return Math.round(percentages.reduce((sum, p) => sum + p, 0) / percentages.length);
   }, [allReleasedGrades, rawAssessmentMap]);
 
-  const submittedCount = allSubmissions.filter(
-    (s) => s.status === "submitted" || s.status === "resubmitted"
-  ).length;
-
   if (loading) return <DetailSkeleton />;
 
   if (!studentId) {
@@ -145,20 +136,15 @@ export default function StudentProgressPage() {
       />
 
       {/* Analytics cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-3 gap-4 mb-6">
         <StatCard
           label="Overall Average"
           value={overallAverage !== null ? `${overallAverage}%` : "N/A"}
           icon={TrendingUp}
         />
         <StatCard
-          label="Assignments Submitted"
-          value={`${submittedCount}/${allAssessments.length}`}
-          icon={ClipboardCheck}
-        />
-        <StatCard
-          label="Goals Tracked"
-          value={`${goalsWithData}/${goalProgress.length}`}
+          label="Standards Tracked"
+          value={`${standardsWithData}/${standards.length}`}
           icon={Target}
         />
         <StatCard

@@ -22,6 +22,7 @@ import {
   Save,
   Send,
   Clock,
+  AlertTriangle,
 } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
@@ -34,6 +35,8 @@ interface SubmissionWorkbookProps {
   studentId: string;
   classId: string;
   isOpen: boolean;
+  /** Whether the assessment is past its due date — late submissions get flagged */
+  isPastDue?: boolean;
   /** Callback after submission state changes */
   onSubmissionChange?: () => void;
 }
@@ -52,6 +55,7 @@ export function SubmissionWorkbook({
   studentId,
   classId,
   isOpen,
+  isPastDue = false,
   onSubmissionChange,
 }: SubmissionWorkbookProps) {
   const addSubmission = useStore((s) => s.addSubmission);
@@ -112,6 +116,7 @@ export function SubmissionWorkbook({
         status: isResubmit ? "resubmitted" : "submitted",
         submittedAt: now,
         ...(isResubmit ? { resubmittedAt: now } : {}),
+        ...(isPastDue ? { isLate: true } : {}),
         updatedAt: now,
       });
     } else {
@@ -125,13 +130,18 @@ export function SubmissionWorkbook({
         attachments,
         reflection: reflection || undefined,
         submittedAt: now,
+        ...(isPastDue ? { isLate: true } : {}),
         createdAt: now,
         updatedAt: now,
       });
     }
 
     setSubmitConfirm(false);
-    toast.success(isResubmit ? "Work resubmitted" : "Work submitted");
+    toast.success(
+      isPastDue
+        ? isResubmit ? "Work resubmitted (late)" : "Work submitted (late)"
+        : isResubmit ? "Work resubmitted" : "Work submitted"
+    );
     onSubmissionChange?.();
   };
 
@@ -157,11 +167,56 @@ export function SubmissionWorkbook({
   };
 
   if (!isOpen) {
+    // No submission at all — simple closed message
+    if (!submission) {
+      return (
+        <Card className="p-5 gap-0 bg-muted/30">
+          <p className="text-[13px] text-muted-foreground text-center">
+            This assessment is no longer open for submissions.
+          </p>
+        </Card>
+      );
+    }
+
+    // Has a draft or previous submission — show read-only so student can always access their work
     return (
       <Card className="p-5 gap-0 bg-muted/30">
-        <p className="text-[13px] text-muted-foreground text-center">
-          This assessment is no longer open for submissions.
-        </p>
+        <div className="flex items-center gap-2 mb-3">
+          <StatusBadge
+            status={submission.status}
+            variant="neutral"
+            label={getStudentStatusLabel(submission.status)}
+          />
+          <span className="text-[11px] text-muted-foreground">
+            This assessment is no longer open for submissions.
+          </span>
+        </div>
+        {submission.content && (
+          <div className="text-[13px] whitespace-pre-wrap bg-background rounded-lg p-3 mb-3">
+            {submission.content}
+          </div>
+        )}
+        {submission.attachments && submission.attachments.length > 0 && (
+          <div>
+            <p className="text-[12px] text-muted-foreground mb-1.5">
+              Attachments ({submission.attachments.length})
+            </p>
+            <div className="space-y-1.5">
+              {submission.attachments.map((att) => {
+                const Icon = ATTACHMENT_ICONS[att.type] ?? FileText;
+                return (
+                  <div
+                    key={att.id}
+                    className="flex items-center gap-2 px-3 py-2 rounded-lg border bg-background"
+                  >
+                    <Icon className="h-4 w-4 text-muted-foreground shrink-0" />
+                    <span className="text-[13px] flex-1 truncate">{att.name}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </Card>
     );
   }
@@ -198,6 +253,18 @@ export function SubmissionWorkbook({
                 </span>
               )}
             </div>
+          </div>
+        </Card>
+      )}
+
+      {/* Late submission warning */}
+      {isPastDue && canEdit && (
+        <Card className="p-4 gap-0 border-[#dc2626]/20 bg-[#fef2f2]/50">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="h-4 w-4 text-[#dc2626] shrink-0" />
+            <p className="text-[13px] text-[#dc2626]">
+              This assessment is past due. Your submission will be marked as late.
+            </p>
           </div>
         </Card>
       )}

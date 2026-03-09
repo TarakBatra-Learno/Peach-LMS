@@ -29,6 +29,7 @@ import {
   canStudentViewReport,
   isAnnouncementVisibleToStudent,
   isAssessmentOpenForSubmission,
+  isAssessmentPastDue,
   type StudentAssessmentView,
   type StudentUnitPlanView,
   type StudentLessonPlanView,
@@ -186,10 +187,7 @@ export function getStudentAssessmentState(
   const canSubmit = assessmentOpen && submittableWorkStates.includes(workState);
 
   // ── Due date ──
-  const now = new Date();
-  const due = new Date(assessment.dueDate);
-  due.setHours(23, 59, 59, 999);
-  const isPastDue = now > due;
+  const isPastDue = isAssessmentPastDue(assessment);
 
   return {
     assessmentId,

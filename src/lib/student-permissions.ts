@@ -209,15 +209,20 @@ export function canStudentViewReport(report: Report): boolean {
   return report.distributionStatus === "completed";
 }
 
-/** Is this assessment currently open for student submission? */
-export function isAssessmentOpenForSubmission(assessment: Assessment): boolean {
-  // Published assessments with a future or current due date are open
-  if (assessment.status !== "published") return false;
+/** Is this assessment past its due date? Pure date check, no status gating.
+ *  Accepts any object with a dueDate string — works with both Assessment and StudentAssessmentView. */
+export function isAssessmentPastDue(assessment: { dueDate: string }): boolean {
   const now = new Date();
   const due = new Date(assessment.dueDate);
-  // Allow submission up to end of due date
   due.setHours(23, 59, 59, 999);
-  return now <= due;
+  return now > due;
+}
+
+/** Is this assessment currently open for student submission?
+ *  Published assessments are always open for submission — late submissions
+ *  are allowed and automatically flagged via `Submission.isLate`. */
+export function isAssessmentOpenForSubmission(assessment: Assessment): boolean {
+  return assessment.status === "published";
 }
 
 /** Is this portfolio artifact visible to the student who created it? (always yes) */
