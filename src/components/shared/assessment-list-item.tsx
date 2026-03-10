@@ -5,7 +5,8 @@ import { format, parseISO } from "date-fns";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { StatusBadge } from "@/components/shared/status-badge";
-import { getToMarkCount, getMissingCount, GRADING_MODE_LABELS } from "@/lib/grade-helpers";
+import { getToMarkCount, GRADING_MODE_LABELS } from "@/lib/grade-helpers";
+import { computeUnreleasedGradesCount } from "@/lib/selectors/grade-selectors";
 import { Calendar, Users } from "lucide-react";
 import type { Assessment } from "@/types/assessment";
 import type { GradeRecord } from "@/types/gradebook";
@@ -22,6 +23,10 @@ interface AssessmentListItemProps {
   variant?: "card" | "row";
   /** Optional unit title to show a unit tag */
   unitTitle?: string;
+  /** Number of students who have been graded */
+  gradedCount?: number;
+  /** Total number of students in the class */
+  totalStudents?: number;
 }
 
 export function AssessmentListItem({
@@ -32,12 +37,15 @@ export function AssessmentListItem({
   href,
   variant = "row",
   unitTitle,
+  gradedCount,
+  totalStudents,
 }: AssessmentListItemProps) {
-  const toMark = assessment.status === "published"
+  const toMark = assessment.status === "live"
     ? getToMarkCount(studentIds, grades, assessment)
     : 0;
-  const missing = assessment.status === "published"
-    ? getMissingCount(studentIds, grades, assessment)
+
+  const unreleasedCount = assessment.status === "live"
+    ? computeUnreleasedGradesCount(grades, assessment.id)
     : 0;
 
   const resolvedHref = href || `/assessments/${assessment.id}`;
@@ -73,15 +81,16 @@ export function AssessmentListItem({
             </span>
           </div>
 
+          {unitTitle && (
+            <p className="text-[11px] text-muted-foreground hover:underline hover:text-foreground cursor-pointer mb-2">
+              {unitTitle}
+            </p>
+          )}
+
           <div className="flex items-center gap-1.5 mt-auto flex-wrap">
             <Badge variant="outline" className="text-[11px] font-medium">
               {GRADING_MODE_LABELS[assessment.gradingMode]}
             </Badge>
-            {unitTitle && (
-              <Badge variant="secondary" className="text-[11px] font-medium bg-[#f0f4ff] text-[#3b5998] border-[#3b5998]/20">
-                {unitTitle}
-              </Badge>
-            )}
             {assessment.totalPoints != null && assessment.gradingMode === "score" && (
               <Badge variant="secondary" className="text-[11px] font-medium">
                 {assessment.totalPoints} pts
@@ -92,9 +101,9 @@ export function AssessmentListItem({
                 {toMark} to mark
               </Badge>
             )}
-            {missing > 0 && (
-              <Badge className="bg-muted text-muted-foreground border-border font-normal text-[11px] font-medium hover:bg-[#fee2e2]">
-                {missing} missing
+            {unreleasedCount > 0 && (
+              <Badge className="bg-[#dbeafe] text-[#2563eb] border-[#2563eb]/20 text-[11px] font-medium hover:bg-[#dbeafe]">
+                {unreleasedCount} unreleased
               </Badge>
             )}
           </div>
@@ -112,22 +121,22 @@ export function AssessmentListItem({
             <p className="text-[14px] font-medium">{assessment.title}</p>
             <p className="text-[12px] text-muted-foreground">
               Due {format(parseISO(assessment.dueDate), "MMM d, yyyy")} · {GRADING_MODE_LABELS[assessment.gradingMode]}
+              {unitTitle && (
+                <span className="text-[11px] text-muted-foreground hover:underline hover:text-foreground cursor-pointer ml-1">
+                  · {unitTitle}
+                </span>
+              )}
             </p>
           </div>
           <div className="flex items-center gap-2">
-            {unitTitle && (
-              <Badge variant="secondary" className="text-[11px] font-medium bg-[#f0f4ff] text-[#3b5998] border-[#3b5998]/20">
-                {unitTitle}
-              </Badge>
-            )}
             {toMark > 0 && (
               <Badge className="bg-[#fef3c7] text-[#b45309] border-[#b45309]/20 text-[11px] font-medium hover:bg-[#fef3c7]">
                 {toMark} to mark
               </Badge>
             )}
-            {missing > 0 && (
-              <Badge className="bg-muted text-muted-foreground border-border font-normal text-[11px] font-medium hover:bg-[#fee2e2]">
-                {missing} missing
+            {unreleasedCount > 0 && (
+              <Badge className="bg-[#dbeafe] text-[#2563eb] border-[#2563eb]/20 text-[11px] font-medium hover:bg-[#dbeafe]">
+                {unreleasedCount} unreleased
               </Badge>
             )}
             <StatusBadge status={assessment.status} />
