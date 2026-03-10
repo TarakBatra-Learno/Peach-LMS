@@ -9,8 +9,8 @@ import { ID } from "./common";
  *
  * - `"draft"` → student has saved but not submitted
  * - `"submitted"` → student has submitted work for review
- * - `"returned"` → teacher has returned work with feedback
- * - `"resubmitted"` → student has resubmitted after teacher return
+ * - `"returned"` → @deprecated — return/resubmit path removed. Kept for backward compat.
+ * - `"resubmitted"` → @deprecated — return/resubmit path removed. Kept for backward compat.
  */
 export type SubmissionLifecycleStatus = "draft" | "submitted" | "returned" | "resubmitted";
 
@@ -45,15 +45,15 @@ export interface Submission {
   draftSavedAt?: string;
   /** When the student submitted */
   submittedAt?: string;
-  /** When the teacher returned with feedback */
+  /** @deprecated Return/resubmit path removed */
   returnedAt?: string;
-  /** When the student resubmitted after return */
+  /** @deprecated Return/resubmit path removed */
   resubmittedAt?: string;
-  /** Teacher's feedback comment on return */
+  /** @deprecated Return/resubmit path removed */
   teacherComment?: string;
-  /** Student's reflection (required on resubmission after return) */
+  /** @deprecated Return/resubmit path removed */
   reflection?: string;
-  /** Auto-set to true when the student submits/resubmits after the assessment due date */
+  /** Auto-set to true when the student submits after the assessment due date. Treat undefined as false. */
   isLate?: boolean;
   createdAt: string;
   updatedAt: string;

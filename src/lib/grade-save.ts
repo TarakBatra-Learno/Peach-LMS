@@ -8,6 +8,7 @@
 import type { GradeRecord, SubmissionStatus, ChecklistResultItem } from "@/types/gradebook";
 import type { Assessment } from "@/types/assessment";
 import type { MasteryLevel } from "@/types/common";
+import { getGradePercentage, isGradingComplete } from "./grade-helpers";
 
 // ---------------------------------------------------------------------------
 // Input types — what the caller passes in from their form state
@@ -31,11 +32,9 @@ export interface GradeFormInputs {
 const MYP_CRITERIA_LABELS = ["A", "B", "C", "D"] as const;
 
 /**
- * Build the grade payload for saving. Handles all 6 grading modes,
- * plus excused and missing terminal states.
+ * Build the grade payload for saving. Handles all 6 grading modes plus excused terminal state.
  *
- * Returns a Partial<GradeRecord> that can be spread into an addGrade or
- * updateGrade call.
+ * Returns a Partial<GradeRecord> that can be spread into an addGrade or updateGrade call.
  */
 export function buildGradePayload(
   assessment: Assessment,
@@ -58,12 +57,25 @@ export function buildGradePayload(
     return buildExcusedPayload(base);
   }
 
-  if (inputs.submissionStatus === "missing") {
-    return buildMissingPayload(base);
-  }
+  // Normal grading — attach mode-specific data, then infer mastery, then set gradingStatus
+  const result = attachModeSpecificData(base, assessment, inputs);
+  inferStandardsMastery(result, assessment);
 
-  // Normal grading — attach mode-specific data
-  return attachModeSpecificData(base, assessment, inputs);
+  // Set gradingStatus based on completeness
+  // Build a temp GradeRecord to check completion
+  const tempGrade = {
+    id: "",
+    assessmentId: assessment.id,
+    studentId,
+    classId: assessment.classId,
+    gradingMode: assessment.gradingMode,
+    submissionStatus: inputs.submissionStatus,
+    ...result,
+  } as GradeRecord;
+
+  result.gradingStatus = isGradingComplete(tempGrade, assessment) ? "ready" : "in_progress";
+
+  return result;
 }
 
 /**
@@ -71,6 +83,7 @@ export function buildGradePayload(
  * This is the terminal state — no grade data should remain.
  */
 function buildExcusedPayload(base: Partial<GradeRecord>): Partial<GradeRecord> {
+  const now = new Date().toISOString();
   return {
     ...base,
     score: undefined,
@@ -81,17 +94,15 @@ function buildExcusedPayload(base: Partial<GradeRecord>): Partial<GradeRecord> {
     checklistGradeResults: undefined,
     checklistResults: undefined,
     feedback: undefined,
+    feedbackAttachments: undefined,
+    gradingStatus: undefined,
+    amendedAt: undefined,
+    reportStatus: undefined,
     gradedAt: undefined,
     submittedAt: undefined,
+    releasedAt: undefined,
+    updatedAt: now,
   };
-}
-
-/**
- * Missing: grade inputs are hidden, so we don't attach mode-specific data.
- * Unlike excused, we preserve the base payload as-is (no explicit clearing).
- */
-function buildMissingPayload(base: Partial<GradeRecord>): Partial<GradeRecord> {
-  return base;
 }
 
 /**
@@ -155,4 +166,81 @@ function attachModeSpecificData(
   }
 
   return base;
+}
+
+// ---------------------------------------------------------------------------
+// Auto-infer standards mastery from grade percentage
+// ---------------------------------------------------------------------------
+
+/**
+ * Mastery inference thresholds: grade % → mastery level.
+ * Only applied for non-"standards" grading modes (where teacher sets mastery manually).
+ */
+const MASTERY_THRESHOLDS: [number, MasteryLevel][] = [
+  [85, "exceeding"],
+  [70, "meeting"],
+  [50, "approaching"],
+  [0, "beginning"],
+];
+
+function percentageToMastery(pct: number): MasteryLevel {
+  for (const [threshold, level] of MASTERY_THRESHOLDS) {
+    if (pct >= threshold) return level;
+  }
+  return "beginning";
+}
+
+/**
+ * Auto-infer standardsMastery from grade percentage for non-standards grading modes.
+ *
+ * Mutates `payload` in place — sets `standardsMastery` based on the grade percentage
+ * mapped against the assessment's `learningGoalIds`.
+ *
+ * Skips when:
+ * - gradingMode is "standards" (teacher manually sets mastery — don't overwrite)
+ * - assessment has no learningGoalIds
+ * - submissionStatus is "excused" or "missing"
+ * - grade percentage is null (feedback-only checklists, incomplete grade)
+ */
+function inferStandardsMastery(
+  payload: Partial<GradeRecord>,
+  assessment: Assessment,
+): void {
+  // Standards mode: teacher sets mastery directly — don't override
+  if (assessment.gradingMode === "standards") return;
+
+  // No learning goals tagged → nothing to infer
+  if (!assessment.learningGoalIds || assessment.learningGoalIds.length === 0) return;
+
+  // Excused → no grade data to infer from
+  if (payload.submissionStatus === "excused") return;
+
+  // Build a temporary GradeRecord-like object from the payload for getGradePercentage
+  const tempGrade = {
+    id: "",
+    assessmentId: assessment.id,
+    studentId: payload.studentId ?? "",
+    classId: assessment.classId,
+    gradingMode: assessment.gradingMode,
+    submissionStatus: payload.submissionStatus ?? ("none" as const),
+    score: payload.score,
+    totalPoints: payload.totalPoints,
+    dpGrade: payload.dpGrade,
+    mypCriteriaScores: payload.mypCriteriaScores,
+    rubricScores: payload.rubricScores,
+    checklistGradeResults: payload.checklistGradeResults,
+    standardsMastery: payload.standardsMastery,
+  } as GradeRecord;
+
+  const pct = getGradePercentage(tempGrade, assessment);
+
+  // No computable percentage (e.g., feedback-only checklist) → skip
+  if (pct === null) return;
+
+  const level = percentageToMastery(pct);
+
+  payload.standardsMastery = assessment.learningGoalIds.map((goalId) => ({
+    standardId: goalId,
+    level,
+  }));
 }

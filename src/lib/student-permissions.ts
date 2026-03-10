@@ -31,7 +31,7 @@ export interface StudentAssessmentView {
   learningGoalIds: string[];
   standardIds?: string[];
   unitId?: string;
-  /** Whether grades have been released for this assessment */
+  /** @deprecated Grade visibility is now per-student via releasedAt. Kept for backward compat. */
   gradesReleased: boolean;
 }
 
@@ -141,14 +141,13 @@ export function projectStudentThreadReply(reply: ThreadReply): StudentThreadRepl
 /**
  * Work axis of the student assessment lifecycle.
  *
- * Derived from teacher-owned GradeRecord.submissionStatus (for excused/missing)
- * and student-owned Submission.status (for draft/submitted/returned/resubmitted).
+ * Derived from teacher-owned GradeRecord.submissionStatus (for excused)
+ * and student-owned Submission.status (for draft/submitted).
  *
  * Precedence:
  *   1. excused — terminal, always wins (from GradeRecord.submissionStatus)
- *   2. missing — teacher-set queue status (from GradeRecord.submissionStatus)
- *   3. Submission.status when a Submission entity exists
- *   4. not_started — no submission exists
+ *   2. Submission.status when a Submission entity exists
+ *   3. not_started — no submission exists
  *
  * Grade completeness and release visibility NEVER affect workState.
  */
@@ -156,9 +155,6 @@ export type StudentWorkState =
   | "not_started"
   | "draft"
   | "submitted"
-  | "returned"
-  | "resubmitted"
-  | "missing"
   | "excused";
 
 /**
@@ -199,9 +195,13 @@ export interface StudentAssessmentStateProjection {
 
 // ─── Gate / Visibility Checks ───────────────────────────────────────────────
 
-/** Can student view grades for this assessment? (requires teacher to have released) */
-export function canStudentViewGrade(assessment: Assessment): boolean {
-  return !!assessment.gradesReleasedAt;
+/**
+ * Can student view grades for this assessment?
+ *
+ * Returns true if the per-student `grade.releasedAt` is set.
+ */
+export function canStudentViewGrade(assessment: Assessment, grade?: GradeRecord): boolean {
+  return !!grade?.releasedAt;
 }
 
 /** Can student view this report? (requires distributed status) */
@@ -219,10 +219,10 @@ export function isAssessmentPastDue(assessment: { dueDate: string }): boolean {
 }
 
 /** Is this assessment currently open for student submission?
- *  Published assessments are always open for submission — late submissions
+ *  Live assessments are always open for submission — late submissions
  *  are allowed and automatically flagged via `Submission.isLate`. */
 export function isAssessmentOpenForSubmission(assessment: Assessment): boolean {
-  return assessment.status === "published";
+  return assessment.status === "live";
 }
 
 /** Is this portfolio artifact visible to the student who created it? (always yes) */

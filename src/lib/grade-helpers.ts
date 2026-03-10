@@ -14,7 +14,7 @@ function isWithinDays(dateStr: string, days: number): boolean {
 }
 
 /**
- * Return only published assessments with a due date within the given window.
+ * Return only live assessments with a due date within the given window.
  * This is the single source of truth for "due soon" filtering.
  */
 export function getPublishedDueAssessments(
@@ -22,7 +22,7 @@ export function getPublishedDueAssessments(
   withinDays = 7
 ): Assessment[] {
   return assessments.filter(
-    (a) => a.status === "published" && a.dueDate && isWithinDays(a.dueDate, withinDays)
+    (a) => a.status === "live" && a.dueDate && isWithinDays(a.dueDate, withinDays)
   );
 }
 
@@ -59,51 +59,116 @@ export const GRADING_MODE_LABELS: Record<string, string> = {
 };
 
 // ---------------------------------------------------------------------------
-// Derived assessment status
+// Derived assessment status (teacher review status)
 // ---------------------------------------------------------------------------
 
-export type StudentAssessmentStatus =
-  | "pending"     // no grade record, or submissionStatus "none" + ungraded
-  | "submitted"   // submissionStatus "submitted" + ungraded  →  "To mark"
-  | "completed"   // has mode-specific grade data (graded)
-  | "missing"     // submissionStatus "missing" + ungraded
-  | "excused";    // submissionStatus "excused" (terminal state, always wins)
+export type TeacherReviewStatus =
+  | "pending"      // no submission yet, due date not passed
+  | "late"         // no submission, past due date
+  | "excused"      // student excused (terminal state)
+  | "to_mark"      // submission exists but not graded
+  | "in_progress"  // grading started but not complete
+  | "ready"        // grading complete, ready to release
+  | "released";    // grade released to student
 
 /**
- * Derive the per-student assessment status from a grade record.
+ * Derive the teacher's review status for a student on a specific assessment.
  *
- * Priority:
- *   1. No grade record → Pending
- *   2. Excused → Excused (terminal state, always wins regardless of grade data)
- *   3. Graded (mode-specific data exists) → Completed
- *   4. Not graded → derive from submissionStatus
+ * Logic:
+ * - if grade.submissionStatus === "excused" → "excused"
+ * - if submission exists (grade.submissionStatus === "submitted" OR grade.submittedAt is set):
+ *   - if grade.releasedAt → "released"
+ *   - if grade.gradingStatus === "ready" → "ready"
+ *   - if grade.gradingStatus === "in_progress" → "in_progress"
+ *   - else → "to_mark"
+ * - if assessment.dueDate < now → "late"
+ * - else → "pending"
+ */
+export function getTeacherReviewStatus(
+  grade: GradeRecord | undefined,
+  assessment: Assessment
+): TeacherReviewStatus {
+  const now = new Date();
+
+  // Excused is terminal — always wins
+  if (grade?.submissionStatus === "excused") return "excused";
+
+  // Check if submission exists (either via submissionStatus or submittedAt)
+  const hasSubmission = grade?.submissionStatus === "submitted" || !!grade?.submittedAt;
+
+  if (hasSubmission) {
+    // Submission exists — check grading progress
+    if (grade?.releasedAt) return "released";
+    if (grade?.gradingStatus === "ready") return "ready";
+    if (grade?.gradingStatus === "in_progress") return "in_progress";
+    return "to_mark";
+  }
+
+  // No submission — check if late
+  const dueDate = new Date(assessment.dueDate);
+  dueDate.setHours(23, 59, 59, 999);
+  if (now > dueDate) return "late";
+
+  return "pending";
+}
+
+/**
+ * @deprecated Use getTeacherReviewStatus instead. This is a backward compatibility shim.
+ * Maps old StudentAssessmentStatus type to new TeacherReviewStatus.
+ */
+export type StudentAssessmentStatus =
+  | "pending"
+  | "submitted"
+  | "completed"
+  | "released"
+  | "missing"
+  | "excused";
+
+/**
+ * @deprecated Use getTeacherReviewStatus instead. Kept for backward compatibility.
+ * This function maps the new TeacherReviewStatus to the old StudentAssessmentStatus type.
  */
 export function getStudentAssessmentStatus(
   grade: GradeRecord | undefined,
   assessment: Assessment
 ): StudentAssessmentStatus {
-  if (!grade) return "pending";
+  const newStatus = getTeacherReviewStatus(grade, assessment);
 
-  // Excused is a terminal state — always wins, regardless of residual grade data
-  if (grade.submissionStatus === "excused") return "excused";
-
-  const graded = isGradeComplete(grade, assessment);
-  if (graded) return "completed";
-
-  // Not graded — derive from submission status
-  switch (grade.submissionStatus) {
-    case "submitted":
-      return "submitted"; // THIS is "To mark"
-    case "missing":
-      return "missing";
-    case "none":
+  // Map new statuses to old ones
+  switch (newStatus) {
+    case "pending":
+      return "pending";
+    case "late":
+      return "pending"; // old system didn't distinguish late from pending
+    case "excused":
+      return "excused";
+    case "to_mark":
+      return "submitted";
+    case "in_progress":
+      return "completed"; // in_progress wasn't in old system, map to completed
+    case "ready":
+      return "completed";
+    case "released":
+      return "released";
     default:
       return "pending";
   }
 }
 
 /**
- * Count students whose derived status is "submitted" (i.e., to mark).
+ * @deprecated getMissingCount removed. Missing status no longer exists.
+ * Returns 0 for backward compatibility.
+ */
+export function getMissingCount(
+  studentIds: string[],
+  grades: GradeRecord[],
+  assessment: Assessment
+): number {
+  return 0;
+}
+
+/**
+ * Count students whose derived status is "to_mark".
  */
 export function getToMarkCount(
   studentIds: string[],
@@ -114,23 +179,7 @@ export function getToMarkCount(
     const grade = grades.find(
       (g) => g.studentId === sid && g.assessmentId === assessment.id
     );
-    return getStudentAssessmentStatus(grade, assessment) === "submitted";
-  }).length;
-}
-
-/**
- * Count students whose derived status is "missing".
- */
-export function getMissingCount(
-  studentIds: string[],
-  grades: GradeRecord[],
-  assessment: Assessment
-): number {
-  return studentIds.filter((sid) => {
-    const grade = grades.find(
-      (g) => g.studentId === sid && g.assessmentId === assessment.id
-    );
-    return getStudentAssessmentStatus(grade, assessment) === "missing";
+    return getTeacherReviewStatus(grade, assessment) === "to_mark";
   }).length;
 }
 
@@ -207,8 +256,8 @@ function computeChecklistEarnedPoints(
 // ---------------------------------------------------------------------------
 
 /**
- * Returns a short display string for a grade cell (e.g. "5/8", "42", "M", "E", "✓").
- * Handles all five grading modes: score, dp_scale, myp_criteria, rubric, standards.
+ * Returns a short display string for a grade cell (e.g. "5/8", "42", "E", "✓").
+ * Handles all six grading modes: score, dp_scale, myp_criteria, rubric, standards, checklist.
  */
 export function getGradeCellDisplay(
   grade: GradeRecord | undefined,
@@ -222,7 +271,6 @@ export function getGradeCellDisplay(
   const graded = isGradeComplete(grade, assessment);
 
   if (!graded) {
-    if (grade.submissionStatus === "missing") return "M";
     return "-";
   }
 
@@ -294,7 +342,7 @@ export function getGradeCellDisplay(
  * Returns true when a grade record has been fully entered for its assessment's
  * grading mode. Excused students always return false (non-participating).
  */
-export function isGradeComplete(
+export function isGradingComplete(
   grade: GradeRecord | undefined,
   assessment: Assessment
 ): boolean {
@@ -330,6 +378,11 @@ export function isGradeComplete(
 }
 
 /**
+ * @deprecated Use isGradingComplete instead. Kept for backward compatibility.
+ */
+export const isGradeComplete = isGradingComplete;
+
+/**
  * Returns a normalised 0–100 percentage for a grade, or null if not computable.
  * Returns null for excused students (always excluded from all math).
  * Returns null for ungraded records.
@@ -344,7 +397,7 @@ export function getGradePercentage(
   if (grade.submissionStatus === "excused") return null;
 
   // If not graded, return null
-  const graded = isGradeComplete(grade, assessment);
+  const graded = isGradingComplete(grade, assessment);
   if (!graded) return null;
 
   if (
@@ -422,10 +475,9 @@ export function getStudentGradeCellDisplay(
 
   if (grade.submissionStatus === "excused") return "Excused";
 
-  const graded = isGradeComplete(grade, assessment);
+  const graded = isGradingComplete(grade, assessment);
 
   if (!graded) {
-    if (grade.submissionStatus === "missing") return "Missing";
     return "—";
   }
 

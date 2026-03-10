@@ -18,6 +18,7 @@ import { StudentNotification } from "@/types/notification";
 export interface UIState {
   sidebarCollapsed: boolean;
   activeClassId: string | null;
+  studentActiveClassId: string | null;
   activeAcademicYear: string;
   drawerOpen: boolean;
   drawerContent: string | null;
@@ -65,6 +66,7 @@ export interface AppActions {
   // UI
   toggleSidebar: () => void;
   setActiveClass: (classId: string | null) => void;
+  setStudentActiveClass: (classId: string | null) => void;
   setActiveAcademicYear: (year: string) => void;
   openDrawer: (content: string) => void;
   closeDrawer: () => void;
@@ -190,6 +192,14 @@ export interface AppActions {
   markNotificationRead: (id: string) => void;
   markAllNotificationsRead: (studentId: string) => void;
   getNotificationsByStudent: (studentId: string) => StudentNotification[];
+
+  // Assessment Lifecycle
+  publishAssessment: (id: string) => void;
+  closeAssessment: (id: string, force?: boolean) => void;
+  reopenAssessment: (id: string) => void;
+
+  // Grade Amendments
+  amendGrade: (gradeId: string, updates: Partial<GradeRecord>) => void;
 
   // Reset
   resetAllData: (data: Omit<AppState, 'ui'>) => void;

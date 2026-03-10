@@ -1,4 +1,4 @@
-import { ID, GradingMode, Status } from "./common";
+import { ID, GradingMode, AssessmentStatus } from "./common";
 
 /**
  * Assessment — teacher-owned entity that serves as grading configuration,
@@ -23,8 +23,8 @@ export interface Assessment {
   classId: ID;
   /** Determines grade data shape, grading UI, and display format. Set at creation, do not change after grading begins. */
   gradingMode: GradingMode;
-  /** Teacher-owned lifecycle: draft → published → archived. "published" = student-visible. */
-  status: Status;
+  /** Teacher-owned lifecycle: draft → live → closed. "live" = student-visible and open for submission. */
+  status: AssessmentStatus;
   dueDate: string;
   createdAt: string;
   /** Denominator for score mode. Student sees this as "X/totalPoints". */
@@ -56,11 +56,20 @@ export interface Assessment {
   /** Student-facing resource links (teacher sets when publishing). */
   studentResources?: { label: string; url: string }[];
   /**
-   * Grade release gate — ISO timestamp when teacher explicitly releases grades.
-   * Per-assessment, all-or-nothing (no per-student release).
-   * Use `canStudentViewGrade(assessment)` to check.
+   * ISO timestamp when assessment was closed.
+   * When set with forceClosed=true, all non-terminal grade rows were set to excused on close.
+   */
+  /**
+   * @deprecated Bulk grade release removed — use per-student `GradeRecord.releasedAt` instead.
+   * Kept temporarily for backward compatibility during migration.
    */
   gradesReleasedAt?: string;
+  closedAt?: string;
+  /**
+   * Whether non-terminal students were force-excused when the assessment was closed.
+   * Only relevant when closedAt is set.
+   */
+  forceClosed?: boolean;
 }
 
 export interface SimpleCriterion {

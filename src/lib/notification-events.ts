@@ -34,7 +34,7 @@ export function createGradeReleasedNotification(params: GradeReleasedParams): St
   };
 }
 
-interface SubmissionReturnedParams {
+interface GradeAmendedParams {
   studentId: string;
   assessmentId: string;
   assessmentTitle: string;
@@ -42,17 +42,39 @@ interface SubmissionReturnedParams {
   classId: string;
 }
 
-export function createSubmissionReturnedNotification(params: SubmissionReturnedParams): StudentNotification {
+export function createGradeAmendedNotification(params: GradeAmendedParams): StudentNotification {
   return {
     id: generateId("notif"),
     studentId: params.studentId,
-    type: "submission_returned",
-    title: "Submission returned",
-    body: `Your submission for "${params.assessmentTitle}" in ${params.className} has been returned with feedback.`,
+    type: "grade_amended",
+    title: "Grade updated",
+    body: `Your grade for "${params.assessmentTitle}" in ${params.className} has been updated.`,
     read: false,
     createdAt: new Date().toISOString(),
     linkTo: `/student/classes/${params.classId}/assessments/${params.assessmentId}`,
-    dedupeKey: `${params.studentId}:${params.assessmentId}:submission_returned:${Date.now()}`,
+    dedupeKey: `${params.studentId}:${params.assessmentId}:grade_amended:${Date.now()}`,
+  };
+}
+
+interface StudentExcusedParams {
+  studentId: string;
+  assessmentId: string;
+  assessmentTitle: string;
+  className: string;
+  classId: string;
+}
+
+export function createStudentExcusedNotification(params: StudentExcusedParams): StudentNotification {
+  return {
+    id: generateId("notif"),
+    studentId: params.studentId,
+    type: "student_excused",
+    title: "Assessment excused",
+    body: `You have been excused from "${params.assessmentTitle}" in ${params.className}.`,
+    read: false,
+    createdAt: new Date().toISOString(),
+    linkTo: `/student/classes/${params.classId}/assessments/${params.assessmentId}`,
+    dedupeKey: `${params.studentId}:${params.assessmentId}:student_excused`,
   };
 }
 
@@ -96,6 +118,30 @@ export function createPortfolioApprovedNotification(params: PortfolioApprovedPar
     createdAt: new Date().toISOString(),
     linkTo: `/student/portfolio`,
     dedupeKey: `${params.studentId}:${params.artifactId}:portfolio_approved`,
+  };
+}
+
+interface PortfolioRevisionParams {
+  studentId: string;
+  artifactId: string;
+  artifactTitle: string;
+  revisionNote?: string;
+}
+
+export function createPortfolioRevisionNotification(params: PortfolioRevisionParams): StudentNotification {
+  const noteSnippet = params.revisionNote
+    ? ` Teacher's note: "${params.revisionNote}"`
+    : "";
+  return {
+    id: generateId("notif"),
+    studentId: params.studentId,
+    type: "portfolio_revision",
+    title: "Revision requested",
+    body: `Your portfolio artifact "${params.artifactTitle}" needs revision.${noteSnippet}`,
+    read: false,
+    createdAt: new Date().toISOString(),
+    linkTo: `/student/portfolio?artifact=${params.artifactId}`,
+    dedupeKey: `${params.studentId}:${params.artifactId}:portfolio_revision:${Date.now()}`,
   };
 }
 

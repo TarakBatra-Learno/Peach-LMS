@@ -11,6 +11,7 @@
 import type { AppState } from "@/stores/types";
 import type { Class } from "@/types/class";
 import type { Submission } from "@/types/submission";
+import type { Assessment } from "@/types/assessment";
 import type { GradeRecord } from "@/types/gradebook";
 import type { Report } from "@/types/report";
 import type { PortfolioArtifact } from "@/types/portfolio";
@@ -64,8 +65,8 @@ export function getStudentAssessments(
     .filter((a) => {
       // Only assessments for classes the student is enrolled in
       if (!student.classIds.includes(a.classId)) return false;
-      // Only published assessments
-      if (a.status !== "published") return false;
+      // Only non-draft assessments (both "live" and "closed" are visible)
+      if (a.status === "draft") return false;
       // Optional class filter
       if (classId && a.classId !== classId) return false;
       // Only assessments assigned to this student (if assignedStudentIds exists)
@@ -109,12 +110,33 @@ export function getStudentReleasedGrades(
     return true;
   });
 
-  // Only include grades for assessments where grades have been released
+  // Only include grades with per-student release
   return studentGrades.filter((g) => {
     const assessment = state.assessments.find((a) => a.id === g.assessmentId);
     if (!assessment) return false;
-    return canStudentViewGrade(assessment);
+    return canStudentViewGrade(assessment, g);
   }).map(projectStudentGradeRecord);
+}
+
+// ─── Student Submission Status ──────────────────────────────────────────────
+
+export type StudentSubmissionStatus = "due" | "overdue" | "excused" | "submitted_on_time" | "submitted_late";
+
+/**
+ * Derive the submission status from the student's perspective.
+ * Used for badges and status indicators on student-facing surfaces.
+ */
+export function getStudentSubmissionStatus(
+  grade: GradeRecord | undefined,
+  submission: Submission | undefined,
+  assessment: Assessment
+): StudentSubmissionStatus {
+  if (grade?.submissionStatus === "excused") return "excused";
+  if (submission?.status === "submitted") {
+    return submission.isLate ? "submitted_late" : "submitted_on_time";
+  }
+  if (isAssessmentPastDue(assessment)) return "overdue";
+  return "due";
 }
 
 // ─── Student Assessment State Projection ────────────────────────────────────
@@ -127,9 +149,8 @@ export function getStudentReleasedGrades(
  *
  * Precedence for workState:
  *   1. excused (GradeRecord.submissionStatus === "excused") — terminal, always wins
- *   2. missing (GradeRecord.submissionStatus === "missing") — teacher-set
- *   3. Submission.status when a Submission entity exists
- *   4. not_started — no submission exists
+ *   2. Submission.status when a Submission entity exists
+ *   3. not_started — no submission exists
  *
  * Grade completeness and release visibility NEVER affect workState.
  */
@@ -156,15 +177,11 @@ export function getStudentAssessmentState(
   if (grade?.submissionStatus === "excused") {
     workState = "excused";
   }
-  // 2. Missing — teacher-set queue status
-  else if (grade?.submissionStatus === "missing") {
-    workState = "missing";
-  }
-  // 3. Submission exists — use its status directly
+  // 2. Submission exists — use its status directly
   else if (submission) {
     workState = submission.status as StudentWorkState;
   }
-  // 4. No submission — not started
+  // 3. No submission — not started
   else {
     workState = "not_started";
   }
@@ -173,7 +190,7 @@ export function getStudentAssessmentState(
   const hasCompletedGrade = isGradeComplete(grade, assessment);
 
   // ── Visibility flags (orthogonal to workState and grade completeness) ──
-  const isGradeVisible = canStudentViewGrade(assessment);
+  const isGradeVisible = canStudentViewGrade(assessment, grade);
   // Today: isFeedbackVisible === isGradeVisible
   // Future seam: may diverge when Assessment.feedbackReleasedAt is added
   const isFeedbackVisible = isGradeVisible;
@@ -181,9 +198,9 @@ export function getStudentAssessmentState(
   // ── Submission availability ──
   const assessmentOpen = isAssessmentOpenForSubmission(assessment);
   // canSubmit: assessment is open AND workState allows submission
-  // Submittable states: not_started, draft, returned (resubmit window)
-  // Non-submittable: submitted, resubmitted, missing, excused
-  const submittableWorkStates: StudentWorkState[] = ["not_started", "draft", "returned"];
+  // Submittable states: not_started, draft (no more "returned" since we removed that state)
+  // Non-submittable: submitted, excused
+  const submittableWorkStates: StudentWorkState[] = ["not_started", "draft"];
   const canSubmit = assessmentOpen && submittableWorkStates.includes(workState);
 
   // ── Due date ──

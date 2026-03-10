@@ -273,53 +273,53 @@ export function generateSeedData() {
     standardIds?: string[]; mypCriteria?: MYPCriterion[];
   }[] = [
     // MYP HR (10 assessments) - rubric & standards
-    { title: "Personal Project Proposal", desc: "Write a proposal for your MYP Personal Project.", classId: CLS_MYP_HR, mode: "rubric", status: "published", dueDaysAgo: 30, goalIds: [lgId(5), lgId(6)], rubric: hrRubric },
-    { title: "Community Service Reflection", desc: "Reflect on your community service experience.", classId: CLS_MYP_HR, mode: "rubric", status: "published", dueDaysAgo: 20, goalIds: [lgId(5), lgId(14)], rubric: hrRubric },
-    { title: "ATL Skills Self-Assessment", desc: "Complete the ATL skills self-assessment form.", classId: CLS_MYP_HR, mode: "standards", status: "published", dueDaysAgo: 14, goalIds: [lgId(6), lgId(7), lgId(8)], standardIds: [lgId(6), lgId(7), lgId(8)] },
-    { title: "Learner Profile Self-Reflection", desc: "Reflect on your development as an IB Learner.", classId: CLS_MYP_HR, mode: "rubric", status: "published", dueDaysAgo: 42, goalIds: [lgId(11), lgId(14)], rubric: hrRubric },
-    { title: "Digital Citizenship Quiz", desc: "Demonstrate understanding of digital rights and responsibilities.", classId: CLS_MYP_HR, mode: "score", status: "published", dueDaysAgo: 36, goalIds: [lgId(6), lgId(10)], totalPoints: 20 },
-    { title: "Goal Setting & Action Plan", desc: "Create SMART goals and an action plan for Term 2.", classId: CLS_MYP_HR, mode: "rubric", status: "published", dueDaysAgo: 28, goalIds: [lgId(8), lgId(5)], rubric: hrRubric },
-    { title: "CAS Activity Log Review", desc: "Review and document CAS experiences.", classId: CLS_MYP_HR, mode: "standards", status: "published", dueDaysAgo: 18, goalIds: [lgId(7), lgId(15)], standardIds: [lgId(7), lgId(15)] },
-    { title: "Advisory Group Presentation", desc: "Present your advisory group project to the class.", classId: CLS_MYP_HR, mode: "rubric", status: "published", dueDaysAgo: 10, goalIds: [lgId(6), lgId(7)], rubric: hrRubric },
-    { title: "Term 1 Self-Assessment", desc: "Evaluate your progress against Term 1 learning goals.", classId: CLS_MYP_HR, mode: "standards", status: "published", dueDaysAgo: 5, goalIds: [lgId(8), lgId(11)], standardIds: [lgId(8), lgId(11)] },
+    { title: "Personal Project Proposal", desc: "Write a proposal for your MYP Personal Project.", classId: CLS_MYP_HR, mode: "rubric", status: "live", dueDaysAgo: 30, goalIds: [lgId(5), lgId(6)], rubric: hrRubric },
+    { title: "Community Service Reflection", desc: "Reflect on your community service experience.", classId: CLS_MYP_HR, mode: "rubric", status: "live", dueDaysAgo: 20, goalIds: [lgId(5), lgId(14)], rubric: hrRubric },
+    { title: "ATL Skills Self-Assessment", desc: "Complete the ATL skills self-assessment form.", classId: CLS_MYP_HR, mode: "standards", status: "live", dueDaysAgo: 14, goalIds: [lgId(6), lgId(7), lgId(8)], standardIds: [lgId(6), lgId(7), lgId(8)] },
+    { title: "Learner Profile Self-Reflection", desc: "Reflect on your development as an IB Learner.", classId: CLS_MYP_HR, mode: "rubric", status: "live", dueDaysAgo: 42, goalIds: [lgId(11), lgId(14)], rubric: hrRubric },
+    { title: "Digital Citizenship Quiz", desc: "Demonstrate understanding of digital rights and responsibilities.", classId: CLS_MYP_HR, mode: "score", status: "live", dueDaysAgo: 36, goalIds: [lgId(6), lgId(10)], totalPoints: 20 },
+    { title: "Goal Setting & Action Plan", desc: "Create SMART goals and an action plan for Term 2.", classId: CLS_MYP_HR, mode: "rubric", status: "live", dueDaysAgo: 28, goalIds: [lgId(8), lgId(5)], rubric: hrRubric },
+    { title: "CAS Activity Log Review", desc: "Review and document CAS experiences.", classId: CLS_MYP_HR, mode: "standards", status: "live", dueDaysAgo: 18, goalIds: [lgId(7), lgId(15)], standardIds: [lgId(7), lgId(15)] },
+    { title: "Advisory Group Presentation", desc: "Present your advisory group project to the class.", classId: CLS_MYP_HR, mode: "rubric", status: "live", dueDaysAgo: 10, goalIds: [lgId(6), lgId(7)], rubric: hrRubric },
+    { title: "Term 1 Self-Assessment", desc: "Evaluate your progress against Term 1 learning goals.", classId: CLS_MYP_HR, mode: "standards", status: "live", dueDaysAgo: 5, goalIds: [lgId(8), lgId(11)], standardIds: [lgId(8), lgId(11)] },
     { title: "Term 2 Learning Portfolio", desc: "Curate your best work samples for Term 2.", classId: CLS_MYP_HR, mode: "rubric", status: "draft", dueDaysAgo: -7, goalIds: [lgId(5), lgId(8)], rubric: hrRubric },
 
     // MYP SCI (11 assessments) - myp_criteria & score
-    { title: "Ecology Lab Report", desc: "Investigate the effect of pH on plant growth.", classId: CLS_MYP_SCI, mode: "myp_criteria", status: "published", dueDaysAgo: 35, goalIds: [lgId(1), lgId(2)], mypCriteria: mypSciCriteria },
-    { title: "Chemistry Unit Test", desc: "End-of-unit assessment on atomic structure.", classId: CLS_MYP_SCI, mode: "score", status: "published", dueDaysAgo: 25, goalIds: [lgId(1)], totalPoints: 50 },
-    { title: "Scientific Investigation: Osmosis", desc: "Design and conduct an experiment on osmosis.", classId: CLS_MYP_SCI, mode: "myp_criteria", status: "published", dueDaysAgo: 15, goalIds: [lgId(1), lgId(2), lgId(9)], mypCriteria: mypSciCriteria },
-    { title: "Physics Problem Set", desc: "Complete problems on forces and motion.", classId: CLS_MYP_SCI, mode: "score", status: "published", dueDaysAgo: 7, goalIds: [lgId(1)], totalPoints: 40 },
-    { title: "Biology Microscopy Practical", desc: "Observe and draw cell structures under the microscope.", classId: CLS_MYP_SCI, mode: "myp_criteria", status: "published", dueDaysAgo: 45, goalIds: [lgId(1), lgId(2)], mypCriteria: mypSciCriteria },
-    { title: "Periodic Table Quiz", desc: "Identify elements, groups, and periodic trends.", classId: CLS_MYP_SCI, mode: "score", status: "published", dueDaysAgo: 38, goalIds: [lgId(1)], totalPoints: 30 },
-    { title: "Energy Transfer Investigation", desc: "Design an experiment to measure energy transfer efficiency.", classId: CLS_MYP_SCI, mode: "myp_criteria", status: "published", dueDaysAgo: 30, goalIds: [lgId(1), lgId(2), lgId(10)], mypCriteria: mypSciCriteria },
-    { title: "Scientific Method Worksheet", desc: "Apply the scientific method to real-world scenarios.", classId: CLS_MYP_SCI, mode: "score", status: "published", dueDaysAgo: 22, goalIds: [lgId(1), lgId(9)], totalPoints: 25 },
-    { title: "Climate Change Research Project", desc: "Research and present on a climate change topic.", classId: CLS_MYP_SCI, mode: "myp_criteria", status: "published", dueDaysAgo: 12, goalIds: [lgId(2), lgId(9), lgId(10)], mypCriteria: mypSciCriteria },
-    { title: "Lab Safety Assessment", desc: "Demonstrate knowledge of lab safety procedures.", classId: CLS_MYP_SCI, mode: "score", status: "published", dueDaysAgo: -2, goalIds: [lgId(1)], totalPoints: 20 },
+    { title: "Ecology Lab Report", desc: "Investigate the effect of pH on plant growth.", classId: CLS_MYP_SCI, mode: "myp_criteria", status: "live", dueDaysAgo: 35, goalIds: [lgId(1), lgId(2)], mypCriteria: mypSciCriteria },
+    { title: "Chemistry Unit Test", desc: "End-of-unit assessment on atomic structure.", classId: CLS_MYP_SCI, mode: "score", status: "live", dueDaysAgo: 25, goalIds: [lgId(1)], totalPoints: 50 },
+    { title: "Scientific Investigation: Osmosis", desc: "Design and conduct an experiment on osmosis.", classId: CLS_MYP_SCI, mode: "myp_criteria", status: "live", dueDaysAgo: 15, goalIds: [lgId(1), lgId(2), lgId(9)], mypCriteria: mypSciCriteria },
+    { title: "Physics Problem Set", desc: "Complete problems on forces and motion.", classId: CLS_MYP_SCI, mode: "score", status: "live", dueDaysAgo: 7, goalIds: [lgId(1)], totalPoints: 40 },
+    { title: "Biology Microscopy Practical", desc: "Observe and draw cell structures under the microscope.", classId: CLS_MYP_SCI, mode: "myp_criteria", status: "live", dueDaysAgo: 45, goalIds: [lgId(1), lgId(2)], mypCriteria: mypSciCriteria },
+    { title: "Periodic Table Quiz", desc: "Identify elements, groups, and periodic trends.", classId: CLS_MYP_SCI, mode: "score", status: "live", dueDaysAgo: 38, goalIds: [lgId(1)], totalPoints: 30 },
+    { title: "Energy Transfer Investigation", desc: "Design an experiment to measure energy transfer efficiency.", classId: CLS_MYP_SCI, mode: "myp_criteria", status: "live", dueDaysAgo: 30, goalIds: [lgId(1), lgId(2), lgId(10)], mypCriteria: mypSciCriteria },
+    { title: "Scientific Method Worksheet", desc: "Apply the scientific method to real-world scenarios.", classId: CLS_MYP_SCI, mode: "score", status: "live", dueDaysAgo: 22, goalIds: [lgId(1), lgId(9)], totalPoints: 25 },
+    { title: "Climate Change Research Project", desc: "Research and present on a climate change topic.", classId: CLS_MYP_SCI, mode: "myp_criteria", status: "live", dueDaysAgo: 12, goalIds: [lgId(2), lgId(9), lgId(10)], mypCriteria: mypSciCriteria },
+    { title: "Lab Safety Assessment", desc: "Demonstrate knowledge of lab safety procedures.", classId: CLS_MYP_SCI, mode: "score", status: "live", dueDaysAgo: -2, goalIds: [lgId(1)], totalPoints: 20 },
     { title: "IDU Collaboration Reflection", desc: "Reflect on the interdisciplinary unit collaboration.", classId: CLS_MYP_SCI, mode: "myp_criteria", status: "draft", dueDaysAgo: -5, goalIds: [lgId(1), lgId(7), lgId(10)], mypCriteria: mypSciCriteria },
 
     // DP ENG (11 assessments) - dp_scale & score
-    { title: "Paper 1: Guided Textual Analysis", desc: "Unseen text analysis under timed conditions.", classId: CLS_DP_ENG, mode: "dp_scale", status: "published", dueDaysAgo: 32, goalIds: [lgId(3), lgId(4)] },
-    { title: "Individual Oral Commentary", desc: "15-minute oral commentary on studied work.", classId: CLS_DP_ENG, mode: "dp_scale", status: "published", dueDaysAgo: 22, goalIds: [lgId(3), lgId(14)] },
-    { title: "Written Task 1: Creative Response", desc: "Creative writing based on studied text.", classId: CLS_DP_ENG, mode: "score", status: "published", dueDaysAgo: 12, goalIds: [lgId(4), lgId(6)], totalPoints: 30, checklist },
-    { title: "Comparative Essay Draft", desc: "Compare two works from the reading list.", classId: CLS_DP_ENG, mode: "dp_scale", status: "published", dueDaysAgo: -3, goalIds: [lgId(3), lgId(4), lgId(10)] },
-    { title: "Unseen Poetry Analysis", desc: "Analyse an unseen poem under timed conditions.", classId: CLS_DP_ENG, mode: "dp_scale", status: "published", dueDaysAgo: 48, goalIds: [lgId(3), lgId(10)] },
-    { title: "Reading Journal: Novel Study", desc: "Maintain a reflective reading journal on the class novel.", classId: CLS_DP_ENG, mode: "score", status: "published", dueDaysAgo: 40, goalIds: [lgId(3), lgId(4)], totalPoints: 25 },
-    { title: "Dramatic Monologue Performance", desc: "Perform an original dramatic monologue based on a studied character.", classId: CLS_DP_ENG, mode: "dp_scale", status: "published", dueDaysAgo: 34, goalIds: [lgId(4), lgId(14)] },
-    { title: "Rhetorical Analysis Essay", desc: "Analyse the rhetorical strategies in a non-fiction text.", classId: CLS_DP_ENG, mode: "dp_scale", status: "published", dueDaysAgo: 26, goalIds: [lgId(3), lgId(4), lgId(10)] },
-    { title: "Vocabulary & Grammar Test", desc: "Assess knowledge of literary terminology and grammar conventions.", classId: CLS_DP_ENG, mode: "score", status: "published", dueDaysAgo: 18, goalIds: [lgId(4)], totalPoints: 40 },
-    { title: "Socratic Seminar Participation", desc: "Participate in a Socratic seminar on global issues in literature.", classId: CLS_DP_ENG, mode: "dp_scale", status: "published", dueDaysAgo: 8, goalIds: [lgId(3), lgId(14), lgId(6)] },
+    { title: "Paper 1: Guided Textual Analysis", desc: "Unseen text analysis under timed conditions.", classId: CLS_DP_ENG, mode: "dp_scale", status: "live", dueDaysAgo: 32, goalIds: [lgId(3), lgId(4)] },
+    { title: "Individual Oral Commentary", desc: "15-minute oral commentary on studied work.", classId: CLS_DP_ENG, mode: "dp_scale", status: "live", dueDaysAgo: 22, goalIds: [lgId(3), lgId(14)] },
+    { title: "Written Task 1: Creative Response", desc: "Creative writing based on studied text.", classId: CLS_DP_ENG, mode: "score", status: "live", dueDaysAgo: 12, goalIds: [lgId(4), lgId(6)], totalPoints: 30, checklist },
+    { title: "Comparative Essay Draft", desc: "Compare two works from the reading list.", classId: CLS_DP_ENG, mode: "dp_scale", status: "live", dueDaysAgo: -3, goalIds: [lgId(3), lgId(4), lgId(10)] },
+    { title: "Unseen Poetry Analysis", desc: "Analyse an unseen poem under timed conditions.", classId: CLS_DP_ENG, mode: "dp_scale", status: "live", dueDaysAgo: 48, goalIds: [lgId(3), lgId(10)] },
+    { title: "Reading Journal: Novel Study", desc: "Maintain a reflective reading journal on the class novel.", classId: CLS_DP_ENG, mode: "score", status: "live", dueDaysAgo: 40, goalIds: [lgId(3), lgId(4)], totalPoints: 25 },
+    { title: "Dramatic Monologue Performance", desc: "Perform an original dramatic monologue based on a studied character.", classId: CLS_DP_ENG, mode: "dp_scale", status: "live", dueDaysAgo: 34, goalIds: [lgId(4), lgId(14)] },
+    { title: "Rhetorical Analysis Essay", desc: "Analyse the rhetorical strategies in a non-fiction text.", classId: CLS_DP_ENG, mode: "dp_scale", status: "live", dueDaysAgo: 26, goalIds: [lgId(3), lgId(4), lgId(10)] },
+    { title: "Vocabulary & Grammar Test", desc: "Assess knowledge of literary terminology and grammar conventions.", classId: CLS_DP_ENG, mode: "score", status: "live", dueDaysAgo: 18, goalIds: [lgId(4)], totalPoints: 40 },
+    { title: "Socratic Seminar Participation", desc: "Participate in a Socratic seminar on global issues in literature.", classId: CLS_DP_ENG, mode: "dp_scale", status: "live", dueDaysAgo: 8, goalIds: [lgId(3), lgId(14), lgId(6)] },
     { title: "HL Essay Outline", desc: "Submit the outline for your HL extended essay.", classId: CLS_DP_ENG, mode: "score", status: "draft", dueDaysAgo: -10, goalIds: [lgId(4), lgId(9)], totalPoints: 20 },
 
     // Checklist-mode assessments
-    { title: "Lab Report Submission Checklist", desc: "Verify your lab report meets all required components before submission.", classId: CLS_MYP_SCI, mode: "checklist", status: "published", dueDaysAgo: 9, goalIds: [lgId(1), lgId(2), lgId(8)], checklist: labReportChecklist, checklistSections: labReportSections, checklistResponseStyle: "binary", checklistOutcomeModel: "feedback_only" },
-    { title: "Essay Criteria Checklist", desc: "Assessment of key essay criteria with point values for each component.", classId: CLS_DP_ENG, mode: "checklist", status: "published", dueDaysAgo: 6, goalIds: [lgId(3), lgId(4), lgId(10)], checklist: essayCriteriaChecklist, checklistSections: essayCriteriaSections, checklistResponseStyle: "ternary", checklistOutcomeModel: "score_contributing" },
+    { title: "Lab Report Submission Checklist", desc: "Verify your lab report meets all required components before submission.", classId: CLS_MYP_SCI, mode: "checklist", status: "live", dueDaysAgo: 9, goalIds: [lgId(1), lgId(2), lgId(8)], checklist: labReportChecklist, checklistSections: labReportSections, checklistResponseStyle: "binary", checklistOutcomeModel: "feedback_only" },
+    { title: "Essay Criteria Checklist", desc: "Assessment of key essay criteria with point values for each component.", classId: CLS_DP_ENG, mode: "checklist", status: "live", dueDaysAgo: 6, goalIds: [lgId(3), lgId(4), lgId(10)], checklist: essayCriteriaChecklist, checklistSections: essayCriteriaSections, checklistResponseStyle: "ternary", checklistOutcomeModel: "score_contributing" },
   ];
 
   let publishedAsmtCount = 0;
   const assessments: Assessment[] = assessmentConfigs.map((cfg, idx) => {
     const i = idx + 1;
     const dueDate = iso(subDays(TODAY, cfg.dueDaysAgo));
-    const isPublished = cfg.status === "published";
+    const isPublished = cfg.status === "live" || cfg.status === "published";
     if (isPublished) publishedAsmtCount++;
     return {
       id: asmtId(i),
@@ -375,7 +375,8 @@ export function generateSeedData() {
       // Determine submission status with variety
       let submissionStatus: SubmissionStatus = "submitted";
       if (sIdx % 17 === 0 && sIdx > 0) {
-        submissionStatus = "missing";       // ~1 per assessment
+        // ~1 per assessment: no submission (late is derived from due date)
+        submissionStatus = "none";
       } else if (sIdx % 23 === 0 && sIdx > 0) {
         submissionStatus = "excused";       // ~1 per assessment
       } else if (seedVal >= 85) {
@@ -388,6 +389,20 @@ export function generateSeedData() {
       }
 
       const isUngraded = submissionStatus === "submitted" && seedVal >= 70 && seedVal < 85;
+      const isNoSubmission = submissionStatus === "none";
+      const hasNoGradeData = isNoSubmission || submissionStatus === "excused" || isUngraded;
+
+      // Determine gradingStatus for new lifecycle model
+      let gradingStatus: "none" | "in_progress" | "ready" = "none";
+      if (!hasNoGradeData) {
+        gradingStatus = "ready"; // fully graded
+      }
+
+      // For graded records on past-due assessments, set releasedAt (some students see grades)
+      const dueDaysAgo = assessmentConfigs[aIdx].dueDaysAgo || 1;
+      const isGraded = !hasNoGradeData;
+      const isPastDue = dueDaysAgo > 3;
+      const releasedAt = isGraded && isPastDue ? isoTime(subDays(TODAY, dueDaysAgo - 2)) : undefined;
 
       const grade: GradeRecord = {
         id: gradeId(aIdx + 1, sIdx + 1),
@@ -396,13 +411,16 @@ export function generateSeedData() {
         classId: asmt.classId,
         gradingMode: asmt.gradingMode,
         submissionStatus,
-        feedback: (submissionStatus === "missing" || submissionStatus === "excused" || isUngraded) ? undefined : feedbackPhrases[sIdx % feedbackPhrases.length],
-        submittedAt: submissionStatus === "submitted" ? isoTime(subDays(TODAY, (assessmentConfigs[aIdx].dueDaysAgo || 1) + 1)) : undefined,
-        gradedAt: (submissionStatus === "missing" || submissionStatus === "excused" || isUngraded) ? undefined : isoTime(subDays(TODAY, (assessmentConfigs[aIdx].dueDaysAgo || 1) - 1)),
+        feedback: hasNoGradeData ? undefined : feedbackPhrases[sIdx % feedbackPhrases.length],
+        submittedAt: submissionStatus === "submitted" ? isoTime(subDays(TODAY, dueDaysAgo + 1)) : undefined,
+        gradedAt: hasNoGradeData ? undefined : isoTime(subDays(TODAY, dueDaysAgo - 1)),
+        gradingStatus,
+        releasedAt,
+        reportStatus: releasedAt ? "seen" : undefined,
       };
 
-      // Missing, excused, and submitted-but-ungraded records have no grade data
-      if (submissionStatus === "missing" || submissionStatus === "excused" || isUngraded) {
+      // No-submission, excused, and submitted-but-ungraded records have no grade data
+      if (hasNoGradeData) {
         grades.push(grade);
         return;
       }
@@ -477,7 +495,7 @@ export function generateSeedData() {
   // This gives the Standards & Skills tab data to display.
   // -----------------------------------------------------------------------
   grades.forEach((grade) => {
-    if (grade.submissionStatus === "missing" || grade.submissionStatus === "excused" || (grade.standardsMastery && grade.standardsMastery.length > 0)) return;
+    if (grade.submissionStatus === "none" || grade.submissionStatus === "excused" || (grade.standardsMastery && grade.standardsMastery.length > 0)) return;
     const asmt = assessments.find((a) => a.id === grade.assessmentId);
     if (!asmt || asmt.gradingMode === "standards" || asmt.status === "draft") return;
     const goalIds = asmt.learningGoalIds.filter((gid) =>
@@ -885,7 +903,7 @@ export function generateSeedData() {
     const deriveGradeForClass = (classId: string): string => {
       const cls = classes.find(c => c.id === classId);
       if (!cls) return "-";
-      const classGrades = grades.filter(g => g.studentId === student.id && g.classId === classId && g.submissionStatus !== "missing" && g.submissionStatus !== "excused");
+      const classGrades = grades.filter(g => g.studentId === student.id && g.classId === classId && g.submissionStatus !== "none" && g.submissionStatus !== "excused");
       if (classGrades.length === 0) return "-";
 
       if (cls.programme === "DP") {
@@ -1053,7 +1071,7 @@ export function generateSeedData() {
 
   // Assessment-linked announcements
   assessments.forEach((asmt, idx) => {
-    if (asmt.status !== "published") return;
+    if (asmt.status !== "live" && asmt.status !== "published") return;
     annCount++;
     const cls = classes.find(c => c.id === asmt.classId)!;
     const announcementChannel = channels.find(c => c.classId === asmt.classId && c.type === "assignments")!;
@@ -1203,9 +1221,9 @@ export function generateSeedData() {
     }
   }
 
-  // Assessment deadlines — only for published assessments
+  // Assessment deadlines — only for live/published assessments
   assessments.forEach((asmt) => {
-    if (asmt.status !== "published") return;
+    if (asmt.status !== "live" && asmt.status !== "published") return;
     calCount++;
     const dueDate = new Date(asmt.dueDate + "T23:59:00.000Z");
     calendarEvents.push({

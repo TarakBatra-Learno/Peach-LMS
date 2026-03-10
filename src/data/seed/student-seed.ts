@@ -19,7 +19,7 @@ import type { Assessment } from "@/types/assessment";
  * Requires passing in the assessments array to select from published ones.
  */
 export function generateSeedSubmissions(assessments: Assessment[]): Submission[] {
-  const published = assessments.filter((a) => a.status === "published");
+  const published = assessments.filter((a) => a.status === "live" || a.status === "published");
   if (published.length === 0) return [];
 
   const submissions: Submission[] = [];
@@ -40,6 +40,7 @@ export function generateSeedSubmissions(assessments: Assessment[]): Submission[]
         { id: "att_seed_01", name: "Essay_Final.docx", type: "document", url: "https://mock.example.com/essay.docx", sourceType: "drive_import" },
       ],
       submittedAt: yesterday,
+      isLate: false,
       createdAt: twoDaysAgo,
       updatedAt: yesterday,
     });
@@ -54,51 +55,48 @@ export function generateSeedSubmissions(assessments: Assessment[]): Submission[]
       content: "Working on my analysis of the primary sources...",
       attachments: [],
       draftSavedAt: now,
+      isLate: false,
       createdAt: now,
       updatedAt: now,
     });
   }
 
-  // stu_02: returned (needs revision)
+  // stu_02: submitted (submit is final in new model)
   if (published[0]) {
     submissions.push({
       id: "sub_seed_03",
       assessmentId: published[0].id,
       studentId: "stu_02",
       classId: published[0].classId,
-      status: "returned",
+      status: "submitted",
       content: "My initial submission for the sustainability essay. I focused primarily on environmental aspects.",
       attachments: [
         { id: "att_seed_02", name: "Draft_v1.pdf", type: "document", url: "https://mock.example.com/draft.pdf", sourceType: "manual" },
       ],
-      teacherComment: "Good start, but you need to expand your analysis of the economic impact. Also, please add at least two more sources to support your arguments. See the rubric for specifics.",
       submittedAt: twoDaysAgo,
-      returnedAt: yesterday,
+      isLate: false,
       createdAt: twoDaysAgo,
-      updatedAt: yesterday,
+      updatedAt: twoDaysAgo,
     });
   }
 
-  // stu_03: resubmitted
+  // stu_03: submitted (submit is final in new model)
   if (published[0]) {
     submissions.push({
       id: "sub_seed_04",
       assessmentId: published[0].id,
       studentId: "stu_03",
       classId: published[0].classId,
-      status: "resubmitted",
+      status: "submitted",
       content: "I have revised my essay to include the economic analysis you mentioned. I've added sections on GDP impact and trade implications, with three additional academic sources.",
       attachments: [
         { id: "att_seed_03", name: "Essay_Revised.docx", type: "document", url: "https://mock.example.com/revised.docx", sourceType: "drive_import" },
         { id: "att_seed_04", name: "Sources_Bibliography.pdf", type: "document", url: "https://mock.example.com/sources.pdf", sourceType: "manual" },
       ],
-      teacherComment: "Please expand the economic analysis section.",
-      reflection: "I realized I had focused too narrowly on environmental issues. The economic perspective was important because it connects the topic to real-world policy decisions.",
-      submittedAt: twoDaysAgo,
-      returnedAt: yesterday,
-      resubmittedAt: now,
+      submittedAt: yesterday,
+      isLate: false,
       createdAt: twoDaysAgo,
-      updatedAt: now,
+      updatedAt: yesterday,
     });
   }
 
@@ -115,6 +113,7 @@ export function generateSeedSubmissions(assessments: Assessment[]): Submission[]
         { id: "att_seed_05", name: "Analysis_Notes.docx", type: "document", url: "https://mock.example.com/analysis.docx", sourceType: "onedrive_import" },
       ],
       submittedAt: yesterday,
+      isLate: false,
       createdAt: twoDaysAgo,
       updatedAt: yesterday,
     });

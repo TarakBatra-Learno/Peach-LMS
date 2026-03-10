@@ -3,7 +3,9 @@ import { ID } from "./common";
 export type NotificationType =
   | "grade_released"
   | "assessment_due"
-  | "submission_returned"
+  | "grade_amended"
+  | "student_excused"
+  | "submission_returned" // @deprecated — return/resubmit path removed
   | "report_distributed"
   | "announcement"
   | "portfolio_approved"

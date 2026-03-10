@@ -9,10 +9,10 @@ import { ID, GradingMode, MasteryLevel } from "./common";
  *
  * - `"none"` → no action taken (default)
  * - `"submitted"` → teacher acknowledged student work, needs grading (displayed as "To mark")
- * - `"missing"` → teacher marked as missing
  * - `"excused"` → terminal state, clears ALL grade data (always wins in derivation)
+ * - `"missing"` → @deprecated — late is now derived from due date + no submission. Kept for backward compat.
  */
-export type SubmissionStatus = "none" | "submitted" | "missing" | "excused";
+export type SubmissionStatus = "none" | "submitted" | "excused" | "missing";
 
 export type ChecklistResultStatus = "met" | "not_yet" | "yes" | "partly" | "no" | "unmarked";
 
@@ -58,9 +58,30 @@ export interface GradeRecord {
   mypCriteriaScores?: { criterionId: ID; criterion: string; level: number }[];
   /** DP scale grade (1-7). */
   dpGrade?: number;
-  /** Teacher feedback. Shares the same release gate as grades (`Assessment.gradesReleasedAt`). */
+  /**
+   * Per-student grade release timestamp. When set, this student's grade is visible to them.
+   * Cleared by `buildExcusedPayload()` when student is excused (terminal state).
+   */
+  releasedAt?: string;
+  /** Teacher feedback. Shares the same release gate as grades (per-student `releasedAt`). */
   feedback?: string;
   feedbackAttachments?: { type: "text" | "audio" | "image"; url: string }[];
+  /**
+   * Grading completion status:
+   * - "none": no grading action taken yet
+   * - "in_progress": teacher has started grading but not completed all required fields
+   * - "ready": all required fields completed, ready for release
+   */
+  gradingStatus?: "none" | "in_progress" | "ready";
+  /** ISO timestamp when grade was last amended after initial release. Used to notify student of changes. */
+  amendedAt?: string;
+  /**
+   * Student's view status of released grade:
+   * - "unseen": grade released but student hasn't viewed it yet
+   * - "seen": student has viewed the grade
+   * Only relevant when releasedAt is set.
+   */
+  reportStatus?: "unseen" | "seen";
   submittedAt?: string;
   gradedAt?: string;
   updatedAt?: string;
