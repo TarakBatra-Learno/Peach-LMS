@@ -56,7 +56,7 @@ import Link from "next/link";
 import { toast } from "sonner";
 import { generateId } from "@/services/mock-service";
 import { format, parseISO, addDays, getDay } from "date-fns";
-import { getGradeCellDisplay, getGradePercentage, getToMarkCount, getMissingCount, getExcusedCount, isGradeComplete, GRADING_MODE_LABELS } from "@/lib/grade-helpers";
+import { getGradeCellDisplay, getGradePercentage, getToMarkCount, getExcusedCount, isGradeComplete, GRADING_MODE_LABELS } from "@/lib/grade-helpers";
 import { computeClassAveragePercent, computeAttentionStudents, computeWeakestGoals, computeAssessmentChartData } from "@/lib/selectors/grade-selectors";
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 
@@ -479,7 +479,7 @@ export default function ClassHubPage() {
           ) : (() => {
             const studentIds = students.map((s) => s.id);
             const totalToMark = publishedAssessments.reduce((sum, a) => sum + getToMarkCount(studentIds, grades.filter((g) => g.assessmentId === a.id), a), 0);
-            const totalMissing = publishedAssessments.reduce((sum, a) => sum + getMissingCount(studentIds, grades.filter((g) => g.assessmentId === a.id), a), 0);
+            // Missing status no longer exists — late is derived from due date
             const totalExcused = publishedAssessments.reduce((sum, a) => sum + getExcusedCount(studentIds, grades.filter((g) => g.assessmentId === a.id), a), 0);
 
             // Class average with guardrail: only show when ≥3 assessments have numeric data
@@ -621,10 +621,6 @@ export default function ClassHubPage() {
                 <AlertTriangle className={`h-4 w-4 ${totalToMark > 0 ? "text-[#b45309]" : "text-muted-foreground"}`} />
                 <span className={`text-[13px] font-semibold ${totalToMark > 0 ? "text-[#b45309]" : "text-muted-foreground"}`}>{totalToMark}</span>
                 <span className="text-[12px] text-muted-foreground">to mark</span>
-              </div>
-              <div className="flex items-center gap-2 rounded-lg border border-border px-3 py-2">
-                <span className={`text-[13px] font-semibold ${totalMissing > 0 ? "text-[#dc2626]" : "text-muted-foreground"}`}>{totalMissing}</span>
-                <span className="text-[12px] text-muted-foreground">missing</span>
               </div>
               <div className="flex items-center gap-2 rounded-lg border border-border px-3 py-2">
                 <span className="text-[13px] font-semibold text-muted-foreground">{totalExcused}</span>
