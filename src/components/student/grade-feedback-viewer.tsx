@@ -164,11 +164,6 @@ export function GradeFeedbackViewer({ grade, assessment }: GradeFeedbackViewerPr
         </div>
       )}
 
-      {/* Missing status */}
-      {grade.submissionStatus === "missing" && !grade.score && !grade.dpGrade && !grade.mypCriteriaScores?.length && (
-        <StatusBadge status="missing" />
-      )}
-
       {/* Feedback */}
       {grade.feedback && (
         <>

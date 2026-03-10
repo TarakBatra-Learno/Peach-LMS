@@ -16,6 +16,8 @@ import { BarChart3, Calendar, CheckCircle2 } from "lucide-react";
 import { format } from "date-fns";
 import type { GradeRecord } from "@/types/gradebook";
 import type { StudentAssessmentView } from "@/lib/student-permissions";
+import { useReleasedAssessmentClick } from "@/lib/hooks/use-released-assessment-click";
+import { GradeResultSheet } from "@/components/student/grade-result-sheet";
 
 interface ClassGradesTabProps {
   classId: string;
@@ -24,7 +26,6 @@ interface ClassGradesTabProps {
 
 function getStudentGradeDisplay(grade: GradeRecord): string {
   if (grade.submissionStatus === "excused") return "Excused";
-  if (grade.submissionStatus === "missing" && grade.score == null && grade.dpGrade == null && !grade.mypCriteriaScores?.length) return "Missing";
   if (grade.score != null && grade.totalPoints != null)
     return `${grade.score}/${grade.totalPoints}`;
   if (grade.score != null) return `${grade.score}%`;
@@ -45,6 +46,7 @@ function getStudentGradeDisplay(grade: GradeRecord): string {
 
 export function ClassGradesTab({ classId, studentId }: ClassGradesTabProps) {
   const state = useStore((s) => s);
+  const { handleClick, sheetProps } = useReleasedAssessmentClick(studentId);
 
   const releasedGrades = useMemo(
     () => getStudentReleasedGrades(state, studentId, classId),
@@ -148,7 +150,11 @@ export function ClassGradesTab({ classId, studentId }: ClassGradesTabProps) {
               : "";
 
           return (
-            <Card key={grade.id} className="p-4 gap-0">
+            <Card
+              key={grade.id}
+              className="p-4 gap-0 cursor-pointer hover:shadow-[0_1px_2px_rgba(16,24,40,0.06)] transition-all"
+              onClick={() => handleClick(grade.assessmentId, classId)}
+            >
               <div className="flex items-center justify-between">
                 <div className="min-w-0 flex-1">
                   <p className="text-[14px] font-medium truncate">{assessment.title}</p>
@@ -190,6 +196,8 @@ export function ClassGradesTab({ classId, studentId }: ClassGradesTabProps) {
           );
         })}
       </div>
+
+      <GradeResultSheet {...sheetProps} />
     </div>
   );
 }

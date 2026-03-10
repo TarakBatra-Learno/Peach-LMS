@@ -69,8 +69,7 @@ export function SubmissionWorkbook({
   const [driveImportOpen, setDriveImportOpen] = useState(false);
   const [submitConfirm, setSubmitConfirm] = useState(false);
 
-  const isReturned = submission?.status === "returned";
-  const isSubmitted = submission?.status === "submitted" || submission?.status === "resubmitted";
+  const isSubmitted = submission?.status === "submitted";
   const canEdit = !isSubmitted;
 
   const handleSaveDraft = () => {
@@ -106,17 +105,15 @@ export function SubmissionWorkbook({
 
   const handleSubmit = () => {
     const now = new Date().toISOString();
-    const isResubmit = isReturned;
 
     if (submission) {
       updateSubmission(submission.id, {
         content,
         attachments,
         reflection: reflection || undefined,
-        status: isResubmit ? "resubmitted" : "submitted",
+        status: "submitted",
         submittedAt: now,
-        ...(isResubmit ? { resubmittedAt: now } : {}),
-        ...(isPastDue ? { isLate: true } : {}),
+        isLate: isPastDue ? true : false,
         updatedAt: now,
       });
     } else {
@@ -130,18 +127,14 @@ export function SubmissionWorkbook({
         attachments,
         reflection: reflection || undefined,
         submittedAt: now,
-        ...(isPastDue ? { isLate: true } : {}),
+        isLate: isPastDue ? true : false,
         createdAt: now,
         updatedAt: now,
       });
     }
 
     setSubmitConfirm(false);
-    toast.success(
-      isPastDue
-        ? isResubmit ? "Work resubmitted (late)" : "Work submitted (late)"
-        : isResubmit ? "Work resubmitted" : "Work submitted"
-    );
+    toast.success(isPastDue ? "Work submitted (late)" : "Work submitted");
     onSubmissionChange?.();
   };
 
@@ -232,10 +225,8 @@ export function SubmissionWorkbook({
                 status={submission.status}
                 variant={
                   getStudentStatusVariant(submission.status) ??
-                  (submission.status === "submitted" || submission.status === "resubmitted"
+                  (submission.status === "submitted"
                     ? "success"
-                    : submission.status === "returned"
-                    ? "warning"
                     : "info")
                 }
                 label={getStudentStatusLabel(submission.status)}
@@ -246,7 +237,7 @@ export function SubmissionWorkbook({
                   Saved {format(new Date(submission.draftSavedAt), "MMM d, h:mm a")}
                 </span>
               )}
-              {submission.submittedAt && (submission.status === "submitted" || submission.status === "resubmitted") && (
+              {submission.submittedAt && submission.status === "submitted" && (
                 <span className="text-[11px] text-muted-foreground flex items-center gap-1">
                   <Clock className="h-3 w-3" />
                   Submitted {format(new Date(submission.submittedAt), "MMM d, h:mm a")}
@@ -269,23 +260,10 @@ export function SubmissionWorkbook({
         </Card>
       )}
 
-      {/* Returned feedback */}
-      {isReturned && submission?.teacherComment && (
-        <Card className="p-4 gap-0 border-[#b45309]/30 bg-[#fef3c7]/20">
-          <p className="text-[12px] font-medium text-[#b45309] uppercase tracking-wide mb-1">
-            Teacher feedback on your submission
-          </p>
-          <p className="text-[13px]">{submission.teacherComment}</p>
-          <p className="text-[11px] text-muted-foreground mt-1">
-            You may revise your work and resubmit.
-          </p>
-        </Card>
-      )}
-
       {/* Content area */}
       <Card className="p-5 gap-0">
         <h3 className="text-[16px] font-semibold mb-3">
-          {isReturned ? "Revise & resubmit" : isSubmitted ? "Your submission" : "Your work"}
+          {isSubmitted ? "Your submission" : "Your work"}
         </h3>
 
         {canEdit ? (
@@ -300,18 +278,6 @@ export function SubmissionWorkbook({
               />
             </div>
 
-            {/* Reflection prompt (for returned work) */}
-            {isReturned && (
-              <div>
-                <Label className="text-[13px]">Reflection</Label>
-                <Textarea
-                  value={reflection}
-                  onChange={(e) => setReflection(e.target.value)}
-                  placeholder="Reflect on what you've changed in this revision..."
-                  className="mt-1.5 text-[13px] min-h-[80px]"
-                />
-              </div>
-            )}
           </div>
         ) : (
           <div className="text-[13px] whitespace-pre-wrap bg-muted/30 rounded-lg p-3">
@@ -403,7 +369,7 @@ export function SubmissionWorkbook({
                 disabled={!content.trim() && attachments.length === 0}
               >
                 <Send className="h-3.5 w-3.5 mr-1.5" />
-                {isReturned ? "Resubmit" : "Submit"}
+                Submit
               </Button>
             </div>
           </>
@@ -421,13 +387,9 @@ export function SubmissionWorkbook({
       <ConfirmDialog
         open={submitConfirm}
         onOpenChange={setSubmitConfirm}
-        title={isReturned ? "Resubmit your work?" : "Submit your work?"}
-        description={
-          isReturned
-            ? "Your revised work will be resubmitted to your teacher for review."
-            : "Once submitted, you won't be able to edit your work unless your teacher returns it."
-        }
-        confirmLabel={isReturned ? "Resubmit" : "Submit"}
+        title="Submit your work?"
+        description="Once submitted, you won't be able to edit your work. This is final."
+        confirmLabel="Submit"
         onConfirm={handleSubmit}
       />
     </div>

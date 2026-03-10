@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import { useStore } from "@/stores";
 import { useStudentId } from "@/lib/hooks/use-current-user";
@@ -31,6 +31,117 @@ import {
 } from "lucide-react";
 import { format } from "date-fns";
 import Link from "next/link";
+import type { Assessment } from "@/types/assessment";
+import type { GradeRecord } from "@/types/gradebook";
+
+/** Wrapper that marks grade as seen on first view */
+function GradeFeedbackViewerWithTracking({ grade, assessment }: { grade: GradeRecord; assessment: Assessment }) {
+  const updateGrade = useStore((s) => s.updateGrade);
+
+  useEffect(() => {
+    if (grade.reportStatus === "unseen") {
+      updateGrade(grade.id, { reportStatus: "seen" });
+    }
+    // Only run on initial mount / when grade id changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [grade.id]);
+
+  return <GradeFeedbackViewer grade={grade} assessment={assessment} />;
+}
+
+/** Read-only criteria panel showing grading structure */
+function GradingCriteriaPanel({ assessment }: { assessment: Assessment }) {
+  // Only render if there are criteria to show
+  const hasCriteria =
+    (assessment.gradingMode === "rubric" && assessment.rubric?.length) ||
+    (assessment.gradingMode === "checklist" && assessment.checklist?.length) ||
+    (assessment.gradingMode === "myp_criteria" && assessment.mypCriteria?.length) ||
+    (assessment.gradingMode === "score" && assessment.totalPoints) ||
+    assessment.gradingMode === "dp_scale";
+
+  if (!hasCriteria) return null;
+
+  return (
+    <Card className="p-5 gap-0">
+      <h3 className="text-[16px] font-semibold mb-3">Grading criteria</h3>
+
+      {/* Score mode */}
+      {assessment.gradingMode === "score" && assessment.totalPoints && (
+        <p className="text-[13px] text-muted-foreground">
+          Scored out of {assessment.totalPoints} points
+        </p>
+      )}
+
+      {/* DP Scale */}
+      {assessment.gradingMode === "dp_scale" && (
+        <p className="text-[13px] text-muted-foreground">
+          IB Diploma scale (1-7)
+        </p>
+      )}
+
+      {/* Rubric */}
+      {assessment.gradingMode === "rubric" && assessment.rubric && (
+        <div className="space-y-3">
+          {assessment.rubric.map((criterion) => (
+            <div key={criterion.id}>
+              <p className="text-[13px] font-medium">{criterion.title}</p>
+              <div className="flex flex-wrap gap-1.5 mt-1">
+                {criterion.levels.map((level) => (
+                  <Badge key={level.id} variant="outline" className="text-[11px] font-normal">
+                    {level.label} ({level.points} pts)
+                  </Badge>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Checklist */}
+      {assessment.gradingMode === "checklist" && assessment.checklist && (
+        <div className="space-y-1.5">
+          {assessment.checklist.map((item) => (
+            <div key={item.id} className="flex items-start gap-2">
+              <div className="h-4 w-4 rounded border border-border mt-0.5 shrink-0" />
+              <div>
+                <p className="text-[13px]">{item.label}</p>
+                {item.helpText && (
+                  <p className="text-[11px] text-muted-foreground">{item.helpText}</p>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* MYP Criteria */}
+      {assessment.gradingMode === "myp_criteria" && assessment.mypCriteria && (
+        <div className="space-y-3">
+          {assessment.mypCriteria.map((c) => (
+            <div key={c.id}>
+              <p className="text-[13px] font-medium">
+                Criterion {c.criterion}: {c.title}
+              </p>
+              <p className="text-[12px] text-muted-foreground">
+                Levels 0-{c.maxLevel}
+              </p>
+              {c.strandDescriptors.length > 0 && (
+                <ul className="mt-1 space-y-0.5">
+                  {c.strandDescriptors.map((desc, i) => (
+                    <li key={i} className="text-[11px] text-muted-foreground flex items-start gap-1.5">
+                      <span className="text-muted-foreground/50 mt-px">-</span>
+                      {desc}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </Card>
+  );
+}
 
 export default function StudentAssessmentDetailPage() {
   const params = useParams();
@@ -132,9 +243,9 @@ export default function StudentAssessmentDetailPage() {
               Open for submission
             </Badge>
           )}
-          {projectedAssessment.gradesReleased && (
+          {grade && (
             <Badge className="bg-[#dbeafe] text-[#2563eb] border-transparent text-[11px]">
-              Grades released
+              Grade released
             </Badge>
           )}
         </div>
@@ -163,9 +274,14 @@ export default function StudentAssessmentDetailPage() {
             </Card>
           )}
 
+          {/* Grading criteria (read-only) */}
+          {rawAssessment && (
+            <GradingCriteriaPanel assessment={rawAssessment} />
+          )}
+
           {/* Grade & feedback (if released) */}
           {grade && rawAssessment && (
-            <GradeFeedbackViewer grade={grade} assessment={rawAssessment} />
+            <GradeFeedbackViewerWithTracking grade={grade} assessment={rawAssessment} />
           )}
 
           {/* Submission workbook */}
@@ -174,12 +290,12 @@ export default function StudentAssessmentDetailPage() {
             assessmentId={assessmentId}
             studentId={studentId}
             classId={classId}
-            isOpen={isOpen || submission?.status === "returned"}
+            isOpen={isOpen}
             isPastDue={isPastDue}
           />
 
-          {/* Add to Goal button — primarily surfaced for returned work */}
-          {submission && (submission.status === "submitted" || submission.status === "resubmitted" || submission.status === "returned") && (
+          {/* Add to Goal button */}
+          {submission && submission.status === "submitted" && (
             <Button
               variant="outline"
               size="sm"
@@ -187,9 +303,7 @@ export default function StudentAssessmentDetailPage() {
               onClick={() => setAddToGoalOpen(true)}
             >
               <Target className="h-3.5 w-3.5 mr-1.5" />
-              {submission.status === "returned"
-                ? "Reflect on feedback → Add to goal"
-                : "Add to a goal"}
+              Add to a goal
             </Button>
           )}
         </div>
@@ -286,10 +400,10 @@ export default function StudentAssessmentDetailPage() {
 
           {/* Back to class */}
           <Link
-            href={`/student/classes/${classId}?tab=work`}
+            href={`/student/classes/${classId}?tab=assessments`}
             className="text-[13px] text-[#c24e3f] hover:underline flex items-center gap-1"
           >
-            &larr; Back to class work
+            &larr; Back to assessments
           </Link>
         </div>
       </div>
@@ -302,7 +416,7 @@ export default function StudentAssessmentDetailPage() {
           sourceId={submission.id}
           sourceTitle={projectedAssessment.title}
           studentId={studentId}
-          surface={submission.status === "returned" ? "returned_work" : "submission"}
+          surface="submission"
         />
       )}
     </div>
