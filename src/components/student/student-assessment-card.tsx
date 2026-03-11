@@ -3,15 +3,15 @@
 import { useRouter } from "next/navigation";
 import { useStore } from "@/stores";
 import { Card } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { StatusBadge } from "@/components/shared/status-badge";
 import {
   getStudentSubmission,
   getStudentReleasedGrades,
+  getStudentSubmissionStatus,
 } from "@/lib/student-selectors";
 import { isAssessmentPastDue } from "@/lib/student-permissions";
 import type { StudentAssessmentView } from "@/lib/student-permissions";
-import { Calendar } from "lucide-react";
+import { Calendar, ChevronRight } from "lucide-react";
 import { format } from "date-fns";
 
 interface StudentAssessmentCardProps {
@@ -32,35 +32,33 @@ export function StudentAssessmentCard({
   const router = useRouter();
   const state = useStore((s) => s);
   const submission = getStudentSubmission(state, studentId, assessment.id);
-  const isPastDue = isAssessmentPastDue(assessment);
-  const releasedGrade = getStudentReleasedGrades(state, studentId).find((g) => g.assessmentId === assessment.id);
-  const isExcused = releasedGrade?.submissionStatus === "excused";
+  const grade = state.grades.find(
+    (g) => g.studentId === studentId && g.assessmentId === assessment.id
+  );
+  const releasedGrade = getStudentReleasedGrades(state, studentId).find(
+    (g) => g.assessmentId === assessment.id
+  );
+
+  // Use canonical submission status function
+  const submissionStatus = getStudentSubmissionStatus(
+    grade,
+    submission,
+    assessment as any
+  );
+
+  // Teacher marking status (only relevant when submitted)
+  const isGraded = !!releasedGrade;
+  const isExcused = submissionStatus === "excused";
 
   const className = showClassName
     ? state.classes.find((c) => c.id === assessment.classId)?.name
     : undefined;
 
-  const submissionStatus = submission?.status ?? (isPastDue ? "overdue" : "not_started");
-  const statusLabel =
-    submissionStatus === "draft"
-      ? "Draft saved"
-      : submissionStatus === "submitted"
-      ? "Submitted"
-      : isPastDue
-      ? "Past due"
-      : "Not started";
-
-  const statusVariant =
-    submissionStatus === "submitted"
-      ? "success"
-      : submissionStatus === "draft"
-      ? "info"
-      : isPastDue
-      ? "danger"
-      : "neutral";
+  // Map submission status to badge key
+  const submissionBadgeKey = submissionStatus; // "due" | "overdue" | "excused" | "submitted_on_time" | "submitted_late"
 
   const handleClick = () => {
-    if (!!releasedGrade && onGradeClick) {
+    if (isGraded && onGradeClick) {
       onGradeClick(assessment.id);
     } else {
       router.push(`/student/classes/${classId}/assessments/${assessment.id}`);
@@ -88,16 +86,16 @@ export function StudentAssessmentCard({
             </div>
           </div>
           <div className="flex items-center gap-2 shrink-0">
-            {!!releasedGrade && (
-              <Badge variant="secondary" className={`text-[11px] ${isExcused ? "bg-muted text-muted-foreground" : "bg-[#dcfce7] text-[#16a34a]"}`}>
-                {isExcused ? "Excused" : "Graded"}
-              </Badge>
+            {/* Graded badge (teacher marking status) */}
+            {isGraded && !isExcused && (
+              <StatusBadge status="graded" showIcon={false} />
             )}
-            <StatusBadge
-              status={statusLabel.toLowerCase().replace(/ /g, "_")}
-              variant={statusVariant}
-              label={statusLabel}
-            />
+            {/* Submission status badge */}
+            <StatusBadge status={submissionBadgeKey} showIcon={false} />
+            {/* Show arrow for actionable states */}
+            {(submissionStatus === "due" || submissionStatus === "overdue") && (
+              <ChevronRight className="h-4 w-4 text-muted-foreground" />
+            )}
           </div>
         </div>
       </Card>

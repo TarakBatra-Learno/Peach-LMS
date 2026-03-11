@@ -63,8 +63,7 @@ export const GRADING_MODE_LABELS: Record<string, string> = {
 // ---------------------------------------------------------------------------
 
 export type TeacherReviewStatus =
-  | "pending"      // no submission yet, due date not passed
-  | "late"         // no submission, past due date
+  | "pending"      // no submission yet (may also be late — check isStudentPastDue)
   | "excused"      // student excused (terminal state)
   | "to_mark"      // submission exists but not graded
   | "in_progress"  // grading started but not complete
@@ -74,6 +73,9 @@ export type TeacherReviewStatus =
 /**
  * Derive the teacher's review status for a student on a specific assessment.
  *
+ * Late is NOT a status — it is a modifier on pending (and submitted rows).
+ * Use `isStudentPastDue(assessment)` to determine if the "Late" tag should show.
+ *
  * Logic:
  * - if grade.submissionStatus === "excused" → "excused"
  * - if submission exists (grade.submissionStatus === "submitted" OR grade.submittedAt is set):
@@ -81,15 +83,12 @@ export type TeacherReviewStatus =
  *   - if grade.gradingStatus === "ready" → "ready"
  *   - if grade.gradingStatus === "in_progress" → "in_progress"
  *   - else → "to_mark"
- * - if assessment.dueDate < now → "late"
  * - else → "pending"
  */
 export function getTeacherReviewStatus(
   grade: GradeRecord | undefined,
   assessment: Assessment
 ): TeacherReviewStatus {
-  const now = new Date();
-
   // Excused is terminal — always wins
   if (grade?.submissionStatus === "excused") return "excused";
 
@@ -104,12 +103,18 @@ export function getTeacherReviewStatus(
     return "to_mark";
   }
 
-  // No submission — check if late
+  return "pending";
+}
+
+/**
+ * Check if the assessment due date has passed.
+ * Used alongside getTeacherReviewStatus to show a "Late" tag on pending rows.
+ */
+export function isStudentPastDue(assessment: Assessment): boolean {
+  const now = new Date();
   const dueDate = new Date(assessment.dueDate);
   dueDate.setHours(23, 59, 59, 999);
-  if (now > dueDate) return "late";
-
-  return "pending";
+  return now > dueDate;
 }
 
 /**
@@ -138,8 +143,6 @@ export function getStudentAssessmentStatus(
   switch (newStatus) {
     case "pending":
       return "pending";
-    case "late":
-      return "pending"; // old system didn't distinguish late from pending
     case "excused":
       return "excused";
     case "to_mark":

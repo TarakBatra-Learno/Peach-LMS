@@ -58,6 +58,13 @@ export function StudentBreadcrumbNav() {
       continue;
     }
 
+    // "assessments" nested under a class → link to class page with tab param
+    if (segment === "assessments" && parentSegment !== "student" && i >= 2 && segments[i - 2] === "classes") {
+      const classHref = "/" + segments.slice(0, i).join("/");
+      entries.push({ label: "Assessments", href: `${classHref}?tab=assessments` });
+      continue;
+    }
+
     // Friendly labels for known segments
     const labelMap: Record<string, string> = {
       classes: "My Classes",

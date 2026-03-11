@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import { useStore } from "@/stores";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -47,11 +48,24 @@ export function ClassCommunicationTab({ classId, studentId }: ClassCommunication
 
   if (channels.length === 0) {
     return (
-      <EmptyState
-        icon={MessageSquare}
-        title="No channels yet"
-        description="Communication channels for this class will appear here."
-      />
+      <div className="space-y-4">
+        <EmptyState
+          icon={MessageSquare}
+          title="No channels yet"
+          description="Communication channels for this class will appear here."
+        />
+        <Card className="p-4 gap-0 border-dashed border-[#c24e3f]/30 text-center">
+          <p className="text-[13px] text-muted-foreground mb-2">
+            Want to reach your teacher directly?
+          </p>
+          <Link href={`/student/messages?startDm=${classId}`}>
+            <Button variant="outline" size="sm" className="text-[12px]">
+              <MessageSquare className="h-3.5 w-3.5 mr-1" />
+              Start a conversation with your teacher
+            </Button>
+          </Link>
+        </Card>
+      </div>
     );
   }
 
@@ -76,6 +90,15 @@ export function ClassCommunicationTab({ classId, studentId }: ClassCommunication
               # {ch.name}
             </button>
           ))}
+        </div>
+        {/* DM CTA when no DM exists for this class */}
+        <div className="mt-3 pt-3 border-t">
+          <Link href={`/student/messages?startDm=${classId}`}>
+            <button className="w-full text-left px-3 py-2 rounded-lg text-[12px] text-[#c24e3f] hover:bg-[#fff2f0] transition-colors flex items-center gap-1.5">
+              <MessageSquare className="h-3 w-3" />
+              Message teacher
+            </button>
+          </Link>
         </div>
       </div>
 

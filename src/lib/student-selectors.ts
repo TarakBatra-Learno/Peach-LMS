@@ -135,6 +135,8 @@ export function getStudentSubmissionStatus(
   if (submission?.status === "submitted") {
     return submission.isLate ? "submitted_late" : "submitted_on_time";
   }
+  // Fallback: GradeRecord has submissionStatus "submitted" but no Submission entity
+  if (grade?.submissionStatus === "submitted") return "submitted_on_time";
   if (isAssessmentPastDue(assessment)) return "overdue";
   return "due";
 }
@@ -181,7 +183,11 @@ export function getStudentAssessmentState(
   else if (submission) {
     workState = submission.status as StudentWorkState;
   }
-  // 3. No submission — not started
+  // 3. GradeRecord has submissionStatus "submitted" but no Submission entity — treat as submitted
+  else if (grade?.submissionStatus === "submitted") {
+    workState = "submitted";
+  }
+  // 4. No submission — not started
   else {
     workState = "not_started";
   }

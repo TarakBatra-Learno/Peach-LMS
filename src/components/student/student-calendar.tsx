@@ -12,7 +12,11 @@ import {
   ChevronRight,
   Clock,
   MapPin,
+  ExternalLink,
+  Video,
 } from "lucide-react";
+import { useReleasedAssessmentClick } from "@/lib/hooks/use-released-assessment-click";
+import { GradeResultSheet } from "@/components/student/grade-result-sheet";
 import {
   format,
   startOfMonth,
@@ -45,6 +49,8 @@ export function StudentCalendar({ studentId }: StudentCalendarProps) {
   const state = useStore((s) => s);
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState<Date | null>(new Date());
+  const { handleClick: handleAssessmentClick, sheetProps } = useReleasedAssessmentClick(studentId);
+  const [expandedEventId, setExpandedEventId] = useState<string | null>(null);
 
   const calendarEvents = useMemo(
     () => getStudentCalendarEvents(state, studentId),
@@ -67,6 +73,7 @@ export function StudentCalendar({ studentId }: StudentCalendarProps) {
       endTime: new Date(a.dueDate.split("T")[0] + "T23:59:00").toISOString(),
       isAllDay: true,
       classId: a.classId,
+      linkedAssessmentId: a.id,
     }));
     return [...calendarEvents, ...deadlineEvents];
   }, [calendarEvents, assessments]);
@@ -199,42 +206,93 @@ export function StudentCalendar({ studentId }: StudentCalendarProps) {
             </p>
           ) : (
             <div className="space-y-3">
-              {selectedEvents.map((event) => (
-                <div
-                  key={event.id}
-                  className="flex gap-3 items-start"
-                >
+              {selectedEvents.map((event) => {
+                const isDeadline = event.type === "deadline" && event.linkedAssessmentId;
+                const isExpandable = event.type === "event" || event.type === "meeting" || event.type === "video_call";
+                const isExpanded = expandedEventId === event.id;
+
+                return (
                   <div
-                    className={`shrink-0 mt-0.5 rounded-md px-2 py-0.5 text-[10px] font-medium ${
-                      EVENT_TYPE_COLORS[event.type] ?? EVENT_TYPE_COLORS.event
+                    key={event.id}
+                    className={`flex gap-3 items-start ${
+                      isDeadline || isExpandable
+                        ? "cursor-pointer hover:bg-muted/50 -mx-1 px-1 py-1 rounded-lg transition-colors"
+                        : ""
                     }`}
+                    onClick={() => {
+                      if (isDeadline && event.linkedAssessmentId) {
+                        handleAssessmentClick(event.linkedAssessmentId, event.classId ?? "");
+                      } else if (isExpandable) {
+                        setExpandedEventId(isExpanded ? null : event.id);
+                      }
+                    }}
                   >
-                    {event.type}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-[13px] font-medium truncate">
-                      {event.title}
-                    </p>
-                    {!event.isAllDay && (
-                      <p className="text-[12px] text-muted-foreground flex items-center gap-1">
-                        <Clock className="h-3 w-3" />
-                        {format(new Date(event.startTime), "h:mm a")}
-                        {event.endTime &&
-                          ` – ${format(new Date(event.endTime), "h:mm a")}`}
+                    <div
+                      className={`shrink-0 mt-0.5 rounded-md px-2 py-0.5 text-[10px] font-medium ${
+                        EVENT_TYPE_COLORS[event.type] ?? EVENT_TYPE_COLORS.event
+                      }`}
+                    >
+                      {event.type}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[13px] font-medium truncate">
+                        {event.title}
                       </p>
-                    )}
-                    {event.description && (
-                      <p className="text-[11px] text-muted-foreground mt-0.5 line-clamp-2">
-                        {event.description}
-                      </p>
-                    )}
+                      {!event.isAllDay && (
+                        <p className="text-[12px] text-muted-foreground flex items-center gap-1">
+                          <Clock className="h-3 w-3" />
+                          {format(new Date(event.startTime), "h:mm a")}
+                          {event.endTime &&
+                            ` – ${format(new Date(event.endTime), "h:mm a")}`}
+                        </p>
+                      )}
+                      {event.description && !isExpanded && (
+                        <p className="text-[11px] text-muted-foreground mt-0.5 line-clamp-2">
+                          {event.description}
+                        </p>
+                      )}
+                      {/* Expanded details for general events */}
+                      {isExpanded && (
+                        <div className="mt-2 space-y-1.5">
+                          {event.description && (
+                            <p className="text-[12px] text-muted-foreground whitespace-pre-wrap">
+                              {event.description}
+                            </p>
+                          )}
+                          {event.room && (
+                            <p className="text-[11px] text-muted-foreground flex items-center gap-1">
+                              <MapPin className="h-3 w-3" />
+                              {event.room}
+                            </p>
+                          )}
+                          {event.videoCallUrl && (
+                            <a
+                              href={event.videoCallUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 text-[11px] text-[#2563eb] hover:underline"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <Video className="h-3 w-3" />
+                              Join call
+                            </a>
+                          )}
+                          {event.attendees && event.attendees.length > 0 && (
+                            <p className="text-[11px] text-muted-foreground">
+                              Attendees: {event.attendees.join(", ")}
+                            </p>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </Card>
       </div>
+      <GradeResultSheet {...sheetProps} />
     </div>
   );
 }

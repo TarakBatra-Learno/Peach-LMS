@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
+import { useSearchParams } from "next/navigation";
 import { useStore } from "@/stores";
 import { useStudentId } from "@/lib/hooks/use-current-user";
 import { PageHeader } from "@/components/shared/page-header";
@@ -17,6 +18,7 @@ import {
   FolderOpen,
   Plus,
   AlertCircle,
+  AlertTriangle,
   Image,
   Video,
   FileText,
@@ -24,10 +26,12 @@ import {
   Link2,
   Filter,
   Target,
+  Pencil,
 } from "lucide-react";
 import { format } from "date-fns";
 import type { PortfolioArtifact } from "@/types/portfolio";
 import { PortfolioCreateDrawer } from "@/components/student/portfolio-create-drawer";
+import { PortfolioEditDrawer } from "@/components/student/portfolio-edit-drawer";
 
 function getMediaIcon(mediaType: PortfolioArtifact["mediaType"]) {
   switch (mediaType) {
@@ -45,11 +49,22 @@ export default function StudentPortfolioPage() {
   const loading = useMockLoading([studentId]);
   const state = useStore((s) => s);
   const learningGoals = useStore((s) => s.learningGoals);
+  const searchParams = useSearchParams();
+  const highlightArtifactId = searchParams.get("artifact");
+  const highlightRef = useRef<HTMLDivElement>(null);
 
   const [createOpen, setCreateOpen] = useState(false);
   const [filterClass, setFilterClass] = useState<string | null>(null);
   const [filterStatus, setFilterStatus] = useState<string | null>(null);
   const [addToGoalArtifactId, setAddToGoalArtifactId] = useState<string | null>(null);
+  const [editArtifactId, setEditArtifactId] = useState<string | null>(null);
+
+  // Auto-scroll to highlighted artifact from deep-link
+  useEffect(() => {
+    if (highlightArtifactId && highlightRef.current && !loading) {
+      highlightRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+  }, [highlightArtifactId, loading]);
 
   const enrolledClasses = useMemo(
     () => (studentId ? getStudentClasses(state, studentId) : []),
@@ -113,7 +128,7 @@ export default function StudentPortfolioPage() {
           <option value="">All statuses</option>
           <option value="pending">Pending</option>
           <option value="approved">Approved</option>
-          <option value="revision_requested">Revision requested</option>
+          <option value="needs_revision">Needs revision</option>
         </select>
       </div>
 
@@ -132,8 +147,14 @@ export default function StudentPortfolioPage() {
               .map((id) => learningGoals.find((g) => g.id === id))
               .filter(Boolean);
 
+            const isHighlighted = artifact.id === highlightArtifactId;
+
             return (
-              <Card key={artifact.id} className="p-4 gap-0">
+              <Card
+                key={artifact.id}
+                ref={isHighlighted ? highlightRef : undefined}
+                className={`p-4 gap-0 ${isHighlighted ? "ring-2 ring-[#c24e3f] ring-offset-2" : ""}`}
+              >
                 <div className="flex items-start justify-between">
                   <div className="flex items-start gap-3 min-w-0">
                     <div className="h-10 w-10 rounded-lg bg-muted flex items-center justify-center shrink-0">
@@ -153,6 +174,19 @@ export default function StudentPortfolioPage() {
                   <StatusBadge status={artifact.approvalStatus} />
                 </div>
 
+                {/* Revision note callout */}
+                {artifact.approvalStatus === "needs_revision" && artifact.revisionNote && (
+                  <div className="mt-3 p-3 rounded-lg bg-[#fee2e2]/50 border border-[#dc2626]/20">
+                    <div className="flex items-start gap-2">
+                      <AlertTriangle className="h-4 w-4 text-[#dc2626] shrink-0 mt-0.5" />
+                      <div>
+                        <p className="text-[12px] font-medium text-[#dc2626] mb-0.5">Teacher feedback</p>
+                        <p className="text-[13px] text-foreground">{artifact.revisionNote}</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 {artifact.description && (
                   <p className="text-[13px] text-muted-foreground mt-2 line-clamp-2">
                     {artifact.description}
@@ -170,8 +204,9 @@ export default function StudentPortfolioPage() {
                   </div>
                 )}
 
-                {goals.length > 0 && (
-                  <div className="flex flex-wrap gap-1 mt-2">
+                {/* Footer: tags left, action right */}
+                <div className="flex items-center justify-between gap-3 mt-3">
+                  <div className="flex items-center flex-wrap gap-1.5 min-w-0">
                     {goals.map((goal) =>
                       goal ? (
                         <Badge key={goal.id} variant="secondary" className="text-[10px]">
@@ -179,38 +214,49 @@ export default function StudentPortfolioPage() {
                         </Badge>
                       ) : null
                     )}
-                  </div>
-                )}
-
-                {artifact.familyShareStatus === "shared" && (
-                  <Badge className="mt-2 bg-[#dbeafe] text-[#2563eb] border-transparent text-[10px]">
-                    Shared with family
-                  </Badge>
-                )}
-
-                {/* Goal linkage */}
-                <div className="flex items-center gap-2 mt-2">
-                  {(() => {
-                    const linkedGoals = getGoalsForSource(state, "portfolio_artifact", artifact.id);
-                    return linkedGoals.length > 0 ? (
-                      <Badge variant="secondary" className="text-[10px]">
-                        <Target className="h-3 w-3 mr-0.5" />
-                        {linkedGoals.length} goal{linkedGoals.length !== 1 ? "s" : ""}
+                    {artifact.familyShareStatus === "shared" && (
+                      <Badge className="bg-[#dbeafe] text-[#2563eb] border-transparent text-[10px]">
+                        Shared with family
                       </Badge>
-                    ) : null;
-                  })()}
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="text-[11px] h-6 px-2"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      setAddToGoalArtifactId(artifact.id);
-                    }}
-                  >
-                    <Target className="h-3 w-3 mr-1" />
-                    Add to goal
-                  </Button>
+                    )}
+                    {(() => {
+                      const linkedGoals = getGoalsForSource(state, "portfolio_artifact", artifact.id);
+                      return linkedGoals.length > 0 ? (
+                        <Badge variant="secondary" className="text-[10px]">
+                          <Target className="h-3 w-3 mr-0.5" />
+                          {linkedGoals.length} goal{linkedGoals.length !== 1 ? "s" : ""}
+                        </Badge>
+                      ) : null;
+                    })()}
+                  </div>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    {(artifact.approvalStatus === "needs_revision" || artifact.approvalStatus === "pending") && (
+                      <Button
+                        variant={artifact.approvalStatus === "needs_revision" ? "default" : "outline"}
+                        size="sm"
+                        className="text-[11px] h-7 px-2.5"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          setEditArtifactId(artifact.id);
+                        }}
+                      >
+                        <Pencil className="h-3 w-3 mr-1" />
+                        {artifact.approvalStatus === "needs_revision" ? "Revise & Resubmit" : "Edit"}
+                      </Button>
+                    )}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="text-[11px] h-7 px-2.5"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        setAddToGoalArtifactId(artifact.id);
+                      }}
+                    >
+                      <Target className="h-3 w-3 mr-1" />
+                      Add to goal
+                    </Button>
+                  </div>
                 </div>
               </Card>
             );
@@ -223,6 +269,12 @@ export default function StudentPortfolioPage() {
         onClose={() => setCreateOpen(false)}
         studentId={studentId}
         enrolledClasses={enrolledClasses}
+      />
+
+      <PortfolioEditDrawer
+        open={!!editArtifactId}
+        onClose={() => setEditArtifactId(null)}
+        artifact={editArtifactId ? allArtifacts.find((a) => a.id === editArtifactId) ?? null : null}
       />
 
       {addToGoalArtifactId && studentId && (

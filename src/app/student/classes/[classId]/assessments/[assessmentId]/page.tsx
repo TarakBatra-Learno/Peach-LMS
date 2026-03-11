@@ -16,9 +16,11 @@ import { GradeFeedbackViewer } from "@/components/student/grade-feedback-viewer"
 import {
   getStudentAssessments,
   getStudentSubmission,
+  getStudentSubmissionStatus,
   getStudentReleasedGrades,
 } from "@/lib/student-selectors";
 import { isAssessmentOpenForSubmission, isAssessmentPastDue } from "@/lib/student-permissions";
+import { StatusBadge } from "@/components/shared/status-badge";
 import { AddToGoalDialog } from "@/components/student/add-to-goal-dialog";
 import { Button } from "@/components/ui/button";
 import {
@@ -196,6 +198,15 @@ export default function StudentAssessmentDetailPage() {
   const isOpen = rawAssessment ? isAssessmentOpenForSubmission(rawAssessment) : false;
   const isPastDue = rawAssessment ? isAssessmentPastDue(rawAssessment) : false;
 
+  // Canonical submission status
+  const submissionStatusValue = rawAssessment
+    ? getStudentSubmissionStatus(
+        state.grades.find((g) => g.studentId === studentId && g.assessmentId === assessmentId),
+        submission,
+        rawAssessment
+      )
+    : "due";
+
   if (loading) return <DetailSkeleton />;
 
   if (!studentId) {
@@ -233,20 +244,9 @@ export default function StudentAssessmentDetailPage() {
               {projectedAssessment.totalPoints} points
             </Badge>
           )}
-          {isPastDue && (
-            <Badge className="bg-[#fee2e2] text-[#dc2626] border-transparent text-[11px]">
-              Past due
-            </Badge>
-          )}
-          {isOpen && !isPastDue && (
-            <Badge className="bg-[#dcfce7] text-[#16a34a] border-transparent text-[11px]">
-              Open for submission
-            </Badge>
-          )}
+          <StatusBadge status={submissionStatusValue} showIcon={false} />
           {grade && (
-            <Badge className="bg-[#dbeafe] text-[#2563eb] border-transparent text-[11px]">
-              Grade released
-            </Badge>
+            <StatusBadge status="graded" showIcon={false} />
           )}
         </div>
       </PageHeader>

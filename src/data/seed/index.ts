@@ -3,6 +3,7 @@ import type { Class, TimetableSlot } from "@/types/class";
 import type { Student, FamilyShareRecord } from "@/types/student";
 import type { Assessment, LearningGoal, MYPCriterion, RubricCriterion, ChecklistItem, ChecklistSection, ChecklistResponseStyle, ChecklistOutcomeModel } from "@/types/assessment";
 import type { GradeRecord, SubmissionStatus, ChecklistResultStatus } from "@/types/gradebook";
+import type { Submission } from "@/types/submission";
 import type { PortfolioArtifact } from "@/types/portfolio";
 import type { AttendanceSession } from "@/types/attendance";
 import type { Incident, SupportPlan, IncidentTaxonomy } from "@/types/incident";
@@ -45,6 +46,7 @@ const LANGUAGES = ["en","en","en","en","es","fr","ja","hi","ko","zh","ar","de"];
 const stuId = (n: number) => `stu_${pad(n)}`;
 const asmtId = (n: number) => `asmt_${pad(n)}`;
 const gradeId = (aIdx: number, sIdx: number) => `grd_${pad(aIdx)}_${pad(sIdx)}`;
+const subId = (aIdx: number, sIdx: number) => `sub_${pad(aIdx)}_${pad(sIdx)}`;
 const artifactId = (n: number) => `art_${pad(n, 3)}`;
 const attId = (cls: string, n: number) => `att_${cls}_${pad(n)}`;
 const incId = (n: number) => `inc_${pad(n)}`;
@@ -366,6 +368,16 @@ export function generateSeedData() {
   ];
 
   const grades: GradeRecord[] = [];
+  const bulkSubmissions: Submission[] = [];
+
+  const SUBMISSION_CONTENT = [
+    "Here is my completed work for this assessment. I've addressed all the key requirements and included supporting evidence.",
+    "I've finished this assessment. My response covers the main concepts we discussed in class.",
+    "Submitting my work for review. I focused on the areas highlighted in the instructions.",
+    "My completed assessment is attached. I spent time researching the topic and providing detailed analysis.",
+    "Here is my submission. I've tried to demonstrate my understanding of the key concepts.",
+  ];
+
   assessments.forEach((asmt, aIdx) => {
     if (asmt.status === "draft") return; // no grades for draft assessments
     const sIds = studentsForClass(asmt.classId);
@@ -416,8 +428,32 @@ export function generateSeedData() {
         gradedAt: hasNoGradeData ? undefined : isoTime(subDays(TODAY, dueDaysAgo - 1)),
         gradingStatus,
         releasedAt,
-        reportStatus: releasedAt ? "seen" : undefined,
+        reportStatus: releasedAt ? (sIdx % 3 === 0 ? "unseen" : "seen") : undefined,
       };
+
+      // Create a Submission entity for all students with submissionStatus === "submitted"
+      if (submissionStatus === "submitted" && grade.submittedAt) {
+        const dueDaysAgo = assessmentConfigs[aIdx].dueDaysAgo || 1;
+        const submittedDate = isoTime(subDays(TODAY, dueDaysAgo + 1));
+        const dueDate = new Date(asmt.dueDate);
+        dueDate.setHours(23, 59, 59, 999);
+        const submittedDateObj = new Date(submittedDate);
+        const isLate = submittedDateObj > dueDate;
+
+        bulkSubmissions.push({
+          id: subId(aIdx + 1, sIdx + 1),
+          assessmentId: asmt.id,
+          studentId: sid,
+          classId: asmt.classId,
+          status: "submitted",
+          content: SUBMISSION_CONTENT[sIdx % SUBMISSION_CONTENT.length],
+          attachments: [],
+          submittedAt: submittedDate,
+          isLate,
+          createdAt: isoTime(subDays(TODAY, dueDaysAgo + 2)),
+          updatedAt: submittedDate,
+        });
+      }
 
       // No-submission, excused, and submitted-but-ungraded records have no grade data
       if (hasNoGradeData) {
@@ -1385,7 +1421,7 @@ export function generateSeedData() {
     lessonSlotAssignments: unitPlanningData.lessonSlotAssignments,
     // Student Portal
     currentUser: null,
-    submissions: generateSeedSubmissions(assessments),
+    submissions: [...bulkSubmissions, ...generateSeedSubmissions(assessments)],
     studentGoals: generateSeedStudentGoals(),
     goalEvidenceLinks: generateSeedGoalEvidenceLinks(),
     studentNotifications: generateSeedNotifications(),

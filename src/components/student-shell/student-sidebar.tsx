@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { useStore } from "@/stores";
-import { ChevronLeft, ChevronRight, Home, BookOpen, Calendar, MessageSquare, FolderOpen, Target, TrendingUp } from "lucide-react";
+import { ChevronLeft, ChevronRight, Home, BookOpen, ClipboardCheck, Calendar, MessageSquare, FolderOpen, Target, TrendingUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Tooltip,
@@ -15,6 +15,7 @@ import {
 const STUDENT_NAV_ITEMS = [
   { label: "Home", href: "/student/home", icon: Home },
   { label: "My Classes", href: "/student/classes", icon: BookOpen },
+  { label: "Assessments", href: "/student/assessments", icon: ClipboardCheck },
   { label: "Calendar", href: "/student/calendar", icon: Calendar },
   { label: "Messages", href: "/student/messages", icon: MessageSquare },
   { label: "Portfolio", href: "/student/portfolio", icon: FolderOpen },

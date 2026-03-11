@@ -9,7 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { StatusBadge } from "@/components/shared/status-badge";
-import { getStudentStatusLabel, getStudentStatusVariant } from "@/lib/grade-helpers";
+import { getStudentStatusLabel } from "@/lib/grade-helpers";
 import { SimulatedDriveImport } from "./simulated-drive-import";
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import {
@@ -222,14 +222,14 @@ export function SubmissionWorkbook({
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <StatusBadge
-                status={submission.status}
-                variant={
-                  getStudentStatusVariant(submission.status) ??
-                  (submission.status === "submitted"
-                    ? "success"
-                    : "info")
+                status={
+                  submission.status === "submitted" && submission.isLate
+                    ? "submitted_late"
+                    : submission.status === "submitted"
+                    ? "submitted_on_time"
+                    : submission.status
                 }
-                label={getStudentStatusLabel(submission.status)}
+                showIcon={false}
               />
               {submission.draftSavedAt && submission.status === "draft" && (
                 <span className="text-[11px] text-muted-foreground flex items-center gap-1">

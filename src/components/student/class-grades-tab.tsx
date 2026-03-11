@@ -9,6 +9,8 @@ import { StatusBadge } from "@/components/shared/status-badge";
 import {
   getStudentReleasedGrades,
   getStudentAssessments,
+  getStudentSubmission,
+  getStudentSubmissionStatus,
 } from "@/lib/student-selectors";
 import { getGradePercentage } from "@/lib/grade-helpers";
 import type { Assessment } from "@/types/assessment";
@@ -148,6 +150,8 @@ export function ClassGradesTab({ classId, studentId }: ClassGradesTabProps) {
                 ? "text-[#b45309]"
                 : "text-[#dc2626]"
               : "";
+          const sub = state.submissions.find((s: any) => s.studentId === studentId && s.assessmentId === grade.assessmentId);
+          const isLate = sub?.isLate === true;
 
           return (
             <Card
@@ -177,10 +181,16 @@ export function ClassGradesTab({ classId, studentId }: ClassGradesTabProps) {
                       </p>
                     )}
                   </div>
+                  {isLate && (
+                    <StatusBadge status="submitted_late" showIcon={false} className="text-[10px]" />
+                  )}
                   {grade.submissionStatus === "excused" ? (
                     <StatusBadge status="excused" />
                   ) : (
                     <CheckCircle2 className="h-4 w-4 text-[#16a34a]" />
+                  )}
+                  {grade.reportStatus === "unseen" && (
+                    <span className="w-2 h-2 rounded-full bg-[#2563eb] shrink-0" title="New" />
                   )}
                 </div>
               </div>

@@ -124,7 +124,7 @@ export default function StudentGoalsPage() {
           }
         />
       ) : (
-        <div className="space-y-3">
+        <div className="space-y-6">
           {goals.map((goal) => (
             <GoalCard
               key={goal.id}

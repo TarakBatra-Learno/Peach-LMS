@@ -23,10 +23,12 @@ export function buildApprovePayload(): Partial<PortfolioArtifact> {
  * Request revision: revokes family share (invariant — student work in
  * revision-needed state should never be visible to families).
  */
-export function buildRequestRevisionPayload(): Partial<PortfolioArtifact> {
+export function buildRequestRevisionPayload(revisionNote?: string): Partial<PortfolioArtifact> {
   return {
     approvalStatus: "needs_revision",
     familyShareStatus: "not_shared",
+    revisionNote: revisionNote || undefined,
+    revisionRequestedAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };
 }

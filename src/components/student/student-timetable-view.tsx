@@ -2,14 +2,16 @@
 
 import { useMemo, useState } from "react";
 import { useStore } from "@/stores";
-import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/shared/empty-state";
 import {
   getStudentTimetable,
+  getStudentAssessments,
+  getStudentClasses,
   type EnrichedTimetableSlot,
 } from "@/lib/student-selectors";
+import { TimetableSlotSheet } from "@/components/student/timetable-slot-sheet";
 import {
   Calendar,
   ChevronLeft,
@@ -17,6 +19,9 @@ import {
   Clock,
   MapPin,
   BookOpen,
+  ClipboardCheck,
+  Coffee,
+  UtensilsCrossed,
 } from "lucide-react";
 import {
   format,
@@ -24,17 +29,119 @@ import {
   startOfWeek,
   endOfWeek,
   isToday,
-  isSameDay,
 } from "date-fns";
 
 interface StudentTimetableViewProps {
   studentId: string;
 }
 
+/** Represents one row in the timetable grid */
+interface TimeRow {
+  startTime: string;
+  endTime: string;
+  label: string;
+  type: "class" | "break" | "lunch";
+}
+
+/**
+ * Derive all time rows for the school day from the student's class schedules.
+ * Sorts by start time and fills gaps with break/lunch rows.
+ */
+function deriveTimeRows(classes: { schedule: { startTime: string; endTime: string }[] }[]): TimeRow[] {
+  // Collect unique time slots from all classes
+  const slotMap = new Map<string, { startTime: string; endTime: string }>();
+  for (const cls of classes) {
+    for (const slot of cls.schedule) {
+      const key = `${slot.startTime}-${slot.endTime}`;
+      if (!slotMap.has(key)) {
+        slotMap.set(key, { startTime: slot.startTime, endTime: slot.endTime });
+      }
+    }
+  }
+
+  // Sort by start time
+  const uniqueSlots = [...slotMap.values()].sort((a, b) =>
+    a.startTime.localeCompare(b.startTime)
+  );
+
+  if (uniqueSlots.length === 0) return [];
+
+  const rows: TimeRow[] = [];
+  let periodNum = 1;
+
+  for (let i = 0; i < uniqueSlots.length; i++) {
+    const slot = uniqueSlots[i];
+
+    // If there's a gap before this slot (from the previous slot's end), add a break row
+    if (i > 0) {
+      const prevEnd = uniqueSlots[i - 1].endTime;
+      if (prevEnd < slot.startTime) {
+        const gapMinutes = timeToMinutes(slot.startTime) - timeToMinutes(prevEnd);
+        const isLunch = gapMinutes >= 30 && timeToMinutes(prevEnd) >= timeToMinutes("11:00");
+        rows.push({
+          startTime: prevEnd,
+          endTime: slot.startTime,
+          label: isLunch ? "Lunch" : "Break",
+          type: isLunch ? "lunch" : "break",
+        });
+      }
+    }
+
+    rows.push({
+      startTime: slot.startTime,
+      endTime: slot.endTime,
+      label: `Period ${periodNum}`,
+      type: "class",
+    });
+    periodNum++;
+  }
+
+  return rows;
+}
+
+function timeToMinutes(time: string): number {
+  const [h, m] = time.split(":").map(Number);
+  return h * 60 + m;
+}
+
+// Color palette for class cards
+const CLASS_COLORS = [
+  { bg: "bg-[#dbeafe]", border: "border-[#2563eb]/30", text: "text-[#2563eb]" },
+  { bg: "bg-[#fff2f0]", border: "border-[#c24e3f]/30", text: "text-[#c24e3f]" },
+  { bg: "bg-[#dcfce7]", border: "border-[#16a34a]/30", text: "text-[#16a34a]" },
+  { bg: "bg-[#fef3c7]", border: "border-[#b45309]/30", text: "text-[#b45309]" },
+  { bg: "bg-[#f3e8ff]", border: "border-[#7c3aed]/30", text: "text-[#7c3aed]" },
+  { bg: "bg-[#fce7f3]", border: "border-[#db2777]/30", text: "text-[#db2777]" },
+];
+
 export function StudentTimetableView({ studentId }: StudentTimetableViewProps) {
   const state = useStore((s) => s);
   const [weekOffset, setWeekOffset] = useState(0);
   const [viewMode, setViewMode] = useState<"week" | "day">("week");
+  const [selectedSlot, setSelectedSlot] = useState<EnrichedTimetableSlot | null>(null);
+
+  // Get enrolled classes for schedule derivation
+  const enrolledClasses = useMemo(
+    () => getStudentClasses(state, studentId),
+    [state, studentId]
+  );
+
+  // Assessments for deadline indicators
+  const assessments = useMemo(
+    () => getStudentAssessments(state, studentId),
+    [state, studentId]
+  );
+
+  // Compute assessments due per day per class
+  const assessmentsByDayClass = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const a of assessments) {
+      const dueDate = a.dueDate.split("T")[0];
+      const key = `${dueDate}:${a.classId}`;
+      map.set(key, (map.get(key) ?? 0) + 1);
+    }
+    return map;
+  }, [assessments]);
 
   const baseDate = useMemo(() => {
     const now = new Date();
@@ -63,38 +170,35 @@ export function StudentTimetableView({ studentId }: StudentTimetableViewProps) {
     });
   }, [baseDate]);
 
-  // For day view, pick today or first day of the week
+  // For day view
   const [selectedDayIdx, setSelectedDayIdx] = useState(0);
   const dayViewDate = weekDays[selectedDayIdx] ?? weekDays[0];
 
-  // Group slots by day
-  const slotsByDay = useMemo(() => {
-    const grouped = new Map<string, EnrichedTimetableSlot[]>();
+  // Derive structured time rows from all enrolled class schedules
+  const timeRows = useMemo(
+    () => deriveTimeRows(enrolledClasses),
+    [enrolledClasses]
+  );
+
+  // Build a lookup: date + startTime → slot
+  const slotLookup = useMemo(() => {
+    const map = new Map<string, EnrichedTimetableSlot>();
     for (const slot of allSlots) {
-      const existing = grouped.get(slot.date) ?? [];
-      existing.push(slot);
-      grouped.set(slot.date, existing);
+      const key = `${slot.date}:${slot.slotStartTime}`;
+      map.set(key, slot);
     }
-    return grouped;
+    return map;
   }, [allSlots]);
 
-  // Color map by class name
-  const CLASS_COLORS = [
-    "bg-[#dbeafe] border-[#2563eb]/30 text-[#2563eb]",
-    "bg-[#fff2f0] border-[#c24e3f]/30 text-[#c24e3f]",
-    "bg-[#dcfce7] border-[#16a34a]/30 text-[#16a34a]",
-    "bg-[#fef3c7] border-[#b45309]/30 text-[#b45309]",
-    "bg-[#f3e8ff] border-[#7c3aed]/30 text-[#7c3aed]",
-  ];
-
+  // Color map by class name (stable across weeks)
   const classColorMap = useMemo(() => {
-    const map = new Map<string, string>();
-    const classNames = [...new Set(allSlots.map((s) => s.className))];
+    const map = new Map<string, (typeof CLASS_COLORS)[number]>();
+    const classNames = enrolledClasses.map((c) => c.name);
     classNames.forEach((name, i) => {
       map.set(name, CLASS_COLORS[i % CLASS_COLORS.length]);
     });
     return map;
-  }, [allSlots]);
+  }, [enrolledClasses]);
 
   return (
     <div className="space-y-4">
@@ -155,80 +259,151 @@ export function StudentTimetableView({ studentId }: StudentTimetableViewProps) {
         </div>
       </div>
 
-      {allSlots.length === 0 ? (
+      {timeRows.length === 0 ? (
         <EmptyState
           icon={Calendar}
-          title="No sessions this week"
-          description="You don't have any scheduled class sessions this week."
+          title="No schedule configured"
+          description="Your class schedule hasn't been set up yet."
         />
       ) : viewMode === "week" ? (
-        /* Week view */
-        <div className="grid grid-cols-5 gap-3">
-          {weekDays.map((day) => {
-            const daySlots = slotsByDay.get(day.date) ?? [];
-            return (
-              <div key={day.date}>
-                <div
-                  className={`text-center pb-2 mb-2 border-b ${
-                    day.isToday ? "border-[#c24e3f]" : "border-border"
+        /* ─── Week View: Structured Grid ─── */
+        <div className="border rounded-lg overflow-hidden">
+          {/* Header row: day labels */}
+          <div className="grid grid-cols-[80px_repeat(5,1fr)] bg-muted/30">
+            <div className="p-2 border-r border-b" />
+            {weekDays.map((day) => (
+              <div
+                key={day.date}
+                className={`text-center p-2 border-b ${
+                  day.isToday ? "bg-[#fff2f0]" : ""
+                }`}
+              >
+                <p
+                  className={`text-[12px] font-medium ${
+                    day.isToday ? "text-[#c24e3f]" : "text-muted-foreground"
                   }`}
                 >
-                  <p
-                    className={`text-[12px] font-medium ${
-                      day.isToday ? "text-[#c24e3f]" : "text-muted-foreground"
-                    }`}
-                  >
-                    {day.label}
-                  </p>
-                  <p
-                    className={`text-[14px] font-semibold ${
-                      day.isToday ? "text-[#c24e3f]" : ""
-                    }`}
-                  >
-                    {format(day.dayObj, "d")}
-                  </p>
-                </div>
-
-                <div className="space-y-2">
-                  {daySlots.length === 0 ? (
-                    <p className="text-[11px] text-muted-foreground text-center py-4">
-                      No classes
-                    </p>
-                  ) : (
-                    daySlots.map((slot, i) => (
-                      <Card
-                        key={i}
-                        className={`p-2.5 gap-0 border ${
-                          classColorMap.get(slot.className) ?? "bg-muted"
-                        }`}
-                      >
-                        <p className="text-[12px] font-semibold truncate">
-                          {slot.className}
-                        </p>
-                        <p className="text-[11px] opacity-80">
-                          {slot.slotStartTime}–{slot.slotEndTime}
-                        </p>
-                        {slot.room && (
-                          <p className="text-[10px] opacity-70 flex items-center gap-0.5 mt-0.5">
-                            <MapPin className="h-2.5 w-2.5" />
-                            {slot.room}
-                          </p>
-                        )}
-                        {slot.lesson && (
-                          <p className="text-[10px] opacity-70 mt-1 truncate">
-                            {slot.lesson.title}
-                          </p>
-                        )}
-                      </Card>
-                    ))
-                  )}
-                </div>
+                  {day.label}
+                </p>
+                <p
+                  className={`text-[14px] font-semibold ${
+                    day.isToday ? "text-[#c24e3f]" : ""
+                  }`}
+                >
+                  {format(day.dayObj, "d")}
+                </p>
               </div>
-            );
-          })}
+            ))}
+          </div>
+
+          {/* Time rows */}
+          {timeRows.map((row, rowIdx) => (
+            <div
+              key={`${row.startTime}-${row.endTime}`}
+              className={`grid grid-cols-[80px_repeat(5,1fr)] ${
+                rowIdx < timeRows.length - 1 ? "border-b" : ""
+              } ${row.type !== "class" ? "bg-muted/20" : ""}`}
+            >
+              {/* Time label column */}
+              <div className="p-2 border-r flex flex-col justify-center">
+                <p className="text-[11px] font-medium text-muted-foreground">
+                  {row.startTime}
+                </p>
+                <p className="text-[10px] text-muted-foreground/70">
+                  {row.endTime}
+                </p>
+                {row.type !== "class" && (
+                  <p className="text-[10px] text-muted-foreground mt-0.5 flex items-center gap-1">
+                    {row.type === "lunch" ? (
+                      <UtensilsCrossed className="h-2.5 w-2.5" />
+                    ) : (
+                      <Coffee className="h-2.5 w-2.5" />
+                    )}
+                    {row.label}
+                  </p>
+                )}
+              </div>
+
+              {/* Day cells */}
+              {weekDays.map((day) => {
+                if (row.type !== "class") {
+                  // Break/lunch row — empty gray cell
+                  return (
+                    <div
+                      key={day.date}
+                      className={`p-1.5 ${day.isToday ? "bg-[#fff2f0]/30" : ""}`}
+                    >
+                      <div className="h-full min-h-[40px] rounded-md bg-muted/30 flex items-center justify-center">
+                        <span className="text-[10px] text-muted-foreground/50">
+                          {row.label}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                }
+
+                // Class row — find if student has a class at this time on this day
+                const slot = slotLookup.get(`${day.date}:${row.startTime}`);
+
+                if (!slot) {
+                  // Free period
+                  return (
+                    <div
+                      key={day.date}
+                      className={`p-1.5 ${day.isToday ? "bg-[#fff2f0]/30" : ""}`}
+                    >
+                      <div className="h-full min-h-[56px] rounded-md bg-muted/20 flex items-center justify-center">
+                        <span className="text-[10px] text-muted-foreground/40">Free</span>
+                      </div>
+                    </div>
+                  );
+                }
+
+                // Class card
+                const colors = classColorMap.get(slot.className) ?? CLASS_COLORS[0];
+                const dueCount = assessmentsByDayClass.get(`${slot.date}:${slot.classId}`) ?? 0;
+
+                return (
+                  <div
+                    key={day.date}
+                    className={`p-1.5 ${day.isToday ? "bg-[#fff2f0]/30" : ""}`}
+                  >
+                    <button
+                      type="button"
+                      className={`w-full h-full min-h-[56px] rounded-md border p-2 text-left cursor-pointer hover:shadow-sm transition-shadow ${colors.bg} ${colors.border} ${colors.text}`}
+                      onClick={() => setSelectedSlot(slot)}
+                    >
+                      <p className="text-[11px] font-semibold truncate">
+                        {slot.className}
+                      </p>
+                      {slot.room && (
+                        <p className="text-[9px] opacity-70 flex items-center gap-0.5 mt-0.5">
+                          <MapPin className="h-2 w-2" />
+                          {slot.room}
+                        </p>
+                      )}
+                      {slot.lesson && (
+                        <p className="text-[9px] opacity-60 mt-0.5 truncate">
+                          {slot.lesson.title}
+                        </p>
+                      )}
+                      {dueCount > 0 && (
+                        <div className="flex items-center gap-0.5 mt-0.5">
+                          <ClipboardCheck className="h-2 w-2" />
+                          <span className="text-[8px] font-medium">
+                            {dueCount} due
+                          </span>
+                        </div>
+                      )}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          ))}
         </div>
       ) : (
-        /* Day view */
+        /* ─── Day View: Structured List ─── */
         <div>
           {/* Day picker */}
           <div className="flex gap-2 mb-4">
@@ -250,83 +425,158 @@ export function StudentTimetableView({ studentId }: StudentTimetableViewProps) {
             ))}
           </div>
 
-          {/* Day schedule */}
-          <div className="space-y-3">
-            {dayViewDate && (
-              <>
-                <h3 className="text-[14px] font-semibold">
-                  {dayViewDate.fullLabel}
-                </h3>
-                {(slotsByDay.get(dayViewDate.date) ?? []).length === 0 ? (
-                  <p className="text-[13px] text-muted-foreground py-4">
-                    No classes scheduled for this day.
-                  </p>
-                ) : (
-                  (slotsByDay.get(dayViewDate.date) ?? []).map((slot, i) => (
-                    <Card
-                      key={i}
-                      className={`p-4 gap-0 border ${
-                        classColorMap.get(slot.className) ?? "bg-muted"
-                      }`}
-                    >
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="text-[14px] font-semibold">
-                            {slot.className}
-                          </p>
-                          <div className="flex items-center gap-3 text-[12px] opacity-80 mt-0.5">
-                            <span className="flex items-center gap-1">
-                              <Clock className="h-3 w-3" />
-                              {slot.slotStartTime} – {slot.slotEndTime}
-                            </span>
-                            {slot.room && (
-                              <span className="flex items-center gap-1">
-                                <MapPin className="h-3 w-3" />
-                                {slot.room}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                        {slot.unitTitle && (
-                          <Badge variant="secondary" className="text-[10px] bg-white/50">
-                            {slot.unitTitle}
-                          </Badge>
-                        )}
-                      </div>
+          {dayViewDate && (
+            <>
+              <h3 className="text-[14px] font-semibold mb-3">
+                {dayViewDate.fullLabel}
+              </h3>
 
-                      {slot.lesson && (
-                        <div className="mt-2 pt-2 border-t border-current/10">
-                          <div className="flex items-center gap-1.5">
-                            <BookOpen className="h-3.5 w-3.5 opacity-70" />
-                            <p className="text-[13px] font-medium">
-                              {slot.lesson.title}
-                            </p>
-                          </div>
-                          {slot.lesson.objectives &&
-                            slot.lesson.objectives.length > 0 && (
-                              <ul className="mt-1.5 space-y-0.5 ml-5">
-                                {slot.lesson.objectives
-                                  .slice(0, 3)
-                                  .map((obj, j) => (
-                                    <li
-                                      key={j}
-                                      className="text-[12px] opacity-70"
-                                    >
-                                      • {obj}
-                                    </li>
-                                  ))}
-                              </ul>
-                            )}
+              <div className="space-y-0">
+                {timeRows.map((row) => {
+                  if (row.type !== "class") {
+                    // Break/lunch row
+                    return (
+                      <div
+                        key={`${row.startTime}-${row.endTime}`}
+                        className="flex items-center gap-3 py-2 px-3 bg-muted/20 border-y border-dashed"
+                      >
+                        <div className="w-[60px] text-[11px] text-muted-foreground font-medium">
+                          {row.startTime}
                         </div>
-                      )}
-                    </Card>
-                  ))
-                )}
-              </>
-            )}
-          </div>
+                        <div className="flex items-center gap-1.5 text-[12px] text-muted-foreground">
+                          {row.type === "lunch" ? (
+                            <UtensilsCrossed className="h-3 w-3" />
+                          ) : (
+                            <Coffee className="h-3 w-3" />
+                          )}
+                          {row.label}
+                        </div>
+                      </div>
+                    );
+                  }
+
+                  const slot = slotLookup.get(`${dayViewDate.date}:${row.startTime}`);
+
+                  if (!slot) {
+                    // Free period
+                    return (
+                      <div
+                        key={`${row.startTime}-${row.endTime}`}
+                        className="flex items-center gap-3 py-3 px-3 border-b"
+                      >
+                        <div className="w-[60px]">
+                          <p className="text-[11px] font-medium text-muted-foreground">
+                            {row.startTime}
+                          </p>
+                          <p className="text-[10px] text-muted-foreground/70">
+                            {row.endTime}
+                          </p>
+                        </div>
+                        <div className="flex-1 rounded-md bg-muted/20 py-4 flex items-center justify-center">
+                          <span className="text-[12px] text-muted-foreground/50">
+                            Free period
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  }
+
+                  // Class slot
+                  const colors = classColorMap.get(slot.className) ?? CLASS_COLORS[0];
+                  const dueCount = assessmentsByDayClass.get(`${slot.date}:${slot.classId}`) ?? 0;
+
+                  return (
+                    <div
+                      key={`${row.startTime}-${row.endTime}`}
+                      className="flex items-stretch gap-3 py-2 px-3 border-b"
+                    >
+                      <div className="w-[60px] pt-1">
+                        <p className="text-[11px] font-medium text-muted-foreground">
+                          {row.startTime}
+                        </p>
+                        <p className="text-[10px] text-muted-foreground/70">
+                          {row.endTime}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        className={`flex-1 rounded-lg border p-3 text-left cursor-pointer hover:shadow-sm transition-shadow ${colors.bg} ${colors.border} ${colors.text}`}
+                        onClick={() => setSelectedSlot(slot)}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-[14px] font-semibold">
+                              {slot.className}
+                            </p>
+                            <div className="flex items-center gap-3 text-[12px] opacity-80 mt-0.5">
+                              <span className="flex items-center gap-1">
+                                <Clock className="h-3 w-3" />
+                                {slot.slotStartTime} – {slot.slotEndTime}
+                              </span>
+                              {slot.room && (
+                                <span className="flex items-center gap-1">
+                                  <MapPin className="h-3 w-3" />
+                                  {slot.room}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          {slot.unitTitle && (
+                            <Badge variant="secondary" className="text-[10px] bg-white/50">
+                              {slot.unitTitle}
+                            </Badge>
+                          )}
+                        </div>
+
+                        {slot.lesson && (
+                          <div className="mt-2 pt-2 border-t border-current/10">
+                            <div className="flex items-center gap-1.5">
+                              <BookOpen className="h-3.5 w-3.5 opacity-70" />
+                              <p className="text-[13px] font-medium">
+                                {slot.lesson.title}
+                              </p>
+                            </div>
+                            {slot.lesson.objectives &&
+                              slot.lesson.objectives.length > 0 && (
+                                <ul className="mt-1.5 space-y-0.5 ml-5">
+                                  {slot.lesson.objectives
+                                    .slice(0, 3)
+                                    .map((obj, j) => (
+                                      <li
+                                        key={j}
+                                        className="text-[12px] opacity-70"
+                                      >
+                                        • {obj}
+                                      </li>
+                                    ))}
+                                </ul>
+                              )}
+                          </div>
+                        )}
+                        {dueCount > 0 && (
+                          <div className="flex items-center gap-1 mt-2 pt-2 border-t border-current/10">
+                            <ClipboardCheck className="h-3 w-3 opacity-70" />
+                            <span className="text-[11px] font-medium opacity-80">
+                              {dueCount} assessment{dueCount !== 1 ? "s" : ""} due today
+                            </span>
+                          </div>
+                        )}
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            </>
+          )}
         </div>
       )}
+
+      <TimetableSlotSheet
+        slot={selectedSlot}
+        open={!!selectedSlot}
+        onClose={() => setSelectedSlot(null)}
+        studentId={studentId}
+      />
     </div>
   );
 }

@@ -5,7 +5,7 @@ import { format, parseISO } from "date-fns";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { StatusBadge } from "@/components/shared/status-badge";
-import { getToMarkCount, GRADING_MODE_LABELS } from "@/lib/grade-helpers";
+import { GRADING_MODE_LABELS } from "@/lib/grade-helpers";
 import { computeUnreleasedGradesCount } from "@/lib/selectors/grade-selectors";
 import { Calendar, Users } from "lucide-react";
 import type { Assessment } from "@/types/assessment";
@@ -40,10 +40,6 @@ export function AssessmentListItem({
   gradedCount,
   totalStudents,
 }: AssessmentListItemProps) {
-  const toMark = assessment.status === "live"
-    ? getToMarkCount(studentIds, grades, assessment)
-    : 0;
-
   const unreleasedCount = assessment.status === "live"
     ? computeUnreleasedGradesCount(grades, assessment.id)
     : 0;
@@ -96,14 +92,9 @@ export function AssessmentListItem({
                 {assessment.totalPoints} pts
               </Badge>
             )}
-            {toMark > 0 && (
-              <Badge className="bg-[#fef3c7] text-[#b45309] border-[#b45309]/20 text-[11px] font-medium hover:bg-[#fef3c7]">
-                {toMark} to mark
-              </Badge>
-            )}
             {unreleasedCount > 0 && (
               <Badge className="bg-[#dbeafe] text-[#2563eb] border-[#2563eb]/20 text-[11px] font-medium hover:bg-[#dbeafe]">
-                {unreleasedCount} unreleased
+                {unreleasedCount} Require Marking
               </Badge>
             )}
           </div>
@@ -129,14 +120,9 @@ export function AssessmentListItem({
             </p>
           </div>
           <div className="flex items-center gap-2">
-            {toMark > 0 && (
-              <Badge className="bg-[#fef3c7] text-[#b45309] border-[#b45309]/20 text-[11px] font-medium hover:bg-[#fef3c7]">
-                {toMark} to mark
-              </Badge>
-            )}
             {unreleasedCount > 0 && (
               <Badge className="bg-[#dbeafe] text-[#2563eb] border-[#2563eb]/20 text-[11px] font-medium hover:bg-[#dbeafe]">
-                {unreleasedCount} unreleased
+                {unreleasedCount} Require Marking
               </Badge>
             )}
             <StatusBadge status={assessment.status} />

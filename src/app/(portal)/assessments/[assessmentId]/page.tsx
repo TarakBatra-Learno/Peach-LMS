@@ -60,7 +60,14 @@ import {
   BarChart3,
   Lock,
   Unlock,
+  MoreHorizontal,
 } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { format, parseISO } from "date-fns";
 import { toast } from "sonner";
 import Link from "next/link";
@@ -70,6 +77,7 @@ import type { GradingMode } from "@/types/common";
 import {
   isGradeComplete,
   getTeacherReviewStatus,
+  isStudentPastDue,
   getToMarkCount,
   getExcusedCount,
   getGradeCellDisplay,
@@ -106,7 +114,6 @@ const GOAL_CATEGORY_LABELS: Record<string, string> = {
 const STUDENT_FILTER_OPTIONS: { value: TeacherReviewStatus | "all"; label: string }[] = [
   { value: "all", label: "All" },
   { value: "pending", label: "Pending" },
-  { value: "late", label: "Late" },
   { value: "to_mark", label: "To Mark" },
   { value: "in_progress", label: "In Progress" },
   { value: "ready", label: "Ready" },
@@ -137,7 +144,9 @@ export default function AssessmentDetailPage() {
   const addGrade = useStore((s) => s.addGrade);
   const updateGrade = useStore((s) => s.updateGrade);
   const addAnnouncement = useStore((s) => s.addAnnouncement);
+  const addChannel = useStore((s) => s.addChannel);
   const channels = useStore((s) => s.channels);
+  const currentUser = useStore((s) => s.currentUser);
   const calendarEvents = useStore((s) => s.calendarEvents);
   const addCalendarEvent = useStore((s) => s.addCalendarEvent);
   const deleteCalendarEvent = useStore((s) => s.deleteCalendarEvent);
@@ -276,6 +285,45 @@ export default function AssessmentDetailPage() {
     return computeAssessmentAverage(grades, assessment);
   }, [assessment, grades]);
 
+  // Compute status counts for filter pills
+  const statusCounts = useMemo(() => {
+    if (!assessment) return {} as Record<TeacherReviewStatus | "all", number>;
+    const counts: Record<string, number> = { all: students.length };
+    for (const s of students) {
+      const grade = grades.find((g) => g.studentId === s.id);
+      const status = getTeacherReviewStatus(grade, assessment);
+      counts[status] = (counts[status] || 0) + 1;
+    }
+    return counts as Record<TeacherReviewStatus | "all", number>;
+  }, [assessment, students, grades]);
+
+  // ---------------------------------------------------------------------------
+  // Auto-close: when every student is released or excused, close the assessment
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Check whether all students are now in a terminal state (released or excused).
+   * `terminalOverrides` lists studentIds whose status just changed to terminal
+   * in this action — we can't rely on the stale `grades` array for those.
+   * `bulkReleasedIds` is for handleReleaseAllReady where many grades flip at once.
+   */
+  const checkAutoClose = (terminalOverrides: string[] = [], bulkReleasedIds: string[] = []) => {
+    if (!assessment || assessment.status !== "live") return;
+    const allTerminal = students.every((s) => {
+      // If this student was just made terminal in this action, count them
+      if (terminalOverrides.includes(s.id) || bulkReleasedIds.includes(s.id)) return true;
+      const grade = grades.find((g) => g.studentId === s.id);
+      if (!grade) return false;
+      if (grade.submissionStatus === "excused") return true;
+      if (grade.releasedAt) return true;
+      return false;
+    });
+    if (allTerminal && students.length > 0) {
+      closeAssessment(assessmentId);
+      toast.success("All grades released — assessment closed automatically");
+    }
+  };
+
   // ---------------------------------------------------------------------------
   // Grading sheet helpers
   // ---------------------------------------------------------------------------
@@ -406,6 +454,7 @@ export default function AssessmentDetailPage() {
       submissionStatus: gradingSubmissionStatus,
     });
     payload.releasedAt = now;
+    payload.reportStatus = "unseen";
 
     if (existingGrade) {
       updateGrade(existingGrade.id, { ...payload, updatedAt: now });
@@ -430,6 +479,7 @@ export default function AssessmentDetailPage() {
     );
     setGradingOpen(false);
     setGradingStudent(null);
+    checkAutoClose([gradingStudent.id]);
   };
 
   const handleAmendUpdate = () => {
@@ -478,7 +528,7 @@ export default function AssessmentDetailPage() {
     );
     if (!existingGrade) return;
     const now = new Date().toISOString();
-    updateGrade(existingGrade.id, { releasedAt: now, updatedAt: now });
+    updateGrade(existingGrade.id, { releasedAt: now, reportStatus: "unseen", updatedAt: now });
     if (cls) {
       addStudentNotification(
         createGradeReleasedNotification({
@@ -491,6 +541,7 @@ export default function AssessmentDetailPage() {
       );
     }
     toast.success(`Grade released for ${student.firstName} ${student.lastName}`);
+    checkAutoClose([student.id]);
   };
 
   // Release all ready grades
@@ -498,9 +549,10 @@ export default function AssessmentDetailPage() {
     if (!assessment || !cls) return;
     const now = new Date().toISOString();
     let count = 0;
+    const releasedStudentIds: string[] = [];
     for (const grade of grades) {
       if (grade.gradingStatus === "ready" && !grade.releasedAt && grade.submissionStatus !== "excused") {
-        updateGrade(grade.id, { releasedAt: now, updatedAt: now });
+        updateGrade(grade.id, { releasedAt: now, reportStatus: "unseen", updatedAt: now });
         addStudentNotification(
           createGradeReleasedNotification({
             studentId: grade.studentId,
@@ -510,11 +562,13 @@ export default function AssessmentDetailPage() {
             classId: cls.id,
           })
         );
+        releasedStudentIds.push(grade.studentId);
         count++;
       }
     }
     if (count > 0) {
       toast.success(`Released ${count} grade${count !== 1 ? "s" : ""}`);
+      checkAutoClose([], releasedStudentIds);
     } else {
       toast.info("No ready grades to release");
     }
@@ -571,6 +625,7 @@ export default function AssessmentDetailPage() {
 
     const student = students.find((s) => s.id === studentId);
     toast.success(`${student?.firstName ?? "Student"} excused`);
+    checkAutoClose([studentId]);
   };
 
   // Revoke excused status
@@ -580,11 +635,24 @@ export default function AssessmentDetailPage() {
       (g) => g.studentId === student.id && g.assessmentId === assessment.id
     );
     if (!existingGrade) return;
+
+    // Check if student has an existing submission — restore link if so
+    const submission = allSubmissions.find((s) => s.studentId === student.id);
+    const hasSubmission = submission?.status === "submitted";
+
     updateGrade(existingGrade.id, {
-      submissionStatus: "none",
+      submissionStatus: hasSubmission ? "submitted" : "none",
+      submittedAt: hasSubmission ? submission.submittedAt : undefined,
       updatedAt: new Date().toISOString(),
     });
-    toast.success(`Excused status revoked for ${student.firstName} ${student.lastName}`);
+
+    // If assessment is closed, revoking excused reopens it to live
+    if (assessment.status === "closed") {
+      reopenAssessment(assessment.id);
+      toast.success(`Excused status revoked for ${student.firstName} ${student.lastName} — assessment reopened`);
+    } else {
+      toast.success(`Excused status revoked for ${student.firstName} ${student.lastName}`);
+    }
   };
 
   // ---------------------------------------------------------------------------
@@ -617,6 +685,64 @@ export default function AssessmentDetailPage() {
   const handleReopen = () => {
     reopenAssessment(assessmentId);
     toast.success("Assessment reopened");
+  };
+
+  // ---------------------------------------------------------------------------
+  // Message student (DM from options window)
+  // ---------------------------------------------------------------------------
+
+  const handleSendStudentMessage = (studentId: string, message: string) => {
+    if (!assessment) return;
+    const student = students.find((s) => s.id === studentId);
+    if (!student) return;
+    const teacherId = currentUser?.id ?? "tchr_01";
+    const teacherName = currentUser?.name ?? "Ms. Mitchell";
+
+    // Find or create DM channel for this class + student
+    const dmChannels = channels.filter((ch) => ch.type === "dm");
+    let dmChannel = dmChannels.find(
+      (ch) =>
+        ch.classId === assessment.classId &&
+        ch.participantIds?.includes(studentId) &&
+        ch.participantIds?.includes(teacherId)
+    );
+
+    if (!dmChannel) {
+      const channelId = generateId("ch");
+      dmChannel = {
+        id: channelId,
+        classId: assessment.classId,
+        name: `DM: ${teacherName} \u2194 ${student.firstName} ${student.lastName}`,
+        type: "dm" as const,
+        participantIds: [teacherId, studentId],
+        createdAt: new Date().toISOString(),
+      };
+      addChannel(dmChannel);
+    }
+
+    // Post message as an announcement in the DM channel
+    const now = new Date().toISOString();
+    addAnnouncement({
+      id: generateId("ann"),
+      channelId: dmChannel.id,
+      classId: assessment.classId,
+      title: `Re: ${assessment.title}`,
+      body: message,
+      attachments: [],
+      pinnedContext: {
+        type: "assessment",
+        referenceId: assessment.id,
+        label: assessment.title,
+      },
+      status: "sent",
+      sentAt: now,
+      createdAt: now,
+      threadReplies: [],
+      authorId: teacherId,
+      authorRole: "teacher",
+    });
+
+    toast.success(`Message sent to ${student.firstName} ${student.lastName}`);
   };
 
   // ---------------------------------------------------------------------------
@@ -774,22 +900,38 @@ export default function AssessmentDetailPage() {
   if (isDraft) {
     return (
       <div>
-        <PageHeader
-          title={draftTitle || assessment.title}
-          description="Draft — configure your assessment before publishing"
-          secondaryActions={[
-            { label: "Duplicate", onClick: handleDuplicate },
-            {
-              label: "Delete",
-              onClick: () => setDeleteConfirm(true),
-              variant: "destructive" as const,
-            },
-          ]}
-        >
-          <div className="flex gap-2 mt-2">
-            <StatusBadge status="draft" />
+        <div className="flex items-start justify-between gap-4 mb-6">
+          <div className="min-w-0 flex-1">
+            <h1 className="text-[24px] font-semibold leading-[1.2] text-foreground tracking-tight">
+              {draftTitle || assessment.title}
+            </h1>
+            <p className="mt-1 text-[14px] text-muted-foreground">Draft — configure your assessment before publishing</p>
+            <div className="flex gap-2 mt-2">
+              <StatusBadge status="draft" />
+            </div>
           </div>
-        </PageHeader>
+          <div className="flex items-center gap-2 shrink-0">
+            <Button variant="outline" size="sm" onClick={handleSaveDraft}>
+              Save draft
+            </Button>
+            <Button size="sm" onClick={handlePublish}>
+              <Send className="h-4 w-4 mr-1.5" />
+              Publish
+            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="icon" className="h-9 w-9">
+                  <MoreHorizontal className="h-4 w-4" />
+                  <span className="sr-only">More actions</span>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={handleDuplicate}>Duplicate</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setDeleteConfirm(true)}>Delete</DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Left column — core fields */}
@@ -1026,50 +1168,35 @@ export default function AssessmentDetailPage() {
                   Standards mapping is configured via learning goals above.
                 </p>
               )}
+
+              {/* Rubric configuration inline under grading type */}
+              {(draftGradingMode === "rubric" || draftGradingMode === "myp_criteria") && (
+                <div className="pt-2 border-t border-border/50">
+                  <RubricTab
+                    assessment={assessment}
+                    onUpdateAssessment={updateAssessment}
+                  />
+                </div>
+              )}
             </Card>
 
-            {/* Draft action buttons */}
-            <div className="flex gap-2">
-              <Button variant="outline" onClick={handleSaveDraft}>
-                Save draft
-              </Button>
-              <Button onClick={handlePublish}>
-                <Send className="h-4 w-4 mr-1.5" />
-                Publish
-              </Button>
-            </div>
+            {/* Checklist builder for draft mode */}
+            {draftGradingMode === "checklist" && (
+              <ChecklistBuilder
+                items={assessment.checklist ?? []}
+                sections={assessment.checklistSections ?? []}
+                outcomeModel={assessment.checklistOutcomeModel ?? "feedback_only"}
+                onSave={(items, sections) => {
+                  updateAssessment(assessmentId, {
+                    checklist: items,
+                    checklistSections: sections,
+                  });
+                  toast.success("Checklist saved");
+                }}
+              />
+            )}
           </div>
         </div>
-
-        {/* Checklist builder for draft mode */}
-        {draftGradingMode === "checklist" && (
-          <div className="mt-6">
-            <h3 className="text-[16px] font-semibold mb-3">Checklist items</h3>
-            <ChecklistBuilder
-              items={assessment.checklist ?? []}
-              sections={assessment.checklistSections ?? []}
-              outcomeModel={assessment.checklistOutcomeModel ?? "feedback_only"}
-              onSave={(items, sections) => {
-                updateAssessment(assessmentId, {
-                  checklist: items,
-                  checklistSections: sections,
-                });
-                toast.success("Checklist saved");
-              }}
-            />
-          </div>
-        )}
-
-        {/* Rubric tab for draft mode */}
-        {(draftGradingMode === "rubric" || draftGradingMode === "myp_criteria") && (
-          <div className="mt-6">
-            <h3 className="text-[16px] font-semibold mb-3">Rubric configuration</h3>
-            <RubricTab
-              assessment={assessment}
-              onUpdateAssessment={updateAssessment}
-            />
-          </div>
-        )}
 
         {/* Confirm Dialogs */}
         <ConfirmDialog
@@ -1139,66 +1266,79 @@ export default function AssessmentDetailPage() {
 
   return (
     <div>
-      {/* Header */}
-      <PageHeader
-        title={assessment.title}
-        description={`${cls?.name ?? "Unknown class"} \u00B7 Due ${format(parseISO(assessment.dueDate), "MMM d, yyyy")} \u00B7 ${GRADING_MODE_LABELS[assessment.gradingMode]}`}
-        secondaryActions={[
-          { label: "Duplicate", onClick: handleDuplicate },
-          ...(isLive
-            ? [{ label: "Delete", onClick: () => setDeleteConfirm(true), variant: "destructive" as const }]
-            : []),
-        ]}
-      >
-        <div className="flex items-center gap-2 mt-2">
-          <StatusBadge status={assessment.status} />
-          {assessment.gradingMode === "score" && assessment.totalPoints && (
-            <Badge variant="secondary" className="text-[11px]">
-              {assessment.totalPoints} points
-            </Badge>
-          )}
-          {assessment.unitId &&
-            (() => {
-              const linkedUnit = unitPlans.find((u) => u.id === assessment.unitId);
-              return linkedUnit ? (
-                <Link href={`/classes/${assessment.classId}?tab=units`}>
-                  <Badge
-                    variant="outline"
-                    className="text-[11px] cursor-pointer hover:bg-muted"
-                  >
-                    Unit: {linkedUnit.title}
-                  </Badge>
-                </Link>
-              ) : null;
-            })()}
-          {unreleasedCount > 0 && (
-            <Badge className="bg-[#dbeafe] text-[#2563eb] border-transparent text-[11px]">
-              {unreleasedCount} unreleased
-            </Badge>
-          )}
+      {/* Header + top-right action buttons */}
+      <div className="flex items-start justify-between gap-4 mb-6">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-start justify-between gap-4">
+            <h1 className="text-[24px] font-semibold leading-[1.2] text-foreground tracking-tight">
+              {assessment.title}
+            </h1>
+            <div className="flex items-center gap-2 shrink-0">
+              {isLive && readyCount > 0 && (
+                <Button variant="outline" size="sm" onClick={handleReleaseAllReady}>
+                  <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" />
+                  Release all ready ({readyCount})
+                </Button>
+              )}
+              {isLive && (
+                <Button variant="outline" size="sm" onClick={handleClose}>
+                  <Lock className="h-3.5 w-3.5 mr-1.5" />
+                  Close assessment
+                </Button>
+              )}
+              {isClosed && (
+                <Button variant="outline" size="sm" onClick={handleReopen}>
+                  <Unlock className="h-3.5 w-3.5 mr-1.5" />
+                  Reopen
+                </Button>
+              )}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="icon" className="h-9 w-9">
+                    <MoreHorizontal className="h-4 w-4" />
+                    <span className="sr-only">More actions</span>
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={handleDuplicate}>Duplicate</DropdownMenuItem>
+                  {isLive && (
+                    <DropdownMenuItem onClick={() => setDeleteConfirm(true)}>Delete</DropdownMenuItem>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+          </div>
+          <p className="mt-1 text-[14px] text-muted-foreground">
+            {cls?.name ?? "Unknown class"} · Due {format(parseISO(assessment.dueDate), "MMM d, yyyy")} · {GRADING_MODE_LABELS[assessment.gradingMode]}
+          </p>
+          <div className="flex items-center gap-2 mt-2">
+            <StatusBadge status={assessment.status} />
+            {assessment.gradingMode === "score" && assessment.totalPoints && (
+              <Badge variant="secondary" className="text-[11px]">
+                {assessment.totalPoints} points
+              </Badge>
+            )}
+            {assessment.unitId &&
+              (() => {
+                const linkedUnit = unitPlans.find((u) => u.id === assessment.unitId);
+                return linkedUnit ? (
+                  <Link href={`/classes/${assessment.classId}?tab=units`}>
+                    <Badge
+                      variant="outline"
+                      className="text-[11px] cursor-pointer hover:bg-muted"
+                    >
+                      Unit: {linkedUnit.title}
+                    </Badge>
+                  </Link>
+                ) : null;
+              })()}
+            {unreleasedCount > 0 && (
+              <Badge className="bg-[#dbeafe] text-[#2563eb] border-transparent text-[11px]">
+                {unreleasedCount} Require Marking
+              </Badge>
+            )}
+          </div>
         </div>
-      </PageHeader>
-
-      {/* Action bar */}
-      <div className="flex items-center gap-2 mb-4">
-        {isLive && readyCount > 0 && (
-          <Button variant="outline" size="sm" onClick={handleReleaseAllReady}>
-            <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" />
-            Release all ready ({readyCount})
-          </Button>
-        )}
-        {isLive && (
-          <Button variant="outline" size="sm" onClick={handleClose}>
-            <Lock className="h-3.5 w-3.5 mr-1.5" />
-            Close assessment
-          </Button>
-        )}
-        {isClosed && (
-          <Button variant="outline" size="sm" onClick={handleReopen}>
-            <Unlock className="h-3.5 w-3.5 mr-1.5" />
-            Reopen
-          </Button>
-        )}
       </div>
 
       <Tabs defaultValue={urlStudentId ? "students" : "details"} className="w-full">
@@ -1394,17 +1534,20 @@ export default function AssessmentDetailPage() {
 
                 {/* Status filter pills */}
                 <div className="flex gap-1 mt-3 flex-wrap">
-                  {STUDENT_FILTER_OPTIONS.map((opt) => (
-                    <Button
-                      key={opt.value}
-                      variant={studentFilter === opt.value ? "default" : "outline"}
-                      size="sm"
-                      className="h-7 text-[11px]"
-                      onClick={() => setStudentFilter(opt.value)}
-                    >
-                      {opt.label}
-                    </Button>
-                  ))}
+                  {STUDENT_FILTER_OPTIONS.map((opt) => {
+                    const count = statusCounts[opt.value] ?? 0;
+                    return (
+                      <Button
+                        key={opt.value}
+                        variant={studentFilter === opt.value ? "default" : "outline"}
+                        size="sm"
+                        className="h-7 text-[11px]"
+                        onClick={() => setStudentFilter(opt.value)}
+                      >
+                        {opt.label} ({count})
+                      </Button>
+                    );
+                  })}
                 </div>
               </Card>
 
@@ -1435,11 +1578,19 @@ export default function AssessmentDetailPage() {
                         const status = getTeacherReviewStatus(grade, assessment);
                         return status === studentFilter;
                       })
-                      .sort((a, b) =>
-                        `${a.lastName} ${a.firstName}`.localeCompare(
+                      .sort((a, b) => {
+                        // to_mark students float to the top
+                        const gradeA = grades.find((g) => g.studentId === a.id);
+                        const gradeB = grades.find((g) => g.studentId === b.id);
+                        const statusA = getTeacherReviewStatus(gradeA, assessment);
+                        const statusB = getTeacherReviewStatus(gradeB, assessment);
+                        const aIsToMark = statusA === "to_mark" ? 0 : 1;
+                        const bIsToMark = statusB === "to_mark" ? 0 : 1;
+                        if (aIsToMark !== bIsToMark) return aIsToMark - bIsToMark;
+                        return `${a.lastName} ${a.firstName}`.localeCompare(
                           `${b.lastName} ${b.firstName}`
-                        )
-                      )
+                        );
+                      })
                       .map((student) => {
                         const grade = grades.find(
                           (g) => g.studentId === student.id
@@ -1449,12 +1600,15 @@ export default function AssessmentDetailPage() {
                           (s) => s.studentId === student.id
                         );
                         const isLateSubmission = submission?.isLate === true;
+                        const isPastDue = isStudentPastDue(assessment);
+                        // Show "Late" tag on: pending past due OR submitted rows with late submission
                         const showLateBadge =
-                          isLateSubmission &&
-                          (status === "to_mark" ||
-                            status === "in_progress" ||
-                            status === "ready" ||
-                            status === "released");
+                          (status === "pending" && isPastDue) ||
+                          (isLateSubmission &&
+                            (status === "to_mark" ||
+                              status === "in_progress" ||
+                              status === "ready" ||
+                              status === "released"));
 
                         return (
                           <TableRow key={student.id}>
@@ -1492,7 +1646,7 @@ export default function AssessmentDetailPage() {
                             <TableCell className="text-right">
                               <div className="flex items-center gap-1.5 justify-end">
                                 {/* Pending / Late → Options */}
-                                {(status === "pending" || status === "late") && (
+                                {status === "pending" && (
                                   <Button
                                     variant="outline"
                                     size="sm"
@@ -1626,6 +1780,7 @@ export default function AssessmentDetailPage() {
         student={optionsStudent}
         assessmentTitle={assessment.title}
         onExcuse={handleExcuseStudent}
+        onSendMessage={handleSendStudentMessage}
       />
 
       {/* Confirm Dialogs */}

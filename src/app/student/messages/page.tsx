@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
+import { useSearchParams } from "next/navigation";
 import { useStore } from "@/stores";
 import { useStudentId, useCurrentUser } from "@/lib/hooks/use-current-user";
 import { PageHeader } from "@/components/shared/page-header";
@@ -63,6 +64,12 @@ export default function StudentMessagesPage() {
     [channels]
   );
 
+  const searchParams = useSearchParams();
+  const startDmClassId = searchParams.get("startDm");
+  const startDmHandled = useRef(false);
+  const channelParam = searchParams.get("channel");
+  const channelParamHandled = useRef(false);
+
   const [activeChannelId, setActiveChannelId] = useState<string | null>(
     () => channels[0]?.id ?? null
   );
@@ -103,6 +110,28 @@ export default function StudentMessagesPage() {
     setShowDmCompose(false);
     toast.success("New conversation started");
   };
+
+  useEffect(() => {
+    if (startDmClassId && studentId && !startDmHandled.current && !loading) {
+      startDmHandled.current = true;
+      const cls = enrolledClasses.find((c) => c.id === startDmClassId);
+      if (cls) {
+        // Auto-trigger DM creation for this class's teacher
+        handleCreateDm("tchr_01", "Ms. Mitchell", startDmClassId);
+      }
+    }
+  }, [startDmClassId, studentId, loading, enrolledClasses]);
+
+  useEffect(() => {
+    if (channelParam && !channelParamHandled.current && !loading && channels.length > 0) {
+      channelParamHandled.current = true;
+      const found = channels.find((ch) => ch.id === channelParam);
+      if (found) {
+        setActiveChannelId(found.id);
+      }
+      // Silently ignore invalid channelId (fallback behavior per plan)
+    }
+  }, [channelParam, loading, channels]);
 
   if (loading) return <DetailSkeleton />;
 
@@ -187,10 +216,11 @@ export default function StudentMessagesPage() {
               <Button
                 variant="ghost"
                 size="sm"
-                className="h-6 w-6 p-0"
+                className="h-6 px-1.5 text-[10px] gap-0.5"
                 onClick={() => setShowDmCompose(true)}
               >
                 <Plus className="h-3 w-3" />
+                New
               </Button>
             </div>
             <div className="space-y-0.5">
@@ -209,9 +239,12 @@ export default function StudentMessagesPage() {
                 </button>
               ))}
               {dmChannels.length === 0 && (
-                <p className="text-[12px] text-muted-foreground px-3 py-1">
-                  No conversations yet
-                </p>
+                <button
+                  className="w-full text-left px-3 py-2.5 rounded-lg border border-dashed border-[#c24e3f]/30 text-[12px] text-[#c24e3f] hover:bg-[#fff2f0] transition-colors"
+                  onClick={() => setShowDmCompose(true)}
+                >
+                  Message your teacher
+                </button>
               )}
             </div>
           </div>

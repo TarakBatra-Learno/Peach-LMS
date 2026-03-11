@@ -5,12 +5,17 @@ import { useStudentId } from "@/lib/hooks/use-current-user";
 import { PageHeader } from "@/components/shared/page-header";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { StatusBadge } from "@/components/shared/status-badge";
 import { BookOpen, ClipboardCheck, Target, Bell, Calendar, Clock } from "lucide-react";
-import { getStudentClasses, getStudentAssessments, getStudentReleasedGrades, getStudentTimetable } from "@/lib/student-selectors";
+import { getStudentClasses, getStudentAssessments, getStudentReleasedGrades, getStudentTimetable, getStudentSubmission, getStudentSubmissionStatus } from "@/lib/student-selectors";
 import { useEffect, useState, useMemo } from "react";
 import { format } from "date-fns";
 import Link from "next/link";
 import type { AppState } from "@/stores/types";
+import { StudentClassFilter } from "@/components/student/student-class-filter";
+import { DashboardAnnouncementsPanel } from "@/components/student/dashboard-announcements-panel";
+import { useReleasedAssessmentClick } from "@/lib/hooks/use-released-assessment-click";
+import { GradeResultSheet } from "@/components/student/grade-result-sheet";
 
 function StatCardSkeleton() {
   return (
@@ -25,6 +30,7 @@ function StatCardSkeleton() {
 export default function StudentHomePage() {
   const studentId = useStudentId();
   const currentUser = useStore((s) => s.currentUser);
+  const studentActiveClassId = useStore((s) => s.ui.studentActiveClassId);
   const state = useStore() as AppState;
   const [ready, setReady] = useState(false);
 
@@ -60,13 +66,20 @@ export default function StudentHomePage() {
     [state, studentId, today]
   );
 
-  // Upcoming assessments (due in the future)
+  // Upcoming assessments (due in the future), filtered by active class when set
   const upcomingAssessments = assessments
     .filter((a) => new Date(a.dueDate) >= now)
+    .filter((a) => !studentActiveClassId || a.classId === studentActiveClassId)
     .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime())
     .slice(0, 5);
 
+  // Filtered released grades when class filter is active
+  const filteredGrades = studentActiveClassId
+    ? releasedGrades.filter((g) => g.classId === studentActiveClassId)
+    : releasedGrades;
+
   const firstName = currentUser?.name?.split(" ")[0] ?? "Student";
+  const { handleClick: handleGradeClick, sheetProps } = useReleasedAssessmentClick(studentId ?? "");
 
   if (!ready) {
     return (
@@ -104,10 +117,15 @@ export default function StudentHomePage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title={`Welcome back, ${firstName}`}
-        description="Here's what's happening across your classes"
-      />
+      <div className="flex items-start justify-between gap-4">
+        <PageHeader
+          title={`Welcome back, ${firstName}`}
+          description="Here's what's happening across your classes"
+        />
+        <div className="shrink-0 pt-1">
+          <StudentClassFilter />
+        </div>
+      </div>
 
       {/* Stat Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -176,9 +194,19 @@ export default function StudentHomePage() {
                       <p className="text-[14px] font-medium truncate">{asmt.title}</p>
                       <p className="text-[12px] text-muted-foreground">{cls?.name}</p>
                     </div>
-                    <span className={`text-[12px] font-medium shrink-0 ml-3 ${daysUntil <= 2 ? "text-[#dc2626]" : "text-muted-foreground"}`}>
-                      {daysUntil === 0 ? "Due today" : daysUntil === 1 ? "Due tomorrow" : `${daysUntil} days`}
-                    </span>
+                    <div className="flex items-center gap-2 shrink-0 ml-3">
+                      {(() => {
+                        const sub = getStudentSubmission(state, studentId, asmt.id);
+                        const rawGrade = state.grades.find((g: any) => g.studentId === studentId && g.assessmentId === asmt.id);
+                        const subStatus = getStudentSubmissionStatus(rawGrade, sub, asmt as any);
+                        if (subStatus !== "due") return <StatusBadge status={subStatus} showIcon={false} className="text-[10px]" />;
+                        return (
+                          <span className={`text-[12px] font-medium ${daysUntil <= 2 ? "text-[#dc2626]" : "text-muted-foreground"}`}>
+                            {daysUntil === 0 ? "Due today" : daysUntil === 1 ? "Due tomorrow" : `${daysUntil} days`}
+                          </span>
+                        );
+                      })()}
+                    </div>
                   </Link>
                 );
               })}
@@ -192,13 +220,13 @@ export default function StudentHomePage() {
             <Target className="h-4 w-4 text-muted-foreground" />
             Recent Grades
           </h2>
-          {releasedGrades.length === 0 ? (
+          {filteredGrades.length === 0 ? (
             <p className="text-[13px] text-muted-foreground py-4 text-center">
               No grades released yet. Check back later!
             </p>
           ) : (
             <div className="space-y-2">
-              {releasedGrades.slice(0, 5).map((grade) => {
+              {filteredGrades.slice(0, 5).map((grade) => {
                 const assessment = state.assessments.find((a) => a.id === grade.assessmentId);
                 const cls = classes.find((c) => c.id === grade.classId);
                 const isExcused = grade.submissionStatus === "excused";
@@ -212,15 +240,21 @@ export default function StudentHomePage() {
                 return (
                   <div
                     key={grade.id}
-                    className="flex items-center justify-between py-2 px-3 rounded-lg border border-border"
+                    className="flex items-center justify-between py-2 px-3 rounded-lg border border-border cursor-pointer hover:bg-muted/50 transition-colors"
+                    onClick={() => handleGradeClick(grade.assessmentId, grade.classId)}
                   >
                     <div className="min-w-0">
                       <p className="text-[14px] font-medium truncate">{assessment?.title ?? "Assessment"}</p>
                       <p className="text-[12px] text-muted-foreground">{cls?.name}</p>
                     </div>
-                    <span className="text-[14px] font-semibold text-[#c24e3f] shrink-0 ml-3">
-                      {display}
-                    </span>
+                    <div className="flex items-center gap-2 shrink-0 ml-3">
+                      <span className="text-[14px] font-semibold text-[#c24e3f]">
+                        {display}
+                      </span>
+                      {grade.reportStatus === "unseen" && (
+                        <span className="w-2 h-2 rounded-full bg-[#2563eb] shrink-0" title="New" />
+                      )}
+                    </div>
                   </div>
                 );
               })}
@@ -289,7 +323,12 @@ export default function StudentHomePage() {
             </div>
           )}
         </Card>
+
+        {/* Recent Announcements */}
+        {studentId && <DashboardAnnouncementsPanel studentId={studentId} />}
       </div>
+
+      {studentId && <GradeResultSheet {...sheetProps} />}
     </div>
   );
 }

@@ -25,6 +25,9 @@ export interface Announcement {
   sentAt?: string;
   createdAt: string;
   threadReplies: ThreadReply[];
+  /** Author identity for DM messages (announcements used as DM messages) */
+  authorId?: ID;
+  authorRole?: "teacher" | "student";
 }
 
 export interface AnnouncementAttachment {

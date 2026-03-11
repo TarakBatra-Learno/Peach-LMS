@@ -799,7 +799,7 @@ export function UnitPlansTab({
                       {/* Unit Gradebook */}
                       {(() => {
                         const publishedUnitAssessments = unitAssessments.filter(
-                          (a) => a.status === "published"
+                          (a) => a.status === "live" || a.status === "published"
                         );
                         if (publishedUnitAssessments.length === 0) return null;
                         return (

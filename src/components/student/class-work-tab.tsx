@@ -2,107 +2,27 @@
 
 import { useMemo, useState } from "react";
 import { useStore } from "@/stores";
-import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/shared/empty-state";
 import { StatusBadge } from "@/components/shared/status-badge";
+import { StudentAssessmentCard } from "@/components/student/student-assessment-card";
 import {
   getStudentAssessments,
   getStudentUnitPlans,
-  getStudentSubmission,
-  getStudentReleasedGrades,
 } from "@/lib/student-selectors";
-import { isAssessmentPastDue } from "@/lib/student-permissions";
 import type { StudentAssessmentView, StudentUnitPlanView } from "@/lib/student-permissions";
-import { Calendar, ClipboardCheck, ChevronDown, ChevronUp } from "lucide-react";
-import { format } from "date-fns";
-import Link from "next/link";
+import { ClipboardCheck, ChevronDown, ChevronUp } from "lucide-react";
+import { useReleasedAssessmentClick } from "@/lib/hooks/use-released-assessment-click";
+import { GradeResultSheet } from "@/components/student/grade-result-sheet";
 
 interface ClassWorkTabProps {
   classId: string;
   studentId: string;
 }
 
-function AssessmentCard({
-  assessment,
-  classId,
-  studentId,
-}: {
-  assessment: StudentAssessmentView;
-  classId: string;
-  studentId: string;
-}) {
-  const state = useStore((s) => s);
-  const submission = getStudentSubmission(state, studentId, assessment.id);
-  const isPastDue = isAssessmentPastDue(assessment);
-  const releasedGrade = assessment.gradesReleased
-    ? getStudentReleasedGrades(state, studentId).find((g) => g.assessmentId === assessment.id)
-    : undefined;
-  const isExcused = releasedGrade?.submissionStatus === "excused";
-
-  const submissionStatus = submission?.status ?? (isPastDue ? "overdue" : "not_started");
-  const statusLabel =
-    submissionStatus === "draft"
-      ? "Draft saved"
-      : submissionStatus === "submitted"
-      ? "Submitted"
-      : submissionStatus === "returned"
-      ? "Returned"
-      : submissionStatus === "resubmitted"
-      ? "Resubmitted"
-      : isPastDue
-      ? "Past due"
-      : "Not started";
-
-  const statusVariant =
-    submissionStatus === "submitted" || submissionStatus === "resubmitted"
-      ? "success"
-      : submissionStatus === "returned"
-      ? "warning"
-      : submissionStatus === "draft"
-      ? "info"
-      : isPastDue
-      ? "danger"
-      : "neutral";
-
-  return (
-    <Link href={`/student/classes/${classId}/assessments/${assessment.id}`}>
-      <Card className="p-4 gap-0 hover:shadow-[0_1px_2px_rgba(16,24,40,0.06)] transition-all cursor-pointer">
-        <div className="flex items-center justify-between">
-          <div className="min-w-0 flex-1">
-            <p className="text-[14px] font-medium truncate">{assessment.title}</p>
-            <div className="flex items-center gap-3 text-[12px] text-muted-foreground mt-0.5">
-              <span className="flex items-center gap-1">
-                <Calendar className="h-3.5 w-3.5" />
-                Due {format(new Date(assessment.dueDate), "MMM d, yyyy")}
-              </span>
-              <span>{assessment.gradingMode.replace(/_/g, " ")}</span>
-              {assessment.totalPoints && assessment.gradingMode === "score" && (
-                <span>{assessment.totalPoints} pts</span>
-              )}
-            </div>
-          </div>
-          <div className="flex items-center gap-2 shrink-0">
-            {assessment.gradesReleased && (
-              <Badge variant="secondary" className={`text-[11px] ${isExcused ? "bg-muted text-muted-foreground" : "bg-[#dcfce7] text-[#16a34a]"}`}>
-                {isExcused ? "Excused" : "Graded"}
-              </Badge>
-            )}
-            <StatusBadge
-              status={statusLabel.toLowerCase().replace(/ /g, "_")}
-              variant={statusVariant}
-              label={statusLabel}
-            />
-          </div>
-        </div>
-      </Card>
-    </Link>
-  );
-}
-
 export function ClassWorkTab({ classId, studentId }: ClassWorkTabProps) {
   const state = useStore((s) => s);
+  const { handleClick: handleGradeClick, sheetProps } = useReleasedAssessmentClick(studentId);
 
   const assessments = useMemo(
     () => getStudentAssessments(state, studentId, classId),
@@ -159,35 +79,44 @@ export function ClassWorkTab({ classId, studentId }: ClassWorkTabProps) {
   // Flat list when no units
   if (!groupedByUnit) {
     return (
-      <div className="space-y-2">
-        {assessments
-          .sort((a, b) => a.dueDate.localeCompare(b.dueDate))
-          .map((a) => (
-            <AssessmentCard
-              key={a.id}
-              assessment={a}
-              classId={classId}
-              studentId={studentId}
-            />
-          ))}
-      </div>
+      <>
+        <div className="space-y-2">
+          {assessments
+            .sort((a, b) => a.dueDate.localeCompare(b.dueDate))
+            .map((a) => (
+              <StudentAssessmentCard
+                key={a.id}
+                assessment={a}
+                classId={classId}
+                studentId={studentId}
+                showClassName={false}
+                onGradeClick={(assessmentId) => handleGradeClick(assessmentId, classId)}
+              />
+            ))}
+        </div>
+        <GradeResultSheet {...sheetProps} studentId={studentId} />
+      </>
     );
   }
 
   // Grouped by unit
   return (
-    <div className="space-y-6">
-      {groupedByUnit.map((group, i) => (
-        <UnitGroup
-          key={group.unit?.id ?? "no-unit"}
-          unit={group.unit}
-          assessments={group.assessments}
-          classId={classId}
-          studentId={studentId}
-          defaultExpanded={i === 0}
-        />
-      ))}
-    </div>
+    <>
+      <div className="space-y-6">
+        {groupedByUnit.map((group, i) => (
+          <UnitGroup
+            key={group.unit?.id ?? "no-unit"}
+            unit={group.unit}
+            assessments={group.assessments}
+            classId={classId}
+            studentId={studentId}
+            defaultExpanded={i === 0}
+            onGradeClick={(assessmentId) => handleGradeClick(assessmentId, classId)}
+          />
+        ))}
+      </div>
+      <GradeResultSheet {...sheetProps} studentId={studentId} />
+    </>
   );
 }
 
@@ -197,12 +126,14 @@ function UnitGroup({
   classId,
   studentId,
   defaultExpanded,
+  onGradeClick,
 }: {
   unit: StudentUnitPlanView | null;
   assessments: StudentAssessmentView[];
   classId: string;
   studentId: string;
   defaultExpanded: boolean;
+  onGradeClick?: (assessmentId: string) => void;
 }) {
   const [expanded, setExpanded] = useState(defaultExpanded);
 
@@ -240,11 +171,13 @@ function UnitGroup({
           {assessments
             .sort((a, b) => a.dueDate.localeCompare(b.dueDate))
             .map((a) => (
-              <AssessmentCard
+              <StudentAssessmentCard
                 key={a.id}
                 assessment={a}
                 classId={classId}
                 studentId={studentId}
+                showClassName={false}
+                onGradeClick={onGradeClick}
               />
             ))}
         </div>

@@ -8,8 +8,8 @@ import {
   getStudentClasses,
   getStudentSubmission,
   getStudentReleasedGrades,
+  getStudentSubmissionStatus,
 } from "@/lib/student-selectors";
-import { isAssessmentPastDue } from "@/lib/student-permissions";
 import type { StudentAssessmentView } from "@/lib/student-permissions";
 import { StudentClassFilter } from "@/components/student/student-class-filter";
 import { StudentAssessmentCard } from "@/components/student/student-assessment-card";
@@ -56,15 +56,16 @@ export default function StudentAssessmentsPage() {
           return due >= now;
         }
         case "past_due": {
-          const isPastDue = isAssessmentPastDue(a);
-          if (!isPastDue) return false;
           const submission = getStudentSubmission(state, studentId, a.id);
-          return !submission || submission.status !== "submitted";
+          const rawGrade = state.grades.find((g: any) => g.studentId === studentId && g.assessmentId === a.id);
+          const status = getStudentSubmissionStatus(rawGrade, submission, a as any);
+          return status === "overdue";
         }
         case "submitted": {
           const submission = getStudentSubmission(state, studentId, a.id);
-          if (!submission) return false;
-          return submission.status === "submitted";
+          const rawGrade = state.grades.find((g: any) => g.studentId === studentId && g.assessmentId === a.id);
+          const status = getStudentSubmissionStatus(rawGrade, submission, a as any);
+          return status === "submitted_on_time" || status === "submitted_late";
         }
         case "graded": {
           const releasedGrades = getStudentReleasedGrades(state, studentId);
@@ -136,7 +137,7 @@ export default function StudentAssessmentsPage() {
       <div className="flex items-center gap-2 mb-6">
         {([
           { key: "upcoming" as FilterKey, label: "Upcoming" },
-          { key: "past_due" as FilterKey, label: "Past due" },
+          { key: "past_due" as FilterKey, label: "Overdue" },
           { key: "submitted" as FilterKey, label: "Submitted" },
           { key: "graded" as FilterKey, label: "Graded" },
         ]).map((f) => (
