@@ -1,6 +1,6 @@
 import { ID } from "./common";
 
-export type UserRole = "teacher" | "student";
+export type UserRole = "teacher" | "student" | "parent";
 
 export interface CurrentUser {
   id: ID;
@@ -9,6 +9,8 @@ export interface CurrentUser {
   avatarUrl?: string;
   /** When role === "student", this is the student record ID (e.g. "stu_01") */
   linkedStudentId?: ID;
+  /** When role === "parent", this is the parent/family profile ID */
+  linkedParentId?: ID;
 }
 
 /** Teacher persona IDs used in seed data */

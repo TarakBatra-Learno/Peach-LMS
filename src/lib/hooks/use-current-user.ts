@@ -17,10 +17,23 @@ export function useIsTeacher(): boolean {
   return user?.role === "teacher";
 }
 
+export function useIsParent(): boolean {
+  const user = useCurrentUser();
+  return user?.role === "parent";
+}
+
 export function useStudentId(): string | null {
   const user = useCurrentUser();
   if (user?.role === "student" && user.linkedStudentId) {
     return user.linkedStudentId;
+  }
+  return null;
+}
+
+export function useParentId(): string | null {
+  const user = useCurrentUser();
+  if (user?.role === "parent" && user.linkedParentId) {
+    return user.linkedParentId;
   }
   return null;
 }

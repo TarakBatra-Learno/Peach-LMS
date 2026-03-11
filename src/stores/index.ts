@@ -12,6 +12,7 @@ const defaultUIState = {
   sidebarCollapsed: false,
   activeClassId: null as string | null,
   studentActiveClassId: null as string | null,
+  parentActiveStudentId: null as string | null,
   activeAcademicYear: "2025/26",
   drawerOpen: false,
   drawerContent: null as string | null,
@@ -48,6 +49,15 @@ const emptyState: Omit<AppState, 'ui'> = {
   studentGoals: [],
   goalEvidenceLinks: [],
   studentNotifications: [],
+  parentProfiles: [],
+  familyNotifications: [],
+  classroomUpdates: [],
+  schoolPolicies: [],
+  studentSignInCodes: [],
+  familyAnnouncements: [],
+  familyThreads: [],
+  familyMessages: [],
+  familyCalendarEvents: [],
 };
 
 export const useStore = create<AppStore>()(
@@ -60,6 +70,7 @@ export const useStore = create<AppStore>()(
       toggleSidebar: () => set((s) => ({ ui: { ...s.ui, sidebarCollapsed: !s.ui.sidebarCollapsed } })),
       setActiveClass: (classId) => set((s) => ({ ui: { ...s.ui, activeClassId: classId } })),
       setStudentActiveClass: (classId) => set((s) => ({ ui: { ...s.ui, studentActiveClassId: classId } })),
+      setParentActiveStudent: (studentId) => set((s) => ({ ui: { ...s.ui, parentActiveStudentId: studentId } })),
       setActiveAcademicYear: (year) => set((s) => ({ ui: { ...s.ui, activeAcademicYear: year } })),
       openDrawer: (content) => set((s) => ({ ui: { ...s.ui, drawerOpen: true, drawerContent: content } })),
       closeDrawer: () => set((s) => ({ ui: { ...s.ui, drawerOpen: false, drawerContent: null } })),
@@ -76,6 +87,7 @@ export const useStore = create<AppStore>()(
           sidebarCollapsed: false,
           activeClassId: null,
           studentActiveClassId: null,
+          parentActiveStudentId: null,
           drawerOpen: false,
           drawerContent: null,
         },
@@ -486,6 +498,64 @@ export const useStore = create<AppStore>()(
       })),
       getNotificationsByStudent: (studentId) =>
         get().studentNotifications.filter((n) => n.studentId === studentId),
+
+      // Parent / Family Portal
+      updateParentProfile: (id, updates) => set((s) => ({
+        parentProfiles: s.parentProfiles.map((profile) =>
+          profile.id === id ? { ...profile, ...updates } : profile
+        ),
+      })),
+      addFamilyMessage: (message) => set((s) => ({
+        familyMessages: [...s.familyMessages, message],
+        familyThreads: s.familyThreads.map((thread) =>
+          thread.id === message.threadId
+            ? { ...thread, lastMessageAt: message.createdAt }
+            : thread
+        ),
+      })),
+      markFamilyThreadRead: (threadId, parentId) => set((s) => ({
+        familyMessages: s.familyMessages.map((message) =>
+          message.threadId === threadId && !message.readByParentIds.includes(parentId)
+            ? { ...message, readByParentIds: [...message.readByParentIds, parentId] }
+            : message
+        ),
+      })),
+      toggleFamilyThreadMute: (threadId, parentId) => set((s) => ({
+        familyThreads: s.familyThreads.map((thread) => {
+          if (thread.id !== threadId) return thread;
+          const isMuted = thread.mutedByParentIds.includes(parentId);
+          return {
+            ...thread,
+            mutedByParentIds: isMuted
+              ? thread.mutedByParentIds.filter((id) => id !== parentId)
+              : [...thread.mutedByParentIds, parentId],
+          };
+        }),
+      })),
+      markFamilyAnnouncementRead: (id, parentId) => set((s) => ({
+        familyAnnouncements: s.familyAnnouncements.map((announcement) =>
+          announcement.id === id && !announcement.readByParentIds.includes(parentId)
+            ? { ...announcement, readByParentIds: [...announcement.readByParentIds, parentId] }
+            : announcement
+        ),
+      })),
+      markAllFamilyAnnouncementsRead: (parentId) => set((s) => ({
+        familyAnnouncements: s.familyAnnouncements.map((announcement) =>
+          announcement.readByParentIds.includes(parentId)
+            ? announcement
+            : { ...announcement, readByParentIds: [...announcement.readByParentIds, parentId] }
+        ),
+      })),
+      markFamilyNotificationRead: (id) => set((s) => ({
+        familyNotifications: s.familyNotifications.map((notification) =>
+          notification.id === id ? { ...notification, read: true } : notification
+        ),
+      })),
+      markAllFamilyNotificationsRead: (parentId) => set((s) => ({
+        familyNotifications: s.familyNotifications.map((notification) =>
+          notification.parentId === parentId ? { ...notification, read: true } : notification
+        ),
+      })),
 
       // Assessment Lifecycle
       publishAssessment: (id) => set((s) => ({

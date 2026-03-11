@@ -13,6 +13,7 @@ import type { CalendarEvent } from "@/types/calendar";
 import type { AttendanceStatus, MasteryLevel } from "@/types/common";
 import { generateUnitPlanningData } from "./unit-planning-seed";
 import { generateSeedSubmissions, generateSeedStudentGoals, generateSeedGoalEvidenceLinks, generateSeedNotifications } from "./student-seed";
+import { generateFamilyPortalData } from "./family-seed";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -1397,6 +1398,15 @@ export function generateSeedData() {
   // -----------------------------------------------------------------------
   // Return complete seed data
   // -----------------------------------------------------------------------
+  const familyPortalData = generateFamilyPortalData({
+    students,
+    classes,
+    assessments,
+    artifacts,
+    reports,
+    unitPlans: unitPlanningData.unitPlans,
+  });
+
   return {
     classes,
     students,
@@ -1425,5 +1435,14 @@ export function generateSeedData() {
     studentGoals: generateSeedStudentGoals(),
     goalEvidenceLinks: generateSeedGoalEvidenceLinks(),
     studentNotifications: generateSeedNotifications(),
+    parentProfiles: familyPortalData.parentProfiles,
+    familyNotifications: familyPortalData.familyNotifications,
+    classroomUpdates: familyPortalData.classroomUpdates,
+    schoolPolicies: familyPortalData.schoolPolicies,
+    studentSignInCodes: familyPortalData.studentSignInCodes,
+    familyAnnouncements: familyPortalData.familyAnnouncements,
+    familyThreads: familyPortalData.familyThreads,
+    familyMessages: familyPortalData.familyMessages,
+    familyCalendarEvents: familyPortalData.familyCalendarEvents,
   };
 }
