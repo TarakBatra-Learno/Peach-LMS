@@ -14,11 +14,23 @@ import { Submission } from "@/types/submission";
 import { StudentGoal } from "@/types/student-goal";
 import { GoalEvidenceLink } from "@/types/goal-evidence";
 import { StudentNotification } from "@/types/notification";
+import {
+  ParentProfile,
+  FamilyNotification,
+  ClassroomUpdate,
+  SchoolPolicy,
+  StudentSignInCode,
+  FamilyAnnouncement,
+  FamilyThread,
+  FamilyMessage,
+  FamilyCalendarEvent,
+} from "@/types/family";
 
 export interface UIState {
   sidebarCollapsed: boolean;
   activeClassId: string | null;
   studentActiveClassId: string | null;
+  parentActiveStudentId: string | null;
   activeAcademicYear: string;
   drawerOpen: boolean;
   drawerContent: string | null;
@@ -57,6 +69,15 @@ export interface AppState {
   studentGoals: StudentGoal[];
   goalEvidenceLinks: GoalEvidenceLink[];
   studentNotifications: StudentNotification[];
+  parentProfiles: ParentProfile[];
+  familyNotifications: FamilyNotification[];
+  classroomUpdates: ClassroomUpdate[];
+  schoolPolicies: SchoolPolicy[];
+  studentSignInCodes: StudentSignInCode[];
+  familyAnnouncements: FamilyAnnouncement[];
+  familyThreads: FamilyThread[];
+  familyMessages: FamilyMessage[];
+  familyCalendarEvents: FamilyCalendarEvent[];
 
   // UI State
   ui: UIState;
@@ -67,6 +88,7 @@ export interface AppActions {
   toggleSidebar: () => void;
   setActiveClass: (classId: string | null) => void;
   setStudentActiveClass: (classId: string | null) => void;
+  setParentActiveStudent: (studentId: string | null) => void;
   setActiveAcademicYear: (year: string) => void;
   openDrawer: (content: string) => void;
   closeDrawer: () => void;
@@ -192,6 +214,16 @@ export interface AppActions {
   markNotificationRead: (id: string) => void;
   markAllNotificationsRead: (studentId: string) => void;
   getNotificationsByStudent: (studentId: string) => StudentNotification[];
+
+  // Parent / Family Portal
+  updateParentProfile: (id: string, updates: Partial<ParentProfile>) => void;
+  addFamilyMessage: (message: FamilyMessage) => void;
+  markFamilyThreadRead: (threadId: string, parentId: string) => void;
+  toggleFamilyThreadMute: (threadId: string, parentId: string) => void;
+  markFamilyAnnouncementRead: (id: string, parentId: string) => void;
+  markAllFamilyAnnouncementsRead: (parentId: string) => void;
+  markFamilyNotificationRead: (id: string) => void;
+  markAllFamilyNotificationsRead: (parentId: string) => void;
 
   // Assessment Lifecycle
   publishAssessment: (id: string) => void;
