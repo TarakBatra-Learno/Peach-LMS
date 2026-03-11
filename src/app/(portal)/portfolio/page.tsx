@@ -128,6 +128,7 @@ export default function PortfolioPage() {
 
   // Confirmation dialog state
   const [revisionConfirm, setRevisionConfirm] = useState<string | null>(null);
+  const [revisionNote, setRevisionNote] = useState("");
   const [resetConfirm, setResetConfirm] = useState<string | null>(null);
 
   // Group learning goals by category
@@ -955,27 +956,80 @@ export default function PortfolioPage() {
         </SheetContent>
       </Sheet>
 
-      <ConfirmDialog
-        open={!!revisionConfirm}
-        onOpenChange={(open) => !open && setRevisionConfirm(null)}
-        title="Request revision"
-        description="This will notify the student to revise their work. If the artifact is shared with family, sharing will be revoked."
-        confirmLabel="Request revision"
-        destructive
-        onConfirm={() => {
-          if (revisionConfirm) handleRequestRevision(revisionConfirm);
-          setRevisionConfirm(null);
-        }}
-      />
+      <Dialog open={!!revisionConfirm} onOpenChange={(open) => { if (!open) { setRevisionConfirm(null); setRevisionNote(""); } }}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Request revision</DialogTitle>
+            <DialogDescription>
+              {(() => {
+                const revArtifact = revisionConfirm ? artifacts.find((a) => a.id === revisionConfirm) : null;
+                const hasSharedFamily = revArtifact?.familyShareStatus === "shared";
+                return (
+                  <>
+                    This will mark <span className="font-medium">{revArtifact?.title}</span> for revision and notify the student.
+                    {hasSharedFamily && " Family sharing will also be revoked."}
+                  </>
+                );
+              })()}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 py-2">
+            <Label htmlFor="revision-note-portfolio" className="text-[13px]">
+              What should the student improve? <span className="text-muted-foreground">(optional)</span>
+            </Label>
+            <Textarea
+              id="revision-note-portfolio"
+              value={revisionNote}
+              onChange={(e) => setRevisionNote(e.target.value)}
+              placeholder="e.g., Add more detail to your reflection, or choose a clearer image..."
+              className="text-[13px] min-h-[80px]"
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" size="sm" onClick={() => { setRevisionConfirm(null); setRevisionNote(""); }}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={() => {
+                if (revisionConfirm) {
+                  const revArtifact = artifacts.find((a) => a.id === revisionConfirm);
+                  handleRequestRevision(
+                    revisionConfirm,
+                    revisionNote.trim() || undefined,
+                    revArtifact?.studentId,
+                    revArtifact?.title,
+                    revArtifact?.familyShareStatus === "shared",
+                  );
+                }
+                setRevisionConfirm(null);
+                setRevisionNote("");
+              }}
+            >
+              Request revision
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       <ConfirmDialog
         open={!!resetConfirm}
         onOpenChange={(open) => !open && setResetConfirm(null)}
         title="Reset to pending"
-        description="This will reset the artifact status to pending. If the artifact is shared with family, sharing will be revoked."
+        description={(() => {
+          const resetArtifact = resetConfirm ? artifacts.find((a) => a.id === resetConfirm) : null;
+          const isShared = resetArtifact?.familyShareStatus === "shared";
+          return isShared
+            ? "This will reset the artifact status to pending. Family sharing will also be revoked."
+            : "This will reset the artifact status to pending.";
+        })()}
         confirmLabel="Reset"
         destructive
         onConfirm={() => {
-          if (resetConfirm) handleResetApproval(resetConfirm);
+          if (resetConfirm) {
+            const resetArtifact = artifacts.find((a) => a.id === resetConfirm);
+            handleResetApproval(resetConfirm, resetArtifact?.familyShareStatus === "shared");
+          }
           setResetConfirm(null);
         }}
       />

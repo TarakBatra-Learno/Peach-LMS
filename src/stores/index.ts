@@ -3,12 +3,15 @@ import { persist, createJSONStorage } from "zustand/middleware";
 import { AppStore, AppState } from "./types";
 import { materializeTimetableOccurrences } from "@/lib/unit-planning-utils";
 import type { LessonSlotAssignment } from "@/types/unit-planning";
+import type { GradeRecord } from "@/types/gradebook";
+import { generateId } from "@/services/mock-service";
 
 const STORAGE_KEY = "peach-lms-store";
 
 const defaultUIState = {
   sidebarCollapsed: false,
   activeClassId: null as string | null,
+  studentActiveClassId: null as string | null,
   activeAcademicYear: "2025/26",
   drawerOpen: false,
   drawerContent: null as string | null,
@@ -39,6 +42,12 @@ const emptyState: Omit<AppState, 'ui'> = {
   unitPlans: [],
   lessonPlans: [],
   lessonSlotAssignments: [],
+  // Student Portal
+  currentUser: null,
+  submissions: [],
+  studentGoals: [],
+  goalEvidenceLinks: [],
+  studentNotifications: [],
 };
 
 export const useStore = create<AppStore>()(
@@ -50,12 +59,27 @@ export const useStore = create<AppStore>()(
       // UI Actions
       toggleSidebar: () => set((s) => ({ ui: { ...s.ui, sidebarCollapsed: !s.ui.sidebarCollapsed } })),
       setActiveClass: (classId) => set((s) => ({ ui: { ...s.ui, activeClassId: classId } })),
+      setStudentActiveClass: (classId) => set((s) => ({ ui: { ...s.ui, studentActiveClassId: classId } })),
       setActiveAcademicYear: (year) => set((s) => ({ ui: { ...s.ui, activeAcademicYear: year } })),
       openDrawer: (content) => set((s) => ({ ui: { ...s.ui, drawerOpen: true, drawerContent: content } })),
       closeDrawer: () => set((s) => ({ ui: { ...s.ui, drawerOpen: false, drawerContent: null } })),
       setSimulateLatency: (v) => set((s) => ({ ui: { ...s.ui, simulateLatency: v } })),
       setSimulateErrors: (v) => set((s) => ({ ui: { ...s.ui, simulateErrors: v } })),
       setHasHydrated: (v) => set((s) => ({ ui: { ...s.ui, hasHydrated: v } })),
+
+      // Persona
+      setCurrentUser: (user) => set({ currentUser: user }),
+      switchPersona: (user) => set((s) => ({
+        currentUser: user,
+        ui: {
+          ...s.ui,
+          sidebarCollapsed: false,
+          activeClassId: null,
+          studentActiveClassId: null,
+          drawerOpen: false,
+          drawerContent: null,
+        },
+      })),
 
       // Classes
       getClassById: (id) => get().classes.find((c) => c.id === id),
@@ -135,12 +159,20 @@ export const useStore = create<AppStore>()(
       })),
 
       // Communication
+      addChannel: (channel) => set((s) => ({ channels: [...s.channels, channel] })),
       addAnnouncement: (announcement) => set((s) => ({ announcements: [...s.announcements, announcement] })),
       updateAnnouncement: (id, updates) => set((s) => ({
         announcements: s.announcements.map((a) => a.id === id ? { ...a, ...updates } : a),
       })),
       getAnnouncementsByChannel: (channelId) => get().announcements.filter((a) => a.channelId === channelId),
       getAnnouncementsByClass: (classId) => get().announcements.filter((a) => a.classId === classId),
+      addThreadReply: (announcementId, reply) => set((s) => ({
+        announcements: s.announcements.map((a) =>
+          a.id === announcementId
+            ? { ...a, threadReplies: [...a.threadReplies, reply] }
+            : a
+        ),
+      })),
       updateNotificationSettings: (settings) => set((s) => ({
         notificationSettings: { ...s.notificationSettings, ...settings },
       })),
@@ -272,6 +304,280 @@ export const useStore = create<AppStore>()(
           a.id === assessmentId ? { ...a, unitId: undefined } : a
         ),
       })),
+
+      // Submissions
+
+      // ── Private helper: sync Submission.status → GradeRecord.submissionStatus ──
+      // Called by addSubmission (first submit) and updateSubmission (resubmit).
+      // Fires for "submitted" and "resubmitted" (both mean "student has work to mark").
+      // Always sets GradeRecord.submissionStatus to "submitted" (teacher-facing = "To mark").
+      // Guardrails:
+      //   - Never touch excused GradeRecords (terminal state)
+      //   - Never clear grade data fields (score, rubric, feedback, etc.)
+      //   - Teacher manual overrides still win after sync
+      // Note: not exposed on the store interface — internal helper only.
+
+      addSubmission: (submission) => {
+        set((s) => ({ submissions: [...s.submissions, submission] }));
+
+        // Sync: if status is "submitted", create/update GradeRecord
+        if (submission.status === "submitted") {
+          const currentState = get();
+          const assessment = currentState.assessments.find(
+            (a) => a.id === submission.assessmentId
+          );
+          if (!assessment) return;
+
+          const existingGrade = currentState.grades.find(
+            (g) =>
+              g.assessmentId === submission.assessmentId &&
+              g.studentId === submission.studentId
+          );
+
+          if (!existingGrade) {
+            set((s) => ({
+              grades: [
+                ...s.grades,
+                {
+                  id: generateId("grade"),
+                  assessmentId: submission.assessmentId,
+                  studentId: submission.studentId,
+                  classId: submission.classId,
+                  gradingMode: assessment.gradingMode,
+                  submissionStatus: "submitted" as const,
+                  gradingStatus: "none" as const,
+                  submittedAt: new Date().toISOString(),
+                },
+              ],
+            }));
+          } else if (
+            existingGrade.submissionStatus === "none" ||
+            existingGrade.submissionStatus === "submitted"
+          ) {
+            set((s) => ({
+              grades: s.grades.map((g) =>
+                g.id === existingGrade.id
+                  ? { ...g, submissionStatus: "submitted" as const, submittedAt: new Date().toISOString() }
+                  : g
+              ),
+            }));
+          }
+          // If excused → do nothing (terminal state, never overridden)
+        }
+      },
+      updateSubmission: (id, updates) => {
+        // Apply the submission update
+        set((s) => ({
+          submissions: s.submissions.map((sub) => sub.id === id ? { ...sub, ...updates } : sub),
+        }));
+
+        // ── Sync side-effect: Submission.status → GradeRecord.submissionStatus ──
+        // Fires for "submitted" transition.
+        if (updates.status === "submitted") {
+          const currentState = get();
+          const updatedSub = currentState.submissions.find((sub) => sub.id === id);
+          if (!updatedSub) return;
+
+          const assessment = currentState.assessments.find(
+            (a) => a.id === updatedSub.assessmentId
+          );
+          if (!assessment) return;
+
+          const existingGrade = currentState.grades.find(
+            (g) =>
+              g.assessmentId === updatedSub.assessmentId &&
+              g.studentId === updatedSub.studentId
+          );
+
+          if (!existingGrade) {
+            set((s) => ({
+              grades: [
+                ...s.grades,
+                {
+                  id: generateId("grade"),
+                  assessmentId: updatedSub.assessmentId,
+                  studentId: updatedSub.studentId,
+                  classId: updatedSub.classId,
+                  gradingMode: assessment.gradingMode,
+                  submissionStatus: "submitted" as const,
+                  gradingStatus: "none" as const,
+                  submittedAt: new Date().toISOString(),
+                },
+              ],
+            }));
+          } else if (
+            existingGrade.submissionStatus === "none" ||
+            existingGrade.submissionStatus === "submitted"
+          ) {
+            set((s) => ({
+              grades: s.grades.map((g) =>
+                g.id === existingGrade.id
+                  ? { ...g, submissionStatus: "submitted" as const, submittedAt: new Date().toISOString() }
+                  : g
+              ),
+            }));
+          }
+          // If excused → do nothing (terminal state, never overridden)
+        }
+      },
+      getSubmissionsByAssessment: (assessmentId) => get().submissions.filter((s) => s.assessmentId === assessmentId),
+      getSubmissionsByStudent: (studentId) => get().submissions.filter((s) => s.studentId === studentId),
+
+      // Student Goals
+      addStudentGoal: (goal) => set((s) => ({ studentGoals: [...s.studentGoals, goal] })),
+      updateStudentGoal: (id, updates) => set((s) => ({
+        studentGoals: s.studentGoals.map((g) =>
+          g.id === id ? { ...g, ...updates, updatedAt: new Date().toISOString() } : g
+        ),
+      })),
+      deleteStudentGoal: (id) => set((s) => ({
+        studentGoals: s.studentGoals.filter((g) => g.id !== id),
+        goalEvidenceLinks: s.goalEvidenceLinks.filter((l) => l.goalId !== id),
+      })),
+      getStudentGoalsByStudent: (studentId) => get().studentGoals.filter((g) => g.studentId === studentId),
+
+      // Goal Evidence Links
+      addGoalEvidenceLink: (link) => set((s) => ({
+        goalEvidenceLinks: [...s.goalEvidenceLinks, link],
+        studentGoals: s.studentGoals.map((g) =>
+          g.id === link.goalId ? { ...g, updatedAt: new Date().toISOString() } : g
+        ),
+      })),
+      updateGoalEvidenceLink: (id, updates) => set((s) => ({
+        goalEvidenceLinks: s.goalEvidenceLinks.map((l) =>
+          l.id === id ? { ...l, ...updates } : l
+        ),
+      })),
+      deleteGoalEvidenceLink: (id) => set((s) => {
+        const link = s.goalEvidenceLinks.find((l) => l.id === id);
+        return {
+          goalEvidenceLinks: s.goalEvidenceLinks.filter((l) => l.id !== id),
+          studentGoals: link
+            ? s.studentGoals.map((g) =>
+                g.id === link.goalId ? { ...g, updatedAt: new Date().toISOString() } : g
+              )
+            : s.studentGoals,
+        };
+      }),
+      getGoalEvidenceLinksByGoal: (goalId) => get().goalEvidenceLinks.filter((l) => l.goalId === goalId),
+      getGoalEvidenceLinksBySource: (sourceType, sourceId) =>
+        get().goalEvidenceLinks.filter((l) => l.sourceType === sourceType && l.sourceId === sourceId),
+
+      // Student Notifications
+      addStudentNotification: (notification) => set((s) => {
+        // Deduplication: check if notification with same dedupeKey already exists
+        if (notification.dedupeKey) {
+          const exists = s.studentNotifications.some(
+            (n) => n.dedupeKey === notification.dedupeKey
+          );
+          if (exists) return {};
+        }
+        return { studentNotifications: [...s.studentNotifications, notification] };
+      }),
+      markNotificationRead: (id) => set((s) => ({
+        studentNotifications: s.studentNotifications.map((n) =>
+          n.id === id ? { ...n, read: true } : n
+        ),
+      })),
+      markAllNotificationsRead: (studentId) => set((s) => ({
+        studentNotifications: s.studentNotifications.map((n) =>
+          n.studentId === studentId ? { ...n, read: true } : n
+        ),
+      })),
+      getNotificationsByStudent: (studentId) =>
+        get().studentNotifications.filter((n) => n.studentId === studentId),
+
+      // Assessment Lifecycle
+      publishAssessment: (id) => set((s) => ({
+        assessments: s.assessments.map((a) =>
+          a.id === id
+            ? { ...a, status: "live" as const, distributedAt: new Date().toISOString() }
+            : a
+        ),
+      })),
+
+      closeAssessment: (id, force = false) => {
+        const now = new Date().toISOString();
+
+        if (force) {
+          // Force-close: mutate all non-terminal grades to excused
+          set((s) => {
+            const assessment = s.assessments.find((a) => a.id === id);
+            if (!assessment) return {};
+
+            return {
+              assessments: s.assessments.map((a) =>
+                a.id === id
+                  ? { ...a, status: "closed" as const, closedAt: now, forceClosed: true }
+                  : a
+              ),
+              grades: s.grades.map((g) => {
+                if (g.assessmentId !== id) return g;
+                // Only mutate if not already excused and not released
+                if (g.submissionStatus === "excused") return g;
+                if (g.releasedAt) return g;
+                // Force excused: clear all grade data
+                return {
+                  ...g,
+                  submissionStatus: "excused" as const,
+                  score: undefined,
+                  dpGrade: undefined,
+                  mypCriteriaScores: undefined,
+                  rubricScores: undefined,
+                  standardsMastery: undefined,
+                  checklistGradeResults: undefined,
+                  checklistResults: undefined,
+                  feedback: undefined,
+                  feedbackAttachments: undefined,
+                  gradingStatus: undefined,
+                  amendedAt: undefined,
+                  reportStatus: undefined,
+                  gradedAt: undefined,
+                  submittedAt: undefined,
+                  releasedAt: undefined,
+                  updatedAt: now,
+                };
+              }),
+            };
+          });
+        } else {
+          // Normal close: just update assessment status
+          set((s) => ({
+            assessments: s.assessments.map((a) =>
+              a.id === id
+                ? { ...a, status: "closed" as const, closedAt: now, forceClosed: false }
+                : a
+            ),
+          }));
+        }
+      },
+
+      reopenAssessment: (id) => set((s) => ({
+        assessments: s.assessments.map((a) =>
+          a.id === id
+            ? { ...a, status: "live" as const, closedAt: undefined, forceClosed: undefined }
+            : a
+        ),
+      })),
+
+      // Grade Amendments
+      amendGrade: (gradeId, updates) => {
+        const now = new Date().toISOString();
+        set((s) => ({
+          grades: s.grades.map((g) => {
+            if (g.id !== gradeId) return g;
+            const amended: Partial<GradeRecord> = {
+              ...updates,
+              amendedAt: now,
+            };
+            // If reportStatus was "seen", reset to "unseen" since grade changed
+            if (g.reportStatus === "seen") {
+              amended.reportStatus = "unseen";
+            }
+            return { ...g, ...amended };
+          }),
+        }));
+      },
 
       // Reset
       resetAllData: (data) => set({ ...data }),

@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { useMockLoading } from "@/lib/hooks/use-mock-loading";
 import { CardGridSkeleton } from "@/components/shared/skeleton-loader";
-import { getToMarkCount } from "@/lib/grade-helpers";
+import { computeUnreleasedGradesCount } from "@/lib/selectors/grade-selectors";
 import { Users, ClipboardCheck, FolderOpen, BookOpen } from "lucide-react";
 import Link from "next/link";
 
@@ -36,17 +36,22 @@ export default function ClassesPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {classes.map((cls) => {
             const classAssessments = assessments.filter((a) => a.classId === cls.id);
-            const publishedCount = classAssessments.filter((a) => a.status === "published").length;
-            const classStudentIds = cls.studentIds;
-            const toMarkCount = classAssessments
-              .filter((a) => a.status === "published")
-              .reduce((count, asmt) => {
-                const targetIds = asmt.assignedStudentIds?.length
-                  ? asmt.assignedStudentIds.filter((id) => classStudentIds.includes(id))
-                  : classStudentIds;
+            const liveAssessments = classAssessments.filter((a) => a.status === "live" || a.status === "published");
+            const publishedCount = liveAssessments.length;
+            // Find assessments that require marking (have unreleased grades)
+            const assessmentsNeedingMarking = liveAssessments
+              .map((asmt) => {
                 const asmtGrades = grades.filter((g) => g.assessmentId === asmt.id);
-                return count + getToMarkCount(targetIds, asmtGrades, asmt);
-              }, 0);
+                const count = computeUnreleasedGradesCount(asmtGrades, asmt.id);
+                return { asmt, count };
+              })
+              .filter((x) => x.count > 0);
+            const totalUnreleased = assessmentsNeedingMarking.reduce((sum, x) => sum + x.count, 0);
+            // If exactly one assessment needs marking, link directly to it; otherwise link to the assessments tab
+            const requireMarkingHref =
+              assessmentsNeedingMarking.length === 1
+                ? `/assessments/${assessmentsNeedingMarking[0].asmt.id}?classId=${cls.id}`
+                : `/classes/${cls.id}?tab=assessments`;
             const pendingArtifacts = artifacts.filter(
               (a) => a.classId === cls.id && a.approvalStatus === "pending"
             ).length;
@@ -80,17 +85,19 @@ export default function ClassesPage() {
                       </span>
                     )}
                   </div>
-                  {toMarkCount > 0 && (
-                    <div className="mt-3 pt-3 border-t border-border/50">
+                  {totalUnreleased > 0 && (
+                    <div className="mt-3 pt-3 border-t border-border/50 flex items-center gap-3">
                       <button
-                        className="text-[12px] text-[#f59e0b] font-medium hover:text-[#d97706] hover:underline transition-colors"
+                        className="inline-flex items-center"
                         onClick={(e) => {
                           e.preventDefault();
                           e.stopPropagation();
-                          router.push(`/classes/${cls.id}?tab=assessments`);
+                          router.push(requireMarkingHref);
                         }}
                       >
-                        {toMarkCount} to mark →
+                        <Badge className="bg-[#dbeafe] text-[#2563eb] border-[#2563eb]/20 text-[11px] font-medium hover:bg-[#bfdbfe] transition-colors cursor-pointer">
+                          {totalUnreleased} Require Marking →
+                        </Badge>
                       </button>
                     </div>
                   )}

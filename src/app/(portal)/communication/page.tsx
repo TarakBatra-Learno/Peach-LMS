@@ -69,14 +69,21 @@ export default function CommunicationPage() {
   const reportCycles = useStore((s) => s.reportCycles);
   const getStudentsByClassId = useStore((s) => s.getStudentsByClassId);
   const addAnnouncement = useStore((s) => s.addAnnouncement);
+  const addChannel = useStore((s) => s.addChannel);
   const updateAnnouncement = useStore((s) => s.updateAnnouncement);
   const activeClassId = useStore((s) => s.ui.activeClassId);
+  const currentUser = useStore((s) => s.currentUser);
 
   // State
   const [selectedChannelId, setSelectedChannelId] = useState<string | null>(null);
   const [selectedAnnouncementId, setSelectedAnnouncementId] = useState<string | null>(null);
   const [composeOpen, setComposeOpen] = useState(false);
   const [replyText, setReplyText] = useState("");
+
+  // DM compose dialog state
+  const [dmDialogOpen, setDmDialogOpen] = useState(false);
+  const [dmClassId, setDmClassId] = useState<string>("");
+  const [dmStudentId, setDmStudentId] = useState<string>("");
 
   // Compose form state
   const [composeChannel, setComposeChannel] = useState("");
@@ -130,7 +137,7 @@ export default function CommunicationPage() {
   // Group channels by class
   const channelsByClass = useMemo(() => {
     const grouped: Record<string, { className: string; channels: Channel[] }> = {};
-    channels.forEach((ch) => {
+    channels.filter((ch) => ch.type !== "dm").forEach((ch) => {
       if (!grouped[ch.classId]) {
         const cls = classes.find((c) => c.id === ch.classId);
         grouped[ch.classId] = {
@@ -142,6 +149,15 @@ export default function CommunicationPage() {
     });
     return grouped;
   }, [channels, classes]);
+
+  const dmChannels = useMemo(() => {
+    return channels.filter((ch) => ch.type === "dm");
+  }, [channels]);
+
+  const dmClassStudents = useMemo(() => {
+    if (!dmClassId) return [];
+    return getStudentsByClassId(dmClassId);
+  }, [dmClassId, getStudentsByClassId]);
 
   // Sync with global class switcher — auto-select first channel of active class
   useEffect(() => {
@@ -221,6 +237,44 @@ export default function CommunicationPage() {
     setComposePinnedRefId("");
   };
 
+  const handleCreateTeacherDm = () => {
+    if (!dmClassId || !dmStudentId) {
+      toast.error("Please select a class and student");
+      return;
+    }
+    const student = students.find((s) => s.id === dmStudentId);
+    if (!student) return;
+
+    // Check if DM already exists for this class+student combination
+    const existing = dmChannels.find(
+      (ch) => ch.classId === dmClassId && ch.participantIds?.includes(dmStudentId) && ch.participantIds?.includes(currentUser?.id ?? "tchr_01")
+    );
+    if (existing) {
+      setSelectedChannelId(existing.id);
+      setSelectedAnnouncementId(null);
+      setDmDialogOpen(false);
+      setDmClassId("");
+      setDmStudentId("");
+      return;
+    }
+
+    const channelId = generateId("ch");
+    addChannel({
+      id: channelId,
+      classId: dmClassId,
+      name: `DM: ${currentUser?.name ?? "Ms. Mitchell"} \u2194 ${student.firstName} ${student.lastName}`,
+      type: "dm",
+      participantIds: [currentUser?.id ?? "tchr_01", dmStudentId],
+      createdAt: new Date().toISOString(),
+    });
+    setSelectedChannelId(channelId);
+    setSelectedAnnouncementId(null);
+    setDmDialogOpen(false);
+    setDmClassId("");
+    setDmStudentId("");
+    toast.success("New conversation started");
+  };
+
   // Send announcement
   const handleSendAnnouncement = (asDraft: boolean) => {
     if (!composeChannel || !composeTitle.trim() || !composeBody.trim()) {
@@ -277,6 +331,8 @@ export default function CommunicationPage() {
       sentAt: asDraft || isScheduled ? undefined : now,
       createdAt: now,
       threadReplies: [],
+      authorId: currentUser?.id,
+      authorRole: "teacher",
     };
     addAnnouncement(announcement);
     toast.success(asDraft ? "Saved as draft" : isScheduled ? `Scheduled for ${format(parseISO(scheduledAt!), "MMM d 'at' h:mm a")}` : "Announcement sent");
@@ -295,7 +351,9 @@ export default function CommunicationPage() {
     const now = new Date().toISOString();
     const reply: ThreadReply = {
       id: generateId("reply"),
-      authorName: "Ms. Mitchell",
+      authorName: currentUser?.name || "Ms. Mitchell",
+      authorId: currentUser?.id,
+      authorRole: "teacher",
       body: replyText.trim(),
       createdAt: now,
     };
@@ -388,6 +446,52 @@ export default function CommunicationPage() {
               </div>
             ))
           )}
+          {/* DM Channels section */}
+          <div>
+            <div className="px-3 pt-3 pb-1 flex items-center justify-between">
+              <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Direct Messages</p>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-6 px-1.5 text-[10px] gap-0.5"
+                onClick={() => setDmDialogOpen(true)}
+              >
+                <Plus className="h-3 w-3" />
+                New
+              </Button>
+            </div>
+            {dmChannels.length === 0 ? (
+              <div className="px-3 py-2">
+                <button
+                  className="w-full text-left px-3 py-2 rounded-lg border border-dashed border-[#c24e3f]/30 text-[12px] text-[#c24e3f] hover:bg-[#fff2f0] transition-colors"
+                  onClick={() => setDmDialogOpen(true)}
+                >
+                  Start a conversation
+                </button>
+              </div>
+            ) : (
+              dmChannels.map((ch) => {
+                const isActive = selectedChannelId === ch.id;
+                return (
+                  <button
+                    key={ch.id}
+                    onClick={() => {
+                      setSelectedChannelId(ch.id);
+                      setSelectedAnnouncementId(null);
+                    }}
+                    className={`w-full flex items-center gap-2 px-3 py-2 text-left transition-colors ${
+                      isActive
+                        ? "bg-[#fff2f0] text-[#c24e3f]"
+                        : "hover:bg-muted/60 text-foreground"
+                    }`}
+                  >
+                    <MessageSquare className="h-3.5 w-3.5 shrink-0" />
+                    <span className="text-[13px] truncate flex-1">{ch.name.replace(/^DM:\s*/, "")}</span>
+                  </button>
+                );
+              })
+            )}
+          </div>
         </div>
 
         {/* Right panel: Announcement feed or thread view */}
@@ -550,9 +654,9 @@ export default function CommunicationPage() {
                 {channelAnnouncements.length === 0 ? (
                   <EmptyState
                     icon={MessagesSquare}
-                    title="No announcements"
-                    description="This channel has no announcements yet. Create one to get started."
-                    action={{
+                    title={selectedChannel?.type === "dm" ? "No messages yet" : "No announcements"}
+                    description={selectedChannel?.type === "dm" ? "Send a message to start the conversation." : "This channel has no announcements yet. Create one to get started."}
+                    action={selectedChannel?.type === "dm" ? undefined : {
                       label: "New announcement",
                       onClick: () => {
                         setComposeChannel(selectedChannelId || "");
@@ -616,6 +720,68 @@ export default function CommunicationPage() {
                   </div>
                 )}
               </div>
+              {/* New message input for DM channels */}
+              {selectedChannel?.type === "dm" && (
+                <div className="p-3 border-t border-border/50 shrink-0">
+                  <div className="flex items-center gap-2">
+                    <Input
+                      value={replyText}
+                      onChange={(e) => setReplyText(e.target.value)}
+                      placeholder="Write a message..."
+                      className="text-[13px] flex-1"
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && !e.shiftKey && replyText.trim()) {
+                          e.preventDefault();
+                          const now = new Date().toISOString();
+                          addAnnouncement({
+                            id: generateId("ann"),
+                            channelId: selectedChannelId!,
+                            classId: selectedChannel.classId,
+                            title: "Message",
+                            body: replyText.trim(),
+                            attachments: [],
+                            status: "sent",
+                            sentAt: now,
+                            createdAt: now,
+                            threadReplies: [],
+                            authorId: currentUser?.id,
+                            authorRole: "teacher",
+                          });
+                          setReplyText("");
+                          toast.success("Message sent");
+                        }
+                      }}
+                    />
+                    <Button
+                      size="sm"
+                      onClick={() => {
+                        if (!replyText.trim() || !selectedChannelId || !selectedChannel) return;
+                        const now = new Date().toISOString();
+                        addAnnouncement({
+                          id: generateId("ann"),
+                          channelId: selectedChannelId,
+                          classId: selectedChannel.classId,
+                          title: "Message",
+                          body: replyText.trim(),
+                          attachments: [],
+                          status: "sent",
+                          sentAt: now,
+                          createdAt: now,
+                          threadReplies: [],
+                          authorId: currentUser?.id,
+                          authorRole: "teacher",
+                        });
+                        setReplyText("");
+                        toast.success("Message sent");
+                      }}
+                      disabled={!replyText.trim()}
+                    >
+                      <Send className="h-3.5 w-3.5 mr-1" />
+                      Send
+                    </Button>
+                  </div>
+                </div>
+              )}
             </>
           )}
         </div>
@@ -908,6 +1074,59 @@ export default function CommunicationPage() {
                   Send
                 </>
               )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* New DM dialog */}
+      <Dialog open={dmDialogOpen} onOpenChange={(open) => { setDmDialogOpen(open); if (!open) { setDmClassId(""); setDmStudentId(""); } }}>
+        <DialogContent className="sm:max-w-[400px]">
+          <DialogHeader>
+            <DialogTitle>New Direct Message</DialogTitle>
+            <DialogDescription>Start a private conversation with a student.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <Label className="text-[13px]">Class</Label>
+              <Select value={dmClassId} onValueChange={(v) => { setDmClassId(v); setDmStudentId(""); }}>
+                <SelectTrigger className="text-[13px]">
+                  <SelectValue placeholder="Select a class" />
+                </SelectTrigger>
+                <SelectContent>
+                  {classes.map((cls) => (
+                    <SelectItem key={cls.id} value={cls.id}>
+                      {cls.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            {dmClassId && (
+              <div className="space-y-1.5">
+                <Label className="text-[13px]">Student</Label>
+                <Select value={dmStudentId} onValueChange={setDmStudentId}>
+                  <SelectTrigger className="text-[13px]">
+                    <SelectValue placeholder="Select a student" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {dmClassStudents.map((stu) => (
+                      <SelectItem key={stu.id} value={stu.id}>
+                        {stu.firstName} {stu.lastName}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setDmDialogOpen(false); setDmClassId(""); setDmStudentId(""); }}>
+              Cancel
+            </Button>
+            <Button onClick={handleCreateTeacherDm} disabled={!dmClassId || !dmStudentId}>
+              <MessageSquare className="h-3.5 w-3.5 mr-1.5" />
+              Start conversation
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -18,7 +18,7 @@ import { isGradeComplete, getGradePercentage } from "@/lib/grade-helpers";
 
 /**
  * Compute a class-wide average grade as a normalised 0-100 percentage.
- * Excludes excused and missing students. Returns null if no valid data.
+ * Excludes excused students. Returns null if no valid data.
  */
 export function computeClassAveragePercent(
   grades: GradeRecord[],
@@ -28,7 +28,7 @@ export function computeClassAveragePercent(
   const percentages: number[] = [];
   for (const g of grades) {
     if (g.classId !== classId) continue;
-    if (g.submissionStatus === "missing" || g.submissionStatus === "excused") continue;
+    if (g.submissionStatus === "excused") continue;
     const asmt = assessments.find((a) => a.id === g.assessmentId);
     if (!asmt) continue;
     const pct = getGradePercentage(g, asmt);
@@ -112,7 +112,6 @@ export interface AttentionStudent {
 /**
  * Identify students needing attention based on:
  * - Average below 50%
- * - 2+ missing assessments
  * - Beginning mastery levels
  */
 export function computeAttentionStudents(
@@ -140,15 +139,6 @@ export function computeAttentionStudents(
           ? pcts.reduce((a, b) => a + b, 0) / pcts.length
           : null;
       if (avg !== null && avg < 50) reasons.push("Below 50%");
-
-      // Missing count >= 2
-      const missingForStudent = publishedAssessments.filter((a) => {
-        const g = grades.find(
-          (gr) => gr.studentId === student.id && gr.assessmentId === a.id
-        );
-        return g?.submissionStatus === "missing" && !isGradeComplete(g, a);
-      }).length;
-      if (missingForStudent >= 2) reasons.push(`${missingForStudent} missing`);
 
       // Beginning mastery levels
       const beginningGoals: string[] = [];
@@ -235,6 +225,32 @@ export function computeWeakestGoals(
     .filter((g) => g.total > 0)
     .sort((a, b) => b.below / b.total - a.below / a.total)
     .slice(0, 5);
+}
+
+// ---------------------------------------------------------------------------
+// Unreleased grades count
+// Used by: assessment detail page (teacher view)
+// ---------------------------------------------------------------------------
+
+/**
+ * Count how many grades are ready to be released for a specific assessment.
+ * A grade is "unreleased" if:
+ * - It's for the given assessment
+ * - Student is not excused
+ * - Student has submitted work (grade.submittedAt is set)
+ * - Grade has not been released yet (grade.releasedAt is null)
+ */
+export function computeUnreleasedGradesCount(
+  grades: GradeRecord[],
+  assessmentId: string,
+): number {
+  return grades.filter((g) => {
+    if (g.assessmentId !== assessmentId) return false;
+    if (g.submissionStatus === "excused") return false;
+    if (!g.submittedAt) return false; // no submission
+    if (g.releasedAt) return false; // already released
+    return true;
+  }).length;
 }
 
 // ---------------------------------------------------------------------------

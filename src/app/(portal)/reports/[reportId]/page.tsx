@@ -453,7 +453,7 @@ export default function ReportDetailPage() {
         }
         // Collect learning goals scoped to the report's class assessments + portfolio artifacts
         const classAssessments = assessments.filter(
-          (a) => a.classId === report.classId && a.status === "published"
+          (a) => a.classId === report.classId && (a.status === "live" || a.status === "published")
         );
         const relevantGoalIds = new Set<string>();
         classAssessments.forEach((a) =>
@@ -1344,7 +1344,7 @@ export default function ReportDetailPage() {
       case "standards_skills": {
         // Scope to learning goals linked by class assessments + portfolio artifacts
         const classAssmts = assessments.filter(
-          (a) => a.classId === report.classId && a.status === "published"
+          (a) => a.classId === report.classId && (a.status === "live" || a.status === "published")
         );
         const relevantGoalIds = new Set<string>();
         classAssmts.forEach((a) =>

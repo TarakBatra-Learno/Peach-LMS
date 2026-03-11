@@ -127,7 +127,7 @@ export default function DashboardPage() {
   const filteredAssessments = activeClassId
     ? assessments.filter((a) => a.classId === activeClassId)
     : assessments;
-  const publishedAssessments = filteredAssessments.filter((a) => a.status === "published");
+  const publishedAssessments = filteredAssessments.filter((a) => a.status === "live" || a.status === "published");
   const toMarkCount = publishedAssessments.reduce((count, asmt) => {
     const classObj = classes.find((c) => c.id === asmt.classId);
     if (!classObj) return count;

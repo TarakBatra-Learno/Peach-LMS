@@ -1,30 +1,75 @@
-import { ID, GradingMode, Status } from "./common";
+import { ID, GradingMode, AssessmentStatus } from "./common";
 
+/**
+ * Assessment — teacher-owned entity that serves as grading configuration,
+ * student work item, calendar trigger, and announcement trigger.
+ *
+ * Persona ownership: TEACHER (students see a projected view via `projectStudentAssessment()`).
+ *
+ * Status semantics:
+ * - `status: "draft"` → teacher-only, not visible to students
+ * - `status: "published"` → visible to students + open for grading
+ *   ⚠️ NOTE: "published" means STUDENT-VISIBLE for Assessment but NOT for Report.
+ *   Always use gate functions (`canStudentViewGrade()`, etc.) instead of checking status directly.
+ * - `status: "archived"` → hidden from active views, read-only
+ *
+ * Student visibility gate: `Assessment.status === "published"` + `assignedStudentIds` (if set)
+ * Grade visibility gate: `Assessment.gradesReleasedAt` (must be set by teacher)
+ */
 export interface Assessment {
   id: ID;
   title: string;
   description: string;
   classId: ID;
+  /** Determines grade data shape, grading UI, and display format. Set at creation, do not change after grading begins. */
   gradingMode: GradingMode;
-  status: Status;
+  /** Teacher-owned lifecycle: draft → live → closed. "live" = student-visible and open for submission. */
+  status: AssessmentStatus;
   dueDate: string;
   createdAt: string;
+  /** Denominator for score mode. Student sees this as "X/totalPoints". */
   totalPoints?: number;
   rubric?: RubricCriterion[];
   checklist?: ChecklistItem[];
   checklistSections?: ChecklistSection[];
   checklistResponseStyle?: ChecklistResponseStyle;
+  /**
+   * ⚠️ When set to "feedback_only", checklists are excluded from ALL numeric averages.
+   * UX does not currently surface this consequence during configuration.
+   */
   checklistOutcomeModel?: ChecklistOutcomeModel;
   standardIds?: ID[];
   learningGoalIds: ID[];
+  /** Audit trail: ISO timestamp when assessment was published (set alongside status: "published"). */
   distributedAt?: string;
+  /** Forward ref to auto-created announcement on publish. */
   linkedAnnouncementId?: ID;
+  /** If set, only these students see the assessment. Seed-only — no UI for teacher to set this yet. */
   assignedStudentIds?: ID[];
   rubricCriteria?: SimpleCriterion[];
-  // MYP-specific
+  /** MYP-specific criteria (A-D, max level 8). */
   mypCriteria?: MYPCriterion[];
-  // Unit planning (optional — assessments work standalone)
+  /** Optional unit grouping. ⚠️ Can reference draft UnitPlan — student projections should filter. */
   unitId?: ID;
+  /** Student-facing instructions (teacher sets when publishing). */
+  studentInstructions?: string;
+  /** Student-facing resource links (teacher sets when publishing). */
+  studentResources?: { label: string; url: string }[];
+  /**
+   * ISO timestamp when assessment was closed.
+   * When set with forceClosed=true, all non-terminal grade rows were set to excused on close.
+   */
+  /**
+   * @deprecated Bulk grade release removed — use per-student `GradeRecord.releasedAt` instead.
+   * Kept temporarily for backward compatibility during migration.
+   */
+  gradesReleasedAt?: string;
+  closedAt?: string;
+  /**
+   * Whether non-terminal students were force-excused when the assessment was closed.
+   * Only relevant when closedAt is set.
+   */
+  forceClosed?: boolean;
 }
 
 export interface SimpleCriterion {

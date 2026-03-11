@@ -71,9 +71,9 @@ export function StandardsTab({
   const [expandedGoalId, setExpandedGoalId] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<"cards" | "matrix">("cards");
 
-  // Published assessments for this class
+  // Live/published assessments for this class
   const publishedAssessments = useMemo(
-    () => assessments.filter((a) => a.status === "published"),
+    () => assessments.filter((a) => a.status === "live" || a.status === "published"),
     [assessments]
   );
 

@@ -11,6 +11,7 @@ import {
   buildFamilySharePayload,
   buildReportEligiblePayload,
 } from "@/lib/artifact-actions";
+import { createPortfolioRevisionNotification } from "@/lib/notification-events";
 import type { PortfolioArtifact } from "@/types/portfolio";
 
 /**
@@ -25,6 +26,7 @@ export function useArtifactActions(
 ) {
   const updateArtifact = useStore((s) => s.updateArtifact);
   const updateStudent = useStore((s) => s.updateStudent);
+  const addStudentNotification = useStore((s) => s.addStudentNotification);
   const students = useStore((s) => s.students);
 
   const applyUpdate = (id: string, updates: Partial<PortfolioArtifact>) => {
@@ -38,16 +40,43 @@ export function useArtifactActions(
     toast.success("Artifact approved");
   };
 
-  const handleRequestRevision = (id: string) => {
-    const updates = buildRequestRevisionPayload();
+  const handleRequestRevision = (
+    id: string,
+    revisionNote?: string,
+    studentId?: string,
+    artifactTitle?: string,
+    wasSharedWithFamily?: boolean,
+  ) => {
+    const updates = buildRequestRevisionPayload(revisionNote);
     applyUpdate(id, updates);
-    toast.info("Revision requested — family share revoked");
+
+    // Fire student notification when identity is known
+    if (studentId && artifactTitle) {
+      addStudentNotification(
+        createPortfolioRevisionNotification({
+          studentId,
+          artifactId: id,
+          artifactTitle,
+          revisionNote,
+        }),
+      );
+    }
+
+    toast.info(
+      wasSharedWithFamily
+        ? "Revision requested — family sharing revoked"
+        : "Revision requested",
+    );
   };
 
-  const handleResetApproval = (id: string) => {
+  const handleResetApproval = (id: string, wasSharedWithFamily?: boolean) => {
     const updates = buildResetApprovalPayload();
     applyUpdate(id, updates);
-    toast.info("Status reset to pending — family share revoked");
+    toast.info(
+      wasSharedWithFamily
+        ? "Status reset to pending — family sharing revoked"
+        : "Status reset to pending",
+    );
   };
 
   const handleSaveTeacherComment = (artifact: PortfolioArtifact, comment: string) => {

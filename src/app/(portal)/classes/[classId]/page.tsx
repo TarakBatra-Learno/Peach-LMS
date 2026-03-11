@@ -54,8 +54,9 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { toast } from "sonner";
+import { generateId } from "@/services/mock-service";
 import { format, parseISO, addDays, getDay } from "date-fns";
-import { getGradeCellDisplay, getGradePercentage, getToMarkCount, getMissingCount, getExcusedCount, GRADING_MODE_LABELS } from "@/lib/grade-helpers";
+import { getGradeCellDisplay, getGradePercentage, getToMarkCount, getExcusedCount, isGradeComplete, GRADING_MODE_LABELS } from "@/lib/grade-helpers";
 import { computeClassAveragePercent, computeAttentionStudents, computeWeakestGoals, computeAssessmentChartData } from "@/lib/selectors/grade-selectors";
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 
@@ -138,6 +139,9 @@ export default function ClassHubPage() {
   const allUnitPlans = useStore((s) => s.unitPlans);
   const allLessonPlans = useStore((s) => s.lessonPlans);
   const allLessonSlotAssignments = useStore((s) => s.lessonSlotAssignments);
+  const allChannels = useStore((s) => s.channels);
+  const addChannel = useStore((s) => s.addChannel);
+  const currentUser = useStore((s) => s.currentUser);
 
   const cls = getClassById(classId);
   const students = useMemo(() => {
@@ -210,6 +214,33 @@ export default function ClassHubPage() {
       toast.success("All students graded!");
     }
   };
+  const handleMessageStudent = (studentId: string) => {
+    const student = students.find((s) => s.id === studentId);
+    if (!student) return;
+
+    // Check if DM already exists
+    const existingDm = allChannels.find(
+      (ch) => ch.type === "dm" && ch.classId === classId && ch.participantIds?.includes(studentId)
+    );
+    if (existingDm) {
+      router.push(`/communication`);
+      return;
+    }
+
+    // Create DM channel
+    const channelId = generateId("ch");
+    addChannel({
+      id: channelId,
+      classId,
+      name: `DM: ${currentUser?.name ?? "Ms. Mitchell"} \u2194 ${student.firstName} ${student.lastName}`,
+      type: "dm",
+      participantIds: [currentUser?.id ?? "tchr_01", studentId],
+      createdAt: new Date().toISOString(),
+    });
+    router.push(`/communication`);
+    toast.success(`Conversation started with ${student.firstName}`);
+  };
+
   const [scheduleAttendanceOpen, setScheduleAttendanceOpen] = useState(false);
   const [scheduleAttendanceDate, setScheduleAttendanceDate] = useState<string | undefined>();
   // Schedule tab detail sheet state
@@ -239,7 +270,7 @@ export default function ClassHubPage() {
   if (loading) return <DetailSkeleton />;
   if (!cls) return <EmptyState icon={AlertCircle} title="Class not found" description="This class doesn't exist." />;
 
-  const publishedAssessments = assessments.filter((a) => a.status === "published");
+  const publishedAssessments = assessments.filter((a) => a.status === "live");
   const classAvgPct = computeClassAveragePercent(grades, assessments, classId);
   const avgGrade = classAvgPct !== null ? `${classAvgPct}%` : "N/A";
 
@@ -303,21 +334,37 @@ export default function ClassHubPage() {
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
               {students.map((student) => (
-                <Link
+                <div
                   key={student.id}
-                  href={`/students/${student.id}?classId=${classId}`}
-                  className="flex items-center gap-2 py-2 px-3 rounded-lg hover:bg-muted transition-colors"
+                  className="flex items-center gap-2 py-2 px-3 rounded-lg hover:bg-muted transition-colors group"
                 >
-                  <Avatar className="h-7 w-7">
-                    {student.avatarUrl && <AvatarImage src={student.avatarUrl} alt={`${student.firstName} ${student.lastName}`} />}
-                    <AvatarFallback className="text-[11px] font-semibold bg-[#c24e3f]/10 text-[#c24e3f]">
-                      {student.firstName[0]}{student.lastName[0]}
-                    </AvatarFallback>
-                  </Avatar>
-                  <span className="text-[13px] font-medium truncate">
-                    {student.firstName} {student.lastName}
-                  </span>
-                </Link>
+                  <Link
+                    href={`/students/${student.id}?classId=${classId}`}
+                    className="flex items-center gap-2 flex-1 min-w-0"
+                  >
+                    <Avatar className="h-7 w-7">
+                      {student.avatarUrl && <AvatarImage src={student.avatarUrl} alt={`${student.firstName} ${student.lastName}`} />}
+                      <AvatarFallback className="text-[11px] font-semibold bg-[#c24e3f]/10 text-[#c24e3f]">
+                        {student.firstName[0]}{student.lastName[0]}
+                      </AvatarFallback>
+                    </Avatar>
+                    <span className="text-[13px] font-medium truncate">
+                      {student.firstName} {student.lastName}
+                    </span>
+                  </Link>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 px-1.5 text-[10px] opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      handleMessageStudent(student.id);
+                    }}
+                  >
+                    <MessageSquare className="h-3 w-3" />
+                  </Button>
+                </div>
               ))}
             </div>
           </Card>
@@ -357,8 +404,8 @@ export default function ClassHubPage() {
                       options: [
                         { value: "all", label: "All statuses" },
                         { value: "draft", label: "Draft" },
-                        { value: "published", label: "Published" },
-                        { value: "archived", label: "Archived" },
+                        { value: "live", label: "Live" },
+                        { value: "closed", label: "Closed" },
                       ],
                       value: assessmentStatusFilter,
                       onChange: setAssessmentStatusFilter,
@@ -395,17 +442,26 @@ export default function ClassHubPage() {
                   <p className="text-[13px] text-muted-foreground text-center py-8">No assessments match your filters</p>
                 ) : (
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {filtered.map((asmt) => (
-                      <AssessmentListItem
-                        key={asmt.id}
-                        assessment={asmt}
-                        grades={grades.filter((g) => g.assessmentId === asmt.id)}
-                        studentIds={studentIds}
-                        href={`/assessments/${asmt.id}?classId=${classId}`}
-                        variant="card"
-                        unitTitle={asmt.unitId ? unitPlans.find((u) => u.id === asmt.unitId)?.title : undefined}
-                      />
-                    ))}
+                    {filtered.map((asmt) => {
+                      const asmtGrades = grades.filter((g) => g.assessmentId === asmt.id);
+                      const gradedCount = studentIds.filter((sid) => {
+                        const grade = asmtGrades.find((g) => g.studentId === sid);
+                        return grade ? isGradeComplete(grade, asmt) : false;
+                      }).length;
+                      return (
+                        <AssessmentListItem
+                          key={asmt.id}
+                          assessment={asmt}
+                          grades={asmtGrades}
+                          studentIds={studentIds}
+                          href={`/assessments/${asmt.id}?classId=${classId}`}
+                          variant="card"
+                          unitTitle={asmt.unitId ? unitPlans.find((u) => u.id === asmt.unitId)?.title : undefined}
+                          gradedCount={gradedCount}
+                          totalStudents={studentIds.length}
+                        />
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -423,7 +479,7 @@ export default function ClassHubPage() {
           ) : (() => {
             const studentIds = students.map((s) => s.id);
             const totalToMark = publishedAssessments.reduce((sum, a) => sum + getToMarkCount(studentIds, grades.filter((g) => g.assessmentId === a.id), a), 0);
-            const totalMissing = publishedAssessments.reduce((sum, a) => sum + getMissingCount(studentIds, grades.filter((g) => g.assessmentId === a.id), a), 0);
+            // Missing status no longer exists — late is derived from due date
             const totalExcused = publishedAssessments.reduce((sum, a) => sum + getExcusedCount(studentIds, grades.filter((g) => g.assessmentId === a.id), a), 0);
 
             // Class average with guardrail: only show when ≥3 assessments have numeric data
@@ -526,9 +582,7 @@ export default function ClassHubPage() {
                                     editor.openGradingSheet(student.id, asmt.id)
                                   }
                                   className={`text-[12px] font-medium px-2 py-1 rounded-md hover:bg-muted transition-colors cursor-pointer ${
-                                    grade?.submissionStatus === "missing"
-                                      ? "text-[#dc2626]"
-                                      : grade
+                                    grade
                                         ? "text-foreground"
                                         : "text-muted-foreground"
                                   }`}
@@ -567,10 +621,6 @@ export default function ClassHubPage() {
                 <AlertTriangle className={`h-4 w-4 ${totalToMark > 0 ? "text-[#b45309]" : "text-muted-foreground"}`} />
                 <span className={`text-[13px] font-semibold ${totalToMark > 0 ? "text-[#b45309]" : "text-muted-foreground"}`}>{totalToMark}</span>
                 <span className="text-[12px] text-muted-foreground">to mark</span>
-              </div>
-              <div className="flex items-center gap-2 rounded-lg border border-border px-3 py-2">
-                <span className={`text-[13px] font-semibold ${totalMissing > 0 ? "text-[#dc2626]" : "text-muted-foreground"}`}>{totalMissing}</span>
-                <span className="text-[12px] text-muted-foreground">missing</span>
               </div>
               <div className="flex items-center gap-2 rounded-lg border border-border px-3 py-2">
                 <span className="text-[13px] font-semibold text-muted-foreground">{totalExcused}</span>

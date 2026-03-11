@@ -6,7 +6,7 @@ import { generateSeedData } from "@/data/seed";
 import { DashboardSkeleton } from "@/components/shared/skeleton-loader";
 
 // Bump this version whenever seed data shape changes to force a reseed.
-const SEED_VERSION = 14;
+const SEED_VERSION = 20;
 const SEED_VERSION_KEY = "peach-lms-seed-version";
 
 export function StoreInitializer({ children }: { children: React.ReactNode }) {

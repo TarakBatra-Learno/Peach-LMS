@@ -4,8 +4,10 @@ export interface Channel {
   id: ID;
   classId: ID;
   name: string;
-  type: "general" | "announcements" | "assignments";
+  type: "general" | "announcements" | "assignments" | "dm" | "project";
   createdAt: string;
+  /** For DM and project channels: list of participant user/student IDs */
+  participantIds?: ID[];
 }
 
 export interface Announcement {
@@ -23,6 +25,9 @@ export interface Announcement {
   sentAt?: string;
   createdAt: string;
   threadReplies: ThreadReply[];
+  /** Author identity for DM messages (announcements used as DM messages) */
+  authorId?: ID;
+  authorRole?: "teacher" | "student";
 }
 
 export interface AnnouncementAttachment {
@@ -41,6 +46,9 @@ export interface PinnedContext {
 export interface ThreadReply {
   id: ID;
   authorName: string;
+  /** Author identity for role-aware display */
+  authorId?: ID;
+  authorRole?: "teacher" | "student";
   body: string;
   createdAt: string;
 }

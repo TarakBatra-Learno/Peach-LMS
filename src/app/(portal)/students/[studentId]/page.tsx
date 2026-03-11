@@ -119,6 +119,7 @@ export default function StudentProfilePage() {
 
   // Confirmation dialog state
   const [revisionConfirm, setRevisionConfirm] = useState<string | null>(null);
+  const [revisionNote, setRevisionNote] = useState("");
   const [resetConfirm, setResetConfirm] = useState<string | null>(null);
 
   // Create support plan dialog state
@@ -532,7 +533,7 @@ export default function StudentProfilePage() {
                             </td>
                           )}
                           <td className="text-center py-2 px-2">
-                            <span className={`font-medium ${grade.submissionStatus === "missing" ? "text-[#dc2626]" : "text-foreground"}`}>
+                            <span className="font-medium text-foreground">
                               {display}
                             </span>
                           </td>
@@ -1053,10 +1054,10 @@ export default function StudentProfilePage() {
 
                   <Separator />
 
-                  {detailGrade.submissionStatus === "missing" ? (
-                    <div className="rounded-lg bg-[#fee2e2] p-4">
-                      <p className="text-[14px] font-semibold text-[#dc2626]">Missing</p>
-                      <p className="text-[12px] text-[#dc2626]/80">This assessment was not submitted.</p>
+                  {detailGrade.submissionStatus === "excused" ? (
+                    <div className="rounded-lg bg-muted/50 p-4">
+                      <p className="text-[14px] font-semibold text-muted-foreground">Excused</p>
+                      <p className="text-[12px] text-muted-foreground">This student is excused from this assessment.</p>
                     </div>
                   ) : (
                     <div>
@@ -1219,27 +1220,80 @@ export default function StudentProfilePage() {
         </DialogContent>
       </Dialog>
 
-      <ConfirmDialog
-        open={!!revisionConfirm}
-        onOpenChange={(open) => !open && setRevisionConfirm(null)}
-        title="Request revision"
-        description="This will notify the student to revise their work. If the artifact is shared with family, sharing will be revoked."
-        confirmLabel="Request revision"
-        destructive
-        onConfirm={() => {
-          if (revisionConfirm) handleRequestRevision(revisionConfirm);
-          setRevisionConfirm(null);
-        }}
-      />
+      <Dialog open={!!revisionConfirm} onOpenChange={(open) => { if (!open) { setRevisionConfirm(null); setRevisionNote(""); } }}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Request revision</DialogTitle>
+            <DialogDescription>
+              {(() => {
+                const revArtifact = revisionConfirm ? artifacts.find((a) => a.id === revisionConfirm) : null;
+                const hasSharedFamily = revArtifact?.familyShareStatus === "shared";
+                return (
+                  <>
+                    This will mark <span className="font-medium">{revArtifact?.title}</span> for revision and notify the student.
+                    {hasSharedFamily && " Family sharing will also be revoked."}
+                  </>
+                );
+              })()}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 py-2">
+            <Label htmlFor="revision-note-student" className="text-[13px]">
+              What should the student improve? <span className="text-muted-foreground">(optional)</span>
+            </Label>
+            <Textarea
+              id="revision-note-student"
+              value={revisionNote}
+              onChange={(e) => setRevisionNote(e.target.value)}
+              placeholder="e.g., Add more detail to your reflection, or choose a clearer image..."
+              className="text-[13px] min-h-[80px]"
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" size="sm" onClick={() => { setRevisionConfirm(null); setRevisionNote(""); }}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={() => {
+                if (revisionConfirm) {
+                  const revArtifact = artifacts.find((a) => a.id === revisionConfirm);
+                  handleRequestRevision(
+                    revisionConfirm,
+                    revisionNote.trim() || undefined,
+                    revArtifact?.studentId,
+                    revArtifact?.title,
+                    revArtifact?.familyShareStatus === "shared",
+                  );
+                }
+                setRevisionConfirm(null);
+                setRevisionNote("");
+              }}
+            >
+              Request revision
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       <ConfirmDialog
         open={!!resetConfirm}
         onOpenChange={(open) => !open && setResetConfirm(null)}
         title="Reset to pending"
-        description="This will reset the artifact status to pending. If the artifact is shared with family, sharing will be revoked."
+        description={(() => {
+          const resetArtifact = resetConfirm ? artifacts.find((a) => a.id === resetConfirm) : null;
+          const isShared = resetArtifact?.familyShareStatus === "shared";
+          return isShared
+            ? "This will reset the artifact status to pending. Family sharing will also be revoked."
+            : "This will reset the artifact status to pending.";
+        })()}
         confirmLabel="Reset"
         destructive
         onConfirm={() => {
-          if (resetConfirm) handleResetApproval(resetConfirm);
+          if (resetConfirm) {
+            const resetArtifact = artifacts.find((a) => a.id === resetConfirm);
+            handleResetApproval(resetConfirm, resetArtifact?.familyShareStatus === "shared");
+          }
           setResetConfirm(null);
         }}
       />
