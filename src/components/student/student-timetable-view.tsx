@@ -12,6 +12,7 @@ import {
   type EnrichedTimetableSlot,
 } from "@/lib/student-selectors";
 import { TimetableSlotSheet } from "@/components/student/timetable-slot-sheet";
+import { deriveTimeRows, type TimeRow } from "@/lib/timetable-utils";
 import {
   Calendar,
   ChevronLeft,
@@ -33,75 +34,6 @@ import {
 
 interface StudentTimetableViewProps {
   studentId: string;
-}
-
-/** Represents one row in the timetable grid */
-interface TimeRow {
-  startTime: string;
-  endTime: string;
-  label: string;
-  type: "class" | "break" | "lunch";
-}
-
-/**
- * Derive all time rows for the school day from the student's class schedules.
- * Sorts by start time and fills gaps with break/lunch rows.
- */
-function deriveTimeRows(classes: { schedule: { startTime: string; endTime: string }[] }[]): TimeRow[] {
-  // Collect unique time slots from all classes
-  const slotMap = new Map<string, { startTime: string; endTime: string }>();
-  for (const cls of classes) {
-    for (const slot of cls.schedule) {
-      const key = `${slot.startTime}-${slot.endTime}`;
-      if (!slotMap.has(key)) {
-        slotMap.set(key, { startTime: slot.startTime, endTime: slot.endTime });
-      }
-    }
-  }
-
-  // Sort by start time
-  const uniqueSlots = [...slotMap.values()].sort((a, b) =>
-    a.startTime.localeCompare(b.startTime)
-  );
-
-  if (uniqueSlots.length === 0) return [];
-
-  const rows: TimeRow[] = [];
-  let periodNum = 1;
-
-  for (let i = 0; i < uniqueSlots.length; i++) {
-    const slot = uniqueSlots[i];
-
-    // If there's a gap before this slot (from the previous slot's end), add a break row
-    if (i > 0) {
-      const prevEnd = uniqueSlots[i - 1].endTime;
-      if (prevEnd < slot.startTime) {
-        const gapMinutes = timeToMinutes(slot.startTime) - timeToMinutes(prevEnd);
-        const isLunch = gapMinutes >= 30 && timeToMinutes(prevEnd) >= timeToMinutes("11:00");
-        rows.push({
-          startTime: prevEnd,
-          endTime: slot.startTime,
-          label: isLunch ? "Lunch" : "Break",
-          type: isLunch ? "lunch" : "break",
-        });
-      }
-    }
-
-    rows.push({
-      startTime: slot.startTime,
-      endTime: slot.endTime,
-      label: `Period ${periodNum}`,
-      type: "class",
-    });
-    periodNum++;
-  }
-
-  return rows;
-}
-
-function timeToMinutes(time: string): number {
-  const [h, m] = time.split(":").map(Number);
-  return h * 60 + m;
 }
 
 // Color palette for class cards
