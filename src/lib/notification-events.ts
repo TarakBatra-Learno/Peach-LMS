@@ -1,15 +1,14 @@
 /**
  * notification-events.ts
  *
- * Event factories that create StudentNotification objects.
- * These are called from store actions when teacher performs
- * grade release, submission return, etc.
+ * Event factories that create StudentNotification objects for the current
+ * assessment, portfolio, and report demo flows.
  *
  * Deduplication: each factory generates a deterministic dedupeKey
  * so the store's addStudentNotification can skip duplicates.
  */
 
-import type { StudentNotification, NotificationType } from "@/types/notification";
+import type { StudentNotification } from "@/types/notification";
 import { generateId } from "@/services/mock-service";
 
 interface GradeReleasedParams {

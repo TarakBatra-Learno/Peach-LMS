@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import { useStore } from "@/stores";
 import { PageHeader } from "@/components/shared/page-header";
@@ -33,17 +33,18 @@ export default function ReportCycleDetailPage() {
 
   const reportCycles = useStore((s) => s.reportCycles);
   const reports = useStore((s) => s.reports);
-  const getReportsByCycle = useStore((s) => s.getReportsByCycle);
   const updateReportCycle = useStore((s) => s.updateReportCycle);
-  const getStudentById = useStore((s) => s.getStudentById);
-  const getClassById = useStore((s) => s.getClassById);
-  const reportTemplates = useStore((s) => s.reportTemplates);
+  const students = useStore((s) => s.students);
+  const classes = useStore((s) => s.classes);
   const activeClassId = useStore((s) => s.ui.activeClassId);
 
   const [confirmOpen, setConfirmOpen] = useState(false);
 
   const cycle = reportCycles.find((c) => c.id === cycleId);
-  const cycleReports = getReportsByCycle(cycleId);
+  const cycleReports = useMemo(
+    () => reports.filter((report) => report.cycleId === cycleId),
+    [reports, cycleId]
+  );
 
   // Filter reports by macro filter (activeClassId)
   const filteredReports = activeClassId
@@ -179,8 +180,8 @@ export default function ReportCycleDetailPage() {
               </thead>
               <tbody>
                 {filteredReports.map((report) => {
-                  const student = getStudentById(report.studentId);
-                  const cls = getClassById(report.classId);
+                  const student = students.find((entry) => entry.id === report.studentId);
+                  const cls = classes.find((entry) => entry.id === report.classId);
                   const completeness = getCompleteness(report);
                   return (
                     <tr

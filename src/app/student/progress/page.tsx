@@ -116,6 +116,30 @@ export default function StudentProgressPage() {
     return Math.round(percentages.reduce((sum, p) => sum + p, 0) / percentages.length);
   }, [allReleasedGrades, rawAssessmentMap]);
 
+  const latestReleasedGrade = useMemo(
+    () =>
+      [...allReleasedGrades].sort((a, b) =>
+        (b.releasedAt ?? b.gradedAt ?? "").localeCompare(a.releasedAt ?? a.gradedAt ?? "")
+      )[0] ?? null,
+    [allReleasedGrades]
+  );
+
+  const latestReport = useMemo(
+    () =>
+      [...reports].sort((a, b) =>
+        (b.distributedAt ?? "").localeCompare(a.distributedAt ?? "")
+      )[0] ?? null,
+    [reports]
+  );
+
+  const strongestGoalSignal = useMemo(
+    () =>
+      [...goalProgress]
+        .filter((goal) => goal.assessmentCount > 0 && goal.latestLevel)
+        .sort((a, b) => b.assessmentCount - a.assessmentCount)[0] ?? null,
+    [goalProgress]
+  );
+
   if (loading) return <DetailSkeleton />;
 
   if (!studentId) {
@@ -154,6 +178,72 @@ export default function StudentProgressPage() {
         />
       </div>
 
+      <div className="grid gap-4 mb-6 lg:grid-cols-3">
+        <Card className="p-4 gap-0">
+          <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Latest released result</p>
+          {latestReleasedGrade ? (
+            (() => {
+              const assessment = rawAssessmentMap.get(latestReleasedGrade.assessmentId);
+              if (!assessment) {
+                return <p className="mt-2 text-[13px] text-muted-foreground">Assessment unavailable.</p>;
+              }
+              const percentage = getGradePercentage(latestReleasedGrade, assessment);
+              return (
+                <Link
+                  href={`/student/classes/${assessment.classId}/assessments/${assessment.id}`}
+                  className="mt-2 block rounded-xl border border-border/60 p-3 hover:bg-muted/30"
+                >
+                  <p className="text-[14px] font-medium">{assessment.title}</p>
+                  <p className="text-[12px] text-muted-foreground mt-1">
+                    {percentage !== null ? `${percentage}% released` : "Released feedback available"}
+                  </p>
+                </Link>
+              );
+            })()
+          ) : (
+            <p className="mt-2 text-[13px] text-muted-foreground">No released assessments yet.</p>
+          )}
+        </Card>
+
+        <Card className="p-4 gap-0">
+          <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Most recent report</p>
+          {latestReport ? (
+            <Link
+              href={`/student/progress/reports/${latestReport.id}`}
+              className="mt-2 block rounded-xl border border-border/60 p-3 hover:bg-muted/30"
+            >
+              <p className="text-[14px] font-medium">
+                {(enrolledClasses.find((cls) => cls.id === latestReport.classId)?.name ?? "Class")} report
+              </p>
+              <p className="text-[12px] text-muted-foreground mt-1">
+                {latestReport.distributedAt
+                  ? `Distributed ${format(new Date(latestReport.distributedAt), "MMM d, yyyy")}`
+                  : "Available to open"}
+              </p>
+            </Link>
+          ) : (
+            <p className="mt-2 text-[13px] text-muted-foreground">No reports have been distributed yet.</p>
+          )}
+        </Card>
+
+        <Card className="p-4 gap-0">
+          <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Goal momentum</p>
+          {strongestGoalSignal ? (
+            <Link
+              href="/student/goals"
+              className="mt-2 block rounded-xl border border-border/60 p-3 hover:bg-muted/30"
+            >
+              <p className="text-[14px] font-medium">{strongestGoalSignal.goalTitle}</p>
+              <p className="text-[12px] text-muted-foreground mt-1">
+                {strongestGoalSignal.assessmentCount} released assessment{strongestGoalSignal.assessmentCount !== 1 ? "s" : ""} linked
+              </p>
+            </Link>
+          ) : (
+            <p className="mt-2 text-[13px] text-muted-foreground">Your goal trend will appear as released evidence builds up.</p>
+          )}
+        </Card>
+      </div>
+
       <Tabs defaultValue="grades">
         <TabsList className="mb-4">
           <TabsTrigger value="grades" className="text-[13px]">
@@ -187,7 +277,7 @@ export default function StudentProgressPage() {
 
         {/* Learning Goals Tab */}
         <TabsContent value="goals">
-          <LearningGoalTracker goalProgress={goalProgress} />
+          <LearningGoalTracker goalProgress={goalProgress} assessmentMap={rawAssessmentMap} />
         </TabsContent>
       </Tabs>
     </div>
@@ -268,7 +358,12 @@ function ProgressGradesTab({
                 const percentage = rawAssessment ? getGradePercentage(grade, rawAssessment) : null;
 
                 return (
-                  <Card key={grade.id} className="p-3 gap-0">
+                  <Link
+                    key={grade.id}
+                    href={`/student/classes/${grade.classId}/assessments/${grade.assessmentId}`}
+                    className="block"
+                  >
+                  <Card className="p-3 gap-0 transition-colors hover:bg-muted/30">
                     <div className="flex items-center justify-between">
                       <div className="min-w-0 flex-1">
                         <p className="text-[13px] font-medium truncate">
@@ -292,6 +387,7 @@ function ProgressGradesTab({
                       </div>
                     </div>
                   </Card>
+                  </Link>
                 );
               })}
             </div>
@@ -368,8 +464,10 @@ function ProgressReportsTab({
 
 function LearningGoalTracker({
   goalProgress,
+  assessmentMap,
 }: {
   goalProgress: StudentGoalProgress[];
+  assessmentMap: Map<string, Assessment>;
 }) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
@@ -489,11 +587,10 @@ function LearningGoalTracker({
                     {/* Expanded: assessment details */}
                     {isExpanded && goal.assessments.length > 0 && (
                       <div className="border-t bg-muted/20 px-4 py-3 space-y-2">
-                        {goal.assessments.map((asmt, i) => (
-                          <div
-                            key={`${asmt.assessmentId}-${i}`}
-                            className="flex items-center justify-between py-1"
-                          >
+                        {goal.assessments.map((asmt, i) => {
+                          const linkedAssessment = assessmentMap.get(asmt.assessmentId);
+                          const content = (
+                            <div className="flex items-center justify-between py-1">
                             <div className="min-w-0 flex-1">
                               <p className="text-[12px] font-medium truncate">{asmt.assessmentTitle}</p>
                               <p className="text-[11px] text-muted-foreground">
@@ -504,8 +601,21 @@ function LearningGoalTracker({
                             <Badge className={`text-[10px] shrink-0 ml-2 ${MASTERY_COLORS[asmt.level] ?? ""}`}>
                               {asmt.level.replace(/_/g, " ")}
                             </Badge>
-                          </div>
-                        ))}
+                            </div>
+                          );
+
+                          return linkedAssessment ? (
+                            <Link
+                              key={`${asmt.assessmentId}-${i}`}
+                              href={`/student/classes/${linkedAssessment.classId}/assessments/${linkedAssessment.id}`}
+                              className="block rounded-lg px-2 hover:bg-muted/40"
+                            >
+                              {content}
+                            </Link>
+                          ) : (
+                            <div key={`${asmt.assessmentId}-${i}`}>{content}</div>
+                          );
+                        })}
                       </div>
                     )}
                   </Card>

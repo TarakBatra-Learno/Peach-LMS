@@ -5,8 +5,11 @@ import { Toaster } from "@/components/ui/sonner";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Peach LMS - Teacher Portal",
-  description: "IB school teacher portal prototype",
+  title: {
+    default: "Peach LMS",
+    template: "%s | Peach LMS",
+  },
+  description: "IB school learning platform prototype",
 };
 
 export default function RootLayout({

@@ -10,6 +10,7 @@ import type { Assessment, LearningGoal } from "@/types/assessment";
 import type { GradeRecord } from "@/types/gradebook";
 import type { Class } from "@/types/class";
 import type { MasteryLevel } from "@/types/common";
+import { getAdminStudentAssessmentHref } from "@/lib/admin-embed-routes";
 
 interface StudentStandardsTabProps {
   studentId: string;
@@ -18,6 +19,7 @@ interface StudentStandardsTabProps {
   learningGoals: LearningGoal[];
   classFilter: string | null;
   classes: Class[];
+  embedded?: boolean;
 }
 
 const MASTERY_CONFIG: Record<string, { label: string; color: string; bg: string; border: string }> = {
@@ -36,6 +38,7 @@ export function StudentStandardsTab({
   learningGoals,
   classFilter,
   classes,
+  embedded = false,
 }: StudentStandardsTabProps) {
   // Collect all standards & skills the student has data for
   const standardData = useMemo(() => {
@@ -198,7 +201,14 @@ export function StudentStandardsTab({
                     >
                       <div className="flex items-center gap-2 min-w-0">
                         <Link
-                          href={`/assessments/${entry.assessmentId}`}
+                          href={
+                            embedded
+                              ? getAdminStudentAssessmentHref(studentId, entry.assessmentId, {
+                                  classId: classFilter ?? undefined,
+                                })
+                              : `/assessments/${entry.assessmentId}`
+                          }
+                          target={embedded ? "_top" : undefined}
                           className="text-foreground hover:text-[#c24e3f] transition-colors truncate"
                         >
                           {entry.assessmentTitle}

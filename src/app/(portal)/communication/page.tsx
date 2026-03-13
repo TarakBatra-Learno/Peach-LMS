@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useMemo, useCallback, useEffect } from "react";
+import { useState, useMemo, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import { useStore } from "@/stores";
 import { PageHeader } from "@/components/shared/page-header";
 import { StatusBadge } from "@/components/shared/status-badge";
@@ -59,6 +60,7 @@ import type { Channel, PinnedContext } from "@/types/communication";
 import type { Announcement, ThreadReply } from "@/types/communication";
 
 export default function CommunicationPage() {
+  const router = useRouter();
   const loading = useMockLoading();
   const channels = useStore((s) => s.channels);
   const announcements = useStore((s) => s.announcements);
@@ -159,33 +161,67 @@ export default function CommunicationPage() {
     return getStudentsByClassId(dmClassId);
   }, [dmClassId, getStudentsByClassId]);
 
-  // Sync with global class switcher — auto-select first channel of active class
-  useEffect(() => {
-    if (activeClassId && channelsByClass[activeClassId]?.channels.length > 0) {
-      setSelectedChannelId(channelsByClass[activeClassId].channels[0].id);
-      setSelectedAnnouncementId(null);
+  const defaultChannelId = useMemo(() => {
+    if (activeClassId && channelsByClass[activeClassId]?.channels.length) {
+      return channelsByClass[activeClassId].channels[0].id;
     }
-  }, [activeClassId, channelsByClass]);
+
+    const firstClassChannel = Object.values(channelsByClass)[0]?.channels[0];
+    if (firstClassChannel) {
+      return firstClassChannel.id;
+    }
+
+    return dmChannels[0]?.id ?? null;
+  }, [activeClassId, channelsByClass, dmChannels]);
+
+  const effectiveSelectedChannelId = useMemo(() => {
+    if (selectedChannelId && channels.some((channel) => channel.id === selectedChannelId)) {
+      return selectedChannelId;
+    }
+
+    return defaultChannelId;
+  }, [channels, defaultChannelId, selectedChannelId]);
+
+  const defaultAnnouncementChannelId = useMemo(() => {
+    if (effectiveSelectedChannelId) {
+      const selected = channels.find((channel) => channel.id === effectiveSelectedChannelId);
+      if (selected && selected.type !== "dm") {
+        return selected.id;
+      }
+    }
+
+    if (activeClassId && channelsByClass[activeClassId]?.channels.length) {
+      return channelsByClass[activeClassId].channels[0].id;
+    }
+
+    return Object.values(channelsByClass)[0]?.channels[0]?.id ?? "";
+  }, [activeClassId, channels, channelsByClass, effectiveSelectedChannelId]);
 
   // Announcements for selected channel
   const channelAnnouncements = useMemo(() => {
-    if (!selectedChannelId) return [];
+    if (!effectiveSelectedChannelId) return [];
     return announcements
-      .filter((a) => a.channelId === selectedChannelId)
+      .filter((a) => a.channelId === effectiveSelectedChannelId)
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-  }, [announcements, selectedChannelId]);
+  }, [announcements, effectiveSelectedChannelId]);
 
   // Selected announcement
   const selectedAnnouncement = useMemo(() => {
-    if (!selectedAnnouncementId) return null;
-    return announcements.find((a) => a.id === selectedAnnouncementId) || null;
-  }, [announcements, selectedAnnouncementId]);
+    if (!selectedAnnouncementId || !effectiveSelectedChannelId) return null;
+    return (
+      announcements.find(
+        (announcement) =>
+          announcement.id === selectedAnnouncementId &&
+          announcement.channelId === effectiveSelectedChannelId
+      ) || null
+    );
+  }, [announcements, effectiveSelectedChannelId, selectedAnnouncementId]);
 
   // Selected channel
   const selectedChannel = useMemo(() => {
-    if (!selectedChannelId) return null;
-    return channels.find((c) => c.id === selectedChannelId) || null;
-  }, [channels, selectedChannelId]);
+    if (!effectiveSelectedChannelId) return null;
+    return channels.find((c) => c.id === effectiveSelectedChannelId) || null;
+  }, [channels, effectiveSelectedChannelId]);
 
   // Helpers
   const getClassName = useCallback(
@@ -209,11 +245,11 @@ export default function CommunicationPage() {
     (ctx: PinnedContext): string => {
       switch (ctx.type) {
         case "assessment":
-          return `/assessments`;
+          return `/assessments/${ctx.referenceId}`;
         case "event":
-          return `/calendar`;
+          return `/operations/calendar`;
         case "report":
-          return `/reports`;
+          return `/reports/cycles/${ctx.referenceId}`;
         default:
           return "#";
       }
@@ -340,7 +376,7 @@ export default function CommunicationPage() {
     setComposeOpen(false);
 
     // Auto-select the channel if not already selected
-    if (!selectedChannelId) {
+    if (!effectiveSelectedChannelId) {
       setSelectedChannelId(composeChannel);
     }
   };
@@ -380,7 +416,10 @@ export default function CommunicationPage() {
         description="Announcements, updates, and class channels"
         primaryAction={{
           label: "New announcement",
-          onClick: () => setComposeOpen(true),
+          onClick: () => {
+            setComposeChannel(defaultAnnouncementChannelId);
+            setComposeOpen(true);
+          },
           icon: Plus,
         }}
       />
@@ -416,7 +455,7 @@ export default function CommunicationPage() {
                 </div>
                 {group.channels.map((ch) => {
                   const ChannelIcon = getChannelIcon(ch.type);
-                  const isActive = selectedChannelId === ch.id;
+                  const isActive = effectiveSelectedChannelId === ch.id;
                   const unreadCount = announcements.filter(
                     (a) => a.channelId === ch.id && a.status === "sent"
                   ).length;
@@ -471,7 +510,7 @@ export default function CommunicationPage() {
               </div>
             ) : (
               dmChannels.map((ch) => {
-                const isActive = selectedChannelId === ch.id;
+                  const isActive = effectiveSelectedChannelId === ch.id;
                 return (
                   <button
                     key={ch.id}
@@ -496,7 +535,7 @@ export default function CommunicationPage() {
 
         {/* Right panel: Announcement feed or thread view */}
         <div className="flex-1 flex flex-col overflow-hidden">
-          {!selectedChannelId ? (
+          {!effectiveSelectedChannelId ? (
             /* No channel selected */
             <div className="flex-1 flex items-center justify-center">
               <div className="text-center">
@@ -537,7 +576,9 @@ export default function CommunicationPage() {
                       className="text-[11px] gap-1 cursor-pointer hover:bg-muted transition-colors"
                       onClick={() => {
                         const href = resolvePinnedContextLink(selectedAnnouncement.pinnedContext!);
-                        window.location.href = href;
+                        if (href !== "#") {
+                          router.push(href);
+                        }
                       }}
                     >
                       {selectedAnnouncement.pinnedContext.type === "assessment" && <BookOpen className="h-3 w-3" />}
@@ -659,7 +700,7 @@ export default function CommunicationPage() {
                     action={selectedChannel?.type === "dm" ? undefined : {
                       label: "New announcement",
                       onClick: () => {
-                        setComposeChannel(selectedChannelId || "");
+                        setComposeChannel(defaultAnnouncementChannelId);
                         setComposeOpen(true);
                       },
                     }}
@@ -735,7 +776,7 @@ export default function CommunicationPage() {
                           const now = new Date().toISOString();
                           addAnnouncement({
                             id: generateId("ann"),
-                            channelId: selectedChannelId!,
+                          channelId: effectiveSelectedChannelId!,
                             classId: selectedChannel.classId,
                             title: "Message",
                             body: replyText.trim(),
@@ -755,11 +796,11 @@ export default function CommunicationPage() {
                     <Button
                       size="sm"
                       onClick={() => {
-                        if (!replyText.trim() || !selectedChannelId || !selectedChannel) return;
+                        if (!replyText.trim() || !effectiveSelectedChannelId || !selectedChannel) return;
                         const now = new Date().toISOString();
                         addAnnouncement({
                           id: generateId("ann"),
-                          channelId: selectedChannelId,
+                          channelId: effectiveSelectedChannelId,
                           classId: selectedChannel.classId,
                           title: "Message",
                           body: replyText.trim(),

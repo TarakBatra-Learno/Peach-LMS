@@ -14,7 +14,7 @@ import {
 import { BookOpen, Calendar, ClipboardCheck, Clock, GraduationCap, MapPin, Users } from "lucide-react";
 import { format, addDays } from "date-fns";
 import type { Class } from "@/types/class";
-import type { StudentUnitPlanView, StudentAssessmentView } from "@/lib/student-permissions";
+import { getDemoNow } from "@/lib/demo-time";
 
 interface ClassOverviewTabProps {
   cls: Class;
@@ -34,8 +34,9 @@ export function ClassOverviewTab({ cls, studentId }: ClassOverviewTabProps) {
     [state, cls.id]
   );
 
-  const today = format(new Date(), "yyyy-MM-dd");
-  const weekEnd = format(addDays(new Date(), 6), "yyyy-MM-dd");
+  const demoNow = useMemo(() => getDemoNow(), []);
+  const today = format(demoNow, "yyyy-MM-dd");
+  const weekEnd = format(addDays(demoNow, 6), "yyyy-MM-dd");
 
   const thisWeekSchedule = useMemo(
     () => getStudentTimetable(state, studentId, today, weekEnd).filter(
@@ -47,10 +48,14 @@ export function ClassOverviewTab({ cls, studentId }: ClassOverviewTabProps) {
   const upcomingAssessments = useMemo(
     () =>
       assessments
-        .filter((a) => new Date(a.dueDate) >= new Date())
+        .filter((a) => {
+          const due = new Date(a.dueDate);
+          due.setHours(23, 59, 59, 999);
+          return due >= demoNow;
+        })
         .sort((a, b) => a.dueDate.localeCompare(b.dueDate))
         .slice(0, 3),
-    [assessments]
+    [assessments, demoNow]
   );
 
   const activeUnit = useMemo(

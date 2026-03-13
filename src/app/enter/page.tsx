@@ -5,16 +5,22 @@ import { StoreInitializer } from "@/components/shell/store-initializer";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { LogIn, GraduationCap, Users } from "lucide-react";
+import { LogIn, GraduationCap, Users, ShieldCheck } from "lucide-react";
 import { useStore } from "@/stores";
 import { useState } from "react";
-import { TEACHER_ID } from "@/types/auth";
+import { ADMIN_ID, TEACHER_ID } from "@/types/auth";
 import type { CurrentUser } from "@/types/auth";
 
 const TEACHER_USER: CurrentUser = {
   id: TEACHER_ID,
   name: "Ms. Sarah Mitchell",
   role: "teacher",
+};
+
+const ADMIN_USER: CurrentUser = {
+  id: ADMIN_ID,
+  name: "Dr. Elena Alvarez",
+  role: "admin",
 };
 
 export default function EnterPage() {
@@ -39,6 +45,11 @@ function EnterScreen() {
   const handleEnterAsTeacher = () => {
     switchPersona(TEACHER_USER);
     router.push("/dashboard");
+  };
+
+  const handleEnterAsAdmin = () => {
+    switchPersona(ADMIN_USER);
+    router.push("/admin/overview");
   };
 
   const handleEnterAsStudent = () => {
@@ -87,7 +98,33 @@ function EnterScreen() {
           </p>
         </div>
 
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+          {/* Admin Card */}
+          <Card className="p-6 space-y-4 border-[#ffe1dc] bg-[#fffaf9]">
+            <div className="flex items-center gap-3">
+              <div className="rounded-full bg-[#fff2f0] p-2.5">
+                <ShieldCheck className="h-5 w-5 text-[#c24e3f]" />
+              </div>
+              <div>
+                <h2 className="text-[16px] font-semibold">Admin</h2>
+                <p className="text-[12px] text-muted-foreground">Dr. Elena Alvarez</p>
+              </div>
+            </div>
+
+            <p className="text-[13px] text-muted-foreground">
+              Leadership oversight across curriculum quality, performance, communications, operations, and platform health.
+            </p>
+
+            <Button
+              className="w-full h-10"
+              onClick={handleEnterAsAdmin}
+              variant="default"
+            >
+              <ShieldCheck className="h-4 w-4 mr-2" />
+              Enter as Admin
+            </Button>
+          </Card>
+
           {/* Teacher Card */}
           <Card className="p-6 space-y-4">
             <div className="flex items-center gap-3">

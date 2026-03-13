@@ -12,7 +12,12 @@ import type { Channel, Announcement, NotificationSettings } from "@/types/commun
 import type { CalendarEvent } from "@/types/calendar";
 import type { AttendanceStatus, MasteryLevel } from "@/types/common";
 import { generateUnitPlanningData } from "./unit-planning-seed";
-import { generateSeedSubmissions, generateSeedStudentGoals, generateSeedGoalEvidenceLinks, generateSeedNotifications } from "./student-seed";
+import {
+  generateSeedAssessmentDemoState,
+  generateSeedStudentGoals,
+  generateSeedGoalEvidenceLinks,
+  generateSeedNotifications,
+} from "./student-seed";
 import { generateFamilyPortalData } from "./family-seed";
 
 // ---------------------------------------------------------------------------
@@ -1107,10 +1112,9 @@ export function generateSeedData() {
   let annCount = 0;
 
   // Assessment-linked announcements
-  assessments.forEach((asmt, idx) => {
+  assessments.forEach((asmt) => {
     if (asmt.status !== "live" && asmt.status !== "published") return;
     annCount++;
-    const cls = classes.find(c => c.id === asmt.classId)!;
     const announcementChannel = channels.find(c => c.classId === asmt.classId && c.type === "assignments")!;
     announcements.push({
       id: annId(annCount),
@@ -1406,13 +1410,22 @@ export function generateSeedData() {
     reports,
     unitPlans: unitPlanningData.unitPlans,
   });
+  const studentAssessmentDemoState = generateSeedAssessmentDemoState(assessments);
+  const overrideKeys = new Set(
+    studentAssessmentDemoState.overridePairs.map(
+      (entry) => `${entry.studentId}:${entry.assessmentId}`
+    )
+  );
 
   return {
     classes,
     students,
     assessments,
     learningGoals,
-    grades,
+    grades: [
+      ...grades.filter((grade) => !overrideKeys.has(`${grade.studentId}:${grade.assessmentId}`)),
+      ...studentAssessmentDemoState.grades,
+    ],
     artifacts,
     attendanceSessions,
     incidents,
@@ -1431,10 +1444,15 @@ export function generateSeedData() {
     lessonSlotAssignments: unitPlanningData.lessonSlotAssignments,
     // Student Portal
     currentUser: null,
-    submissions: [...bulkSubmissions, ...generateSeedSubmissions(assessments)],
+    submissions: [
+      ...bulkSubmissions.filter(
+        (submission) => !overrideKeys.has(`${submission.studentId}:${submission.assessmentId}`)
+      ),
+      ...studentAssessmentDemoState.submissions,
+    ],
     studentGoals: generateSeedStudentGoals(),
     goalEvidenceLinks: generateSeedGoalEvidenceLinks(),
-    studentNotifications: generateSeedNotifications(),
+    studentNotifications: generateSeedNotifications(assessments),
     parentProfiles: familyPortalData.parentProfiles,
     familyNotifications: familyPortalData.familyNotifications,
     classroomUpdates: familyPortalData.classroomUpdates,

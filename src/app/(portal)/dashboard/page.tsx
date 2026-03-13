@@ -21,7 +21,7 @@ import {
   Clock,
   Megaphone,
   FileText,
-  Image,
+  Image as ImageIcon,
   MapPin,
   Handshake,
   Video,
@@ -30,10 +30,11 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { format, isToday, parseISO, isBefore, addDays, getDay } from "date-fns";
+import { format, parseISO, isBefore, addDays } from "date-fns";
 import { PERIODS } from "@/lib/timetable-constants";
-import { expandEventsForDate, getPeriodStatus, matchEventToPeriod } from "@/lib/calendar-utils";
+import { expandEventsForDate, getPeriodStatus } from "@/lib/calendar-utils";
 import { getToMarkCount, isGradeComplete } from "@/lib/grade-helpers";
+import { getDemoNow } from "@/lib/demo-time";
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -60,7 +61,7 @@ export default function DashboardPage() {
     return cls ? new Set(cls.studentIds) : null;
   }, [activeClassId, classes]);
 
-  const today = new Date();
+  const today = getDemoNow();
   const todayStr = format(today, "yyyy-MM-dd");
 
   // Expand recurring events for today
@@ -486,7 +487,7 @@ export default function DashboardPage() {
         <Card className="p-5 gap-0 h-full">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-[16px] font-semibold flex items-center gap-2">
-              <Image className="h-4 w-4 text-[#c24e3f]" />
+              <ImageIcon aria-hidden="true" className="h-4 w-4 text-[#c24e3f]" />
               Portfolio activity
               {pendingArtifacts.length > 0 && (
                 <Badge variant="secondary" className="text-[11px]">{pendingArtifacts.length} pending</Badge>

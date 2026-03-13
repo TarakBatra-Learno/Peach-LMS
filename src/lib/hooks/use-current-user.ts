@@ -22,6 +22,11 @@ export function useIsParent(): boolean {
   return user?.role === "parent";
 }
 
+export function useIsAdmin(): boolean {
+  const user = useCurrentUser();
+  return user?.role === "admin";
+}
+
 export function useStudentId(): string | null {
   const user = useCurrentUser();
   if (user?.role === "student" && user.linkedStudentId) {

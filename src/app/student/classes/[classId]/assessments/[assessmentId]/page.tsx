@@ -10,7 +10,6 @@ import { DetailSkeleton } from "@/components/shared/skeleton-loader";
 import { useMockLoading } from "@/lib/hooks/use-mock-loading";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
 import { SubmissionWorkbook } from "@/components/student/submission-workbook";
 import { GradeFeedbackViewer } from "@/components/student/grade-feedback-viewer";
 import {
@@ -28,13 +27,13 @@ import {
   Calendar,
   BookOpen,
   ExternalLink,
-  Clock,
   Target,
 } from "lucide-react";
 import { format } from "date-fns";
 import Link from "next/link";
 import type { Assessment } from "@/types/assessment";
 import type { GradeRecord } from "@/types/gradebook";
+import { isSubmissionSubmitted } from "@/lib/submission-state";
 
 /** Wrapper that marks grade as seen on first view */
 function GradeFeedbackViewerWithTracking({ grade, assessment }: { grade: GradeRecord; assessment: Assessment }) {
@@ -180,18 +179,16 @@ export default function StudentAssessmentDetailPage() {
   const grade = releasedGrades.find((g) => g.assessmentId === assessmentId);
 
   // Linked unit plan
-  const unitPlan = useMemo(() => {
-    if (!projectedAssessment?.unitId) return null;
-    return state.unitPlans.find((u) => u.id === projectedAssessment.unitId);
-  }, [projectedAssessment?.unitId, state.unitPlans]);
+  const unitPlan = projectedAssessment?.unitId
+    ? state.unitPlans.find((u) => u.id === projectedAssessment.unitId) ?? null
+    : null;
 
   // Resolve learning goals
-  const assessmentGoals = useMemo(() => {
-    if (!projectedAssessment?.learningGoalIds?.length) return [];
-    return projectedAssessment.learningGoalIds
-      .map((id) => learningGoals.find((g) => g.id === id))
-      .filter(Boolean);
-  }, [projectedAssessment?.learningGoalIds, learningGoals]);
+  const assessmentGoals = projectedAssessment?.learningGoalIds?.length
+    ? projectedAssessment.learningGoalIds
+        .map((id) => learningGoals.find((g) => g.id === id))
+        .filter(Boolean)
+    : [];
 
   const [addToGoalOpen, setAddToGoalOpen] = useState(false);
 
@@ -295,7 +292,7 @@ export default function StudentAssessmentDetailPage() {
           />
 
           {/* Add to Goal button */}
-          {submission && submission.status === "submitted" && (
+          {isSubmissionSubmitted(submission) && (
             <Button
               variant="outline"
               size="sm"

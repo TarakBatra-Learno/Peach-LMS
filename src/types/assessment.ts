@@ -8,13 +8,12 @@ import { ID, GradingMode, AssessmentStatus } from "./common";
  *
  * Status semantics:
  * - `status: "draft"` → teacher-only, not visible to students
- * - `status: "published"` → visible to students + open for grading
- *   ⚠️ NOTE: "published" means STUDENT-VISIBLE for Assessment but NOT for Report.
- *   Always use gate functions (`canStudentViewGrade()`, etc.) instead of checking status directly.
- * - `status: "archived"` → hidden from active views, read-only
+ * - `status: "live"` → student-visible and open for submission
+ * - `status: "closed"` → read-only for students
+ * - legacy `"published"` maps to `"live"` and `"archived"` maps to `"closed"`
  *
- * Student visibility gate: `Assessment.status === "published"` + `assignedStudentIds` (if set)
- * Grade visibility gate: `Assessment.gradesReleasedAt` (must be set by teacher)
+ * Student visibility gate: assessment must be non-draft and assigned to the student when `assignedStudentIds` exists.
+ * Grade visibility gate: per-student `GradeRecord.releasedAt`.
  */
 export interface Assessment {
   id: ID;
@@ -40,7 +39,7 @@ export interface Assessment {
   checklistOutcomeModel?: ChecklistOutcomeModel;
   standardIds?: ID[];
   learningGoalIds: ID[];
-  /** Audit trail: ISO timestamp when assessment was published (set alongside status: "published"). */
+  /** Audit trail: ISO timestamp when assessment became student-visible. */
   distributedAt?: string;
   /** Forward ref to auto-created announcement on publish. */
   linkedAnnouncementId?: ID;
@@ -60,8 +59,7 @@ export interface Assessment {
    * When set with forceClosed=true, all non-terminal grade rows were set to excused on close.
    */
   /**
-   * @deprecated Bulk grade release removed — use per-student `GradeRecord.releasedAt` instead.
-   * Kept temporarily for backward compatibility during migration.
+   * @deprecated Bulk grade release is no longer used. Prefer per-student `GradeRecord.releasedAt`.
    */
   gradesReleasedAt?: string;
   closedAt?: string;

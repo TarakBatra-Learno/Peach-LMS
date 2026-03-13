@@ -30,9 +30,8 @@ export interface ChecklistResultItem {
  * Key invariants:
  * - `submissionStatus: "excused"` is terminal — clears ALL grade data fields via `buildExcusedPayload()`.
  * - `gradingMode` mirrors `Assessment.gradingMode` at save time.
- * - Student visibility gated by `Assessment.gradesReleasedAt` (use `canStudentViewGrade()`).
- * - `submissionStatus` is INDEPENDENT from `Submission.status` — no automatic sync exists.
- *   A store side-effect should bridge them when student submits work.
+ * - Student visibility gated by per-student `releasedAt` (use `canStudentViewGrade()`).
+ * - `submissionStatus` is INDEPENDENT from `Submission.status`; store-side sync bridges them on submit.
  */
 export interface GradeRecord {
   id: ID;

@@ -22,6 +22,7 @@ import {
   X,
 } from "lucide-react";
 import { getPublishedDueAssessments } from "@/lib/grade-helpers";
+import { getDemoNow } from "@/lib/demo-time";
 
 interface Notification {
   id: string;
@@ -39,7 +40,7 @@ interface NotificationsDrawerProps {
 }
 
 function isWithinPastDays(dateStr: string, days: number): boolean {
-  const now = new Date();
+  const now = getDemoNow();
   const date = new Date(dateStr);
   const diffMs = now.getTime() - date.getTime();
   const diffDays = diffMs / (1000 * 60 * 60 * 24);
@@ -47,7 +48,7 @@ function isWithinPastDays(dateStr: string, days: number): boolean {
 }
 
 function formatRelativeTime(dateStr: string): string {
-  const now = new Date();
+  const now = getDemoNow();
   const date = new Date(dateStr);
   const diffMs = Math.abs(now.getTime() - date.getTime());
   const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
@@ -61,7 +62,7 @@ function formatRelativeTime(dateStr: string): string {
 }
 
 function formatDueTime(dateStr: string): string {
-  const now = new Date();
+  const now = getDemoNow();
   const date = new Date(dateStr);
   const diffMs = date.getTime() - now.getTime();
   const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
@@ -154,7 +155,7 @@ export function NotificationsDrawer({ open, onOpenChange }: NotificationsDrawerP
           icon: <FileText className="h-4 w-4" />,
           title: "Report draft needs attention",
           description: `Report for ${studentName} is still in draft`,
-          timestamp: new Date().toISOString(),
+          timestamp: report.publishedAt ?? report.distributedAt ?? getDemoNow().toISOString(),
           type: "report",
           entityUrl: `/reports/${report.id}`,
         });

@@ -65,6 +65,10 @@ import {
 import Link from "next/link";
 import { COMMENT_GUIDANCE } from "@/lib/comment-guidance";
 import { getMYPBoundaryGrade } from "@/lib/grade-helpers";
+import {
+  getAdminStudentAssessmentHref,
+  getAdminStudentWorkspaceHref,
+} from "@/lib/admin-embed-routes";
 
 import type { ReportSection } from "@/types/report";
 
@@ -173,6 +177,7 @@ export default function ReportDetailPage() {
   const searchParams = useSearchParams();
   const reportId = params.reportId as string;
   const cycleIdFromUrl = searchParams.get("cycleId");
+  const embedded = searchParams.get("embed") === "1";
   const loading = useMockLoading([reportId]);
 
   const reports = useStore((s) => s.reports);
@@ -211,6 +216,23 @@ export default function ReportDetailPage() {
   const [emptySectionLabels, setEmptySectionLabels] = useState<string[]>([]);
 
   const report = reports.find((r) => r.id === reportId);
+  const getAssessmentHref = (assessmentId: string) =>
+    report
+      ? embedded
+        ? getAdminStudentAssessmentHref(report.studentId, assessmentId, {
+            classId: report.classId,
+          })
+        : `/assessments/${assessmentId}`
+      : `/assessments/${assessmentId}`;
+  const getStudentHref = () =>
+    report
+      ? embedded
+        ? getAdminStudentWorkspaceHref(report.studentId, {
+            classId: report.classId,
+            tab: "reports",
+          })
+        : `/students/${report.studentId}?classId=${report.classId}`
+      : "/admin/students";
 
   // Compute attendance summary for the student
   const attendanceSummary = useMemo(() => {
@@ -1002,7 +1024,11 @@ export default function ReportDetailPage() {
                 <p className="text-[12px] font-medium text-muted-foreground mb-2">Assessment Details</p>
                 {studentGrades.map((grade) => (
                   <div key={grade.id} className="flex items-center justify-between py-1.5 border-b border-border/30 text-[13px]">
-                    <Link href={`/assessments/${grade.assessmentId}`} className="text-[#c24e3f] hover:underline">
+                    <Link
+                      href={getAssessmentHref(grade.assessmentId)}
+                      target={embedded ? "_top" : undefined}
+                      className="text-[#c24e3f] hover:underline"
+                    >
                       {getAssessmentName(grade.assessmentId)}
                     </Link>
                     <span className="text-muted-foreground">
@@ -1044,7 +1070,8 @@ export default function ReportDetailPage() {
                   >
                     <td className="py-2 pr-4 text-[13px]">
                       <Link
-                        href={`/assessments/${grade.assessmentId}`}
+                        href={getAssessmentHref(grade.assessmentId)}
+                        target={embedded ? "_top" : undefined}
                         className="text-[#c24e3f] hover:underline"
                       >
                         {getAssessmentName(grade.assessmentId)}
@@ -1117,9 +1144,18 @@ export default function ReportDetailPage() {
                         <Image className="h-4 w-4 text-muted-foreground" />
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-[13px] font-medium truncate">
-                          {artifact.title}
-                        </p>
+                        {embedded ? (
+                          <p className="block truncate text-[13px] font-medium text-foreground">
+                            {artifact.title}
+                          </p>
+                        ) : (
+                          <Link
+                            href={`/portfolio?studentId=${report.studentId}&artifactId=${artifact.id}`}
+                            className="block text-[13px] font-medium truncate text-[#c24e3f] hover:underline"
+                          >
+                            {artifact.title}
+                          </Link>
+                        )}
                         <p className="text-[11px] text-muted-foreground">
                           {format(parseISO(artifact.createdAt), "MMM d, yyyy")}
                         </p>
@@ -1486,7 +1522,18 @@ export default function ReportDetailPage() {
                 artifact ? (
                   <div key={artifact.id} className="flex items-center gap-3 rounded-lg border border-border/50 p-3">
                     <div className="flex-1 min-w-0">
-                      <p className="text-[13px] font-medium truncate">{artifact.title}</p>
+                      {embedded ? (
+                        <p className="block truncate text-[13px] font-medium text-foreground">
+                          {artifact.title}
+                        </p>
+                      ) : (
+                        <Link
+                          href={`/portfolio?studentId=${report.studentId}&artifactId=${artifact.id}`}
+                          className="block text-[13px] font-medium truncate text-[#c24e3f] hover:underline"
+                        >
+                          {artifact.title}
+                        </Link>
+                      )}
                       <p className="text-[11px] text-muted-foreground">
                         {artifact.description ? artifact.description.slice(0, 80) + (artifact.description.length > 80 ? "…" : "") : "No description"}
                       </p>
@@ -1524,7 +1571,7 @@ export default function ReportDetailPage() {
 
   return (
     <div>
-      {cycleFromUrl && (
+      {cycleFromUrl && !embedded ? (
         <Link
           href={`/reports/cycles/${cycleFromUrl.id}`}
           className="inline-flex items-center gap-1.5 text-[13px] text-muted-foreground hover:text-foreground transition-colors mb-3"
@@ -1532,7 +1579,7 @@ export default function ReportDetailPage() {
           <ArrowLeft className="h-3.5 w-3.5" />
           Back to {cycleFromUrl.name}
         </Link>
-      )}
+      ) : null}
       <PageHeader
         title={`Report: ${studentName}`}
         description={`${cls?.name || "Unknown Class"} \u00b7 ${cycle?.name || "Unknown Cycle"} \u00b7 ${cycle?.term || ""}`}
@@ -1546,7 +1593,8 @@ export default function ReportDetailPage() {
           )}
           <Separator orientation="vertical" className="h-4" />
           <Link
-            href={`/students/${report.studentId}?classId=${report.classId}`}
+            href={getStudentHref()}
+            target={embedded ? "_top" : undefined}
             className="text-[13px] text-[#c24e3f] hover:underline"
           >
             View student profile →

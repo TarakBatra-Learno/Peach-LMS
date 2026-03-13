@@ -1,4 +1,5 @@
-import { ID } from "./common";
+import { ID, Programme } from "./common";
+import type { ConceptualFraming, UnitStatus } from "./unit-planning";
 
 export type FamilyNotificationCategory =
   | "announcements"
@@ -174,4 +175,26 @@ export interface FamilyCalendarEvent {
   location?: string;
   meetingLink?: string;
   attachment?: FamilyAttachment;
+}
+
+export interface FamilyUnitPlanView {
+  id: ID;
+  classId: ID;
+  title: string;
+  code?: string;
+  summary?: string;
+  programme: Programme;
+  status: UnitStatus;
+  startDate: string;
+  endDate: string;
+  conceptualFraming?: Pick<
+    ConceptualFraming,
+    | "keyConcept"
+    | "relatedConcepts"
+    | "globalContext"
+    | "statementOfInquiry"
+    | "atlFocus"
+    | "tokConnection"
+    | "casOpportunity"
+  >;
 }

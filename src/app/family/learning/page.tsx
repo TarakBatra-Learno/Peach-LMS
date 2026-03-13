@@ -429,7 +429,7 @@ export default function FamilyLearningPage() {
                   (entry) => entry.assessment.unitId === unit.id
                 );
                 const relatedArtifacts = allVisibleArtifacts.filter((artifact) => artifact.classId === unit.classId);
-                const framing = unit.strategy.conceptualFraming;
+                const framing = unit.conceptualFraming;
                 const submittedCount = linkedAssessments.filter((entry) => entry.submission).length;
 
                 return (
@@ -800,19 +800,19 @@ export default function FamilyLearningPage() {
                 <p className="text-[13px] text-muted-foreground">
                   {selectedUnit.summary || "A family-facing summary is not available yet."}
                 </p>
-                {selectedUnit.strategy.conceptualFraming?.statementOfInquiry && (
+                {selectedUnit.conceptualFraming?.statementOfInquiry && (
                   <Card className="gap-0 p-4">
                     <p className="text-[12px] font-medium uppercase tracking-wide text-muted-foreground">
                       Statement of inquiry
                     </p>
                     <p className="mt-2 text-[13px]">
-                      {selectedUnit.strategy.conceptualFraming.statementOfInquiry}
+                      {selectedUnit.conceptualFraming.statementOfInquiry}
                     </p>
                   </Card>
                 )}
-                {selectedUnit.strategy.conceptualFraming?.atlFocus?.length ? (
+                {selectedUnit.conceptualFraming?.atlFocus?.length ? (
                   <div className="flex flex-wrap gap-2">
-                    {selectedUnit.strategy.conceptualFraming.atlFocus.map((focus) => (
+                    {selectedUnit.conceptualFraming.atlFocus.map((focus) => (
                       <Badge key={focus} variant="secondary" className="text-[10px]">
                         {focus}
                       </Badge>

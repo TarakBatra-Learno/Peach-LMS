@@ -1,9 +1,9 @@
-const FAMILY_DEMO_NOW = new Date("2026-02-28T09:00:00.000Z");
+import { getDemoNow, getDemoNowMs } from "./demo-time";
 
 export function getFamilyDemoNow() {
-  return new Date(FAMILY_DEMO_NOW);
+  return getDemoNow();
 }
 
 export function getFamilyDemoNowMs() {
-  return FAMILY_DEMO_NOW.getTime();
+  return getDemoNowMs();
 }

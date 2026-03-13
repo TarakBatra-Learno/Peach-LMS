@@ -18,12 +18,11 @@ import type { PortfolioArtifact } from "@/types/portfolio";
 import type { Announcement, Channel } from "@/types/communication";
 import type { CalendarEvent } from "@/types/calendar";
 import type { MasteryLevel } from "@/types/common";
-import type { MaterializedOccurrence, LessonSlotAssignment } from "@/types/unit-planning";
+import type { MaterializedOccurrence } from "@/types/unit-planning";
 import {
   projectStudentAssessment,
   projectStudentUnitPlan,
   projectStudentLessonPlan,
-  projectStudentLessonSlotAssignment,
   projectStudentThreadReply,
   projectStudentGradeRecord,
   canStudentViewGrade,
@@ -39,6 +38,7 @@ import {
   type StudentWorkState,
 } from "./student-permissions";
 import { isGradeComplete } from "./grade-helpers";
+import { getCanonicalSubmissionStatus } from "./submission-state";
 import { materializeTimetableOccurrences } from "./unit-planning-utils";
 
 // ─── Class Selectors ────────────────────────────────────────────────────────
@@ -120,7 +120,13 @@ export function getStudentReleasedGrades(
 
 // ─── Student Submission Status ──────────────────────────────────────────────
 
-export type StudentSubmissionStatus = "due" | "overdue" | "excused" | "submitted_on_time" | "submitted_late";
+export type StudentSubmissionStatus =
+  | "draft"
+  | "due"
+  | "overdue"
+  | "excused"
+  | "submitted_on_time"
+  | "submitted_late";
 
 /**
  * Derive the submission status from the student's perspective.
@@ -129,11 +135,15 @@ export type StudentSubmissionStatus = "due" | "overdue" | "excused" | "submitted
 export function getStudentSubmissionStatus(
   grade: GradeRecord | undefined,
   submission: Submission | undefined,
-  assessment: Assessment
+  assessment: Pick<Assessment, "dueDate">
 ): StudentSubmissionStatus {
   if (grade?.submissionStatus === "excused") return "excused";
-  if (submission?.status === "submitted") {
-    return submission.isLate ? "submitted_late" : "submitted_on_time";
+  const canonicalSubmissionStatus = getCanonicalSubmissionStatus(submission?.status);
+  if (canonicalSubmissionStatus === "draft") {
+    return "draft";
+  }
+  if (canonicalSubmissionStatus === "submitted") {
+    return submission?.isLate ? "submitted_late" : "submitted_on_time";
   }
   // Fallback: GradeRecord has submissionStatus "submitted" but no Submission entity
   if (grade?.submissionStatus === "submitted") return "submitted_on_time";
@@ -181,7 +191,8 @@ export function getStudentAssessmentState(
   }
   // 2. Submission exists — use its status directly
   else if (submission) {
-    workState = submission.status as StudentWorkState;
+    const canonicalSubmissionStatus = getCanonicalSubmissionStatus(submission.status);
+    workState = canonicalSubmissionStatus ?? "draft";
   }
   // 3. GradeRecord has submissionStatus "submitted" but no Submission entity — treat as submitted
   else if (grade?.submissionStatus === "submitted") {

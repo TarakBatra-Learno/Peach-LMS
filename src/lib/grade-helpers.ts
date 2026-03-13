@@ -1,12 +1,13 @@
 import type { GradeRecord } from "@/types/gradebook";
 import type { Assessment } from "@/types/assessment";
+import { getDemoNow } from "./demo-time";
 
 // ---------------------------------------------------------------------------
 // Published due-date helper — single source of truth
 // ---------------------------------------------------------------------------
 
 function isWithinDays(dateStr: string, days: number): boolean {
-  const now = new Date();
+  const now = getDemoNow();
   const date = new Date(dateStr);
   const diffMs = date.getTime() - now.getTime();
   const diffDays = diffMs / (1000 * 60 * 60 * 24);
@@ -87,8 +88,9 @@ export type TeacherReviewStatus =
  */
 export function getTeacherReviewStatus(
   grade: GradeRecord | undefined,
-  assessment: Assessment
+  _assessment: Assessment
 ): TeacherReviewStatus {
+  void _assessment;
   // Excused is terminal — always wins
   if (grade?.submissionStatus === "excused") return "excused";
 
@@ -111,7 +113,7 @@ export function getTeacherReviewStatus(
  * Used alongside getTeacherReviewStatus to show a "Late" tag on pending rows.
  */
 export function isStudentPastDue(assessment: Assessment): boolean {
-  const now = new Date();
+  const now = getDemoNow();
   const dueDate = new Date(assessment.dueDate);
   dueDate.setHours(23, 59, 59, 999);
   return now > dueDate;
@@ -163,10 +165,13 @@ export function getStudentAssessmentStatus(
  * Returns 0 for backward compatibility.
  */
 export function getMissingCount(
-  studentIds: string[],
-  grades: GradeRecord[],
-  assessment: Assessment
+  _studentIds: string[],
+  _grades: GradeRecord[],
+  _assessment: Assessment
 ): number {
+  void _studentIds;
+  void _grades;
+  void _assessment;
   return 0;
 }
 

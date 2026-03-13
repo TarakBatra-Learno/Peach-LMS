@@ -2,7 +2,6 @@
 
 import { useState, useMemo } from "react";
 import Link from "next/link";
-import { useStore } from "@/stores";
 import { FilterBar } from "@/components/shared/filter-bar";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { EmptyState } from "@/components/shared/empty-state";
@@ -19,7 +18,6 @@ import {
   SheetTitle,
   SheetDescription,
 } from "@/components/ui/sheet";
-import { toast } from "sonner";
 import { format, parseISO } from "date-fns";
 import {
   FolderOpen,
@@ -45,9 +43,11 @@ import {
 import { Label } from "@/components/ui/label";
 import { useArtifactActions } from "@/lib/hooks/use-artifact-actions";
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
+import { getAdminStudentWorkspaceHref } from "@/lib/admin-embed-routes";
 
 interface PortfolioTabProps {
   classId: string;
+  embedded?: boolean;
   artifacts: PortfolioArtifact[];
   students: Student[];
   learningGoals: LearningGoal[];
@@ -64,9 +64,13 @@ function getMediaIcon(type: string) {
   }
 }
 
-export function PortfolioTab({ classId, artifacts, students, learningGoals }: PortfolioTabProps) {
-  const updateArtifact = useStore((s) => s.updateArtifact);
-
+export function PortfolioTab({
+  classId,
+  embedded = false,
+  artifacts,
+  students,
+  learningGoals,
+}: PortfolioTabProps) {
   // Filters
   const [statusFilter, setStatusFilter] = useState("all");
   const [studentFilter, setStudentFilter] = useState("all");
@@ -224,7 +228,12 @@ export function PortfolioTab({ classId, artifacts, students, learningGoals }: Po
                 </div>
                 <p className="text-[12px] text-muted-foreground mb-2">
                   <Link
-                    href={`/students/${artifact.studentId}?classId=${classId}`}
+                    href={
+                      embedded
+                        ? getAdminStudentWorkspaceHref(artifact.studentId, { classId })
+                        : `/students/${artifact.studentId}?classId=${classId}`
+                    }
+                    target={embedded ? "_top" : undefined}
                     className="text-[#c24e3f] hover:underline"
                     onClick={(e) => e.stopPropagation()}
                   >
@@ -254,7 +263,12 @@ export function PortfolioTab({ classId, artifacts, students, learningGoals }: Po
                   <SheetTitle className="text-[16px]">{detailArtifact.title}</SheetTitle>
                   <SheetDescription className="text-[13px]">
                     <Link
-                      href={`/students/${detailArtifact.studentId}?classId=${classId}`}
+                      href={
+                        embedded
+                          ? getAdminStudentWorkspaceHref(detailArtifact.studentId, { classId })
+                          : `/students/${detailArtifact.studentId}?classId=${classId}`
+                      }
+                      target={embedded ? "_top" : undefined}
                       className="text-[#c24e3f] hover:underline"
                     >
                       {artifactStudent ? `${artifactStudent.firstName} ${artifactStudent.lastName}` : "Unknown"}
@@ -403,13 +417,19 @@ export function PortfolioTab({ classId, artifacts, students, learningGoals }: Po
 
                   <Separator />
 
-                  <Link
-                    href={`/portfolio?studentId=${detailArtifact.studentId}&artifactId=${detailArtifact.id}&classId=${classId}`}
-                    className="flex items-center gap-2 text-[13px] font-medium text-[#c24e3f] hover:underline"
-                  >
-                    Open in Portfolio
-                    <ArrowRight className="h-3.5 w-3.5" />
-                  </Link>
+                  {!embedded ? (
+                    <Link
+                      href={`/portfolio?studentId=${detailArtifact.studentId}&artifactId=${detailArtifact.id}&classId=${classId}`}
+                      className="flex items-center gap-2 text-[13px] font-medium text-[#c24e3f] hover:underline"
+                    >
+                      Open in Portfolio
+                      <ArrowRight className="h-3.5 w-3.5" />
+                    </Link>
+                  ) : (
+                    <p className="text-[12px] text-muted-foreground">
+                      Portfolio detail stays in this drawer for admin because the full portfolio surface spans multiple classes.
+                    </p>
+                  )}
                 </div>
               </>
             );
