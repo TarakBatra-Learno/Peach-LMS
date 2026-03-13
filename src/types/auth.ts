@@ -1,6 +1,6 @@
 import { ID } from "./common";
 
-export type UserRole = "teacher" | "student" | "parent";
+export type UserRole = "teacher" | "student" | "parent" | "admin";
 
 export interface CurrentUser {
   id: ID;
@@ -16,3 +16,4 @@ export interface CurrentUser {
 /** Teacher persona IDs used in seed data */
 export const TEACHER_ID = "tchr_01";
 export const TEACHER_ALT_ID = "tchr_02";
+export const ADMIN_ID = "admin_01";

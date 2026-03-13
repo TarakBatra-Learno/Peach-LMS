@@ -3,7 +3,6 @@
 import { useState, useMemo, useEffect, useRef } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import { useStore } from "@/stores";
-import { PageHeader } from "@/components/shared/page-header";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { StatCard } from "@/components/shared/stat-card";
 import { EmptyState } from "@/components/shared/empty-state";
@@ -73,6 +72,7 @@ import { toast } from "sonner";
 import Link from "next/link";
 import type { GradeRecord, SubmissionStatus, ChecklistResultItem } from "@/types/gradebook";
 import type { Student } from "@/types/student";
+import type { Submission } from "@/types/submission";
 import type { GradingMode } from "@/types/common";
 import {
   isGradeComplete,
@@ -91,6 +91,11 @@ import { ChecklistBuilder } from "@/components/shared/checklist-builder";
 import { RubricTab } from "@/components/assessment-tabs/rubric-tab";
 import { RUBRIC_TEMPLATES } from "@/lib/constants";
 import type { ChecklistResponseStyle, ChecklistOutcomeModel } from "@/types/assessment";
+import { isSubmissionSubmitted } from "@/lib/submission-state";
+import {
+  getAdminClassWorkspaceHref,
+  getAdminStudentWorkspaceHref,
+} from "@/lib/admin-embed-routes";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -129,6 +134,7 @@ export default function AssessmentDetailPage() {
   const params = useParams();
   const searchParams = useSearchParams();
   const urlStudentId = searchParams.get("studentId");
+  const embedded = searchParams.get("embed") === "1";
   const assessmentId = params.assessmentId as string;
   const loading = useMockLoading([assessmentId]);
 
@@ -137,10 +143,9 @@ export default function AssessmentDetailPage() {
   const updateAssessment = useStore((s) => s.updateAssessment);
   const deleteAssessment = useStore((s) => s.deleteAssessment);
   const addAssessment = useStore((s) => s.addAssessment);
-  const getClassById = useStore((s) => s.getClassById);
-  const getStudentsByClassId = useStore((s) => s.getStudentsByClassId);
-  const getGradesByAssessment = useStore((s) => s.getGradesByAssessment);
-  const _gradesRef = useStore((s) => s.grades);
+  const classes = useStore((s) => s.classes);
+  const studentsState = useStore((s) => s.students);
+  const allGrades = useStore((s) => s.grades);
   const addGrade = useStore((s) => s.addGrade);
   const updateGrade = useStore((s) => s.updateGrade);
   const addAnnouncement = useStore((s) => s.addAnnouncement);
@@ -152,18 +157,36 @@ export default function AssessmentDetailPage() {
   const deleteCalendarEvent = useStore((s) => s.deleteCalendarEvent);
   const learningGoals = useStore((s) => s.learningGoals);
   const unitPlans = useStore((s) => s.unitPlans);
-  const getSubmissionsByAssessment = useStore((s) => s.getSubmissionsByAssessment);
+  const submissions = useStore((s) => s.submissions);
   const addStudentNotification = useStore((s) => s.addStudentNotification);
-  const classes = useStore((s) => s.classes);
   const closeAssessment = useStore((s) => s.closeAssessment);
   const reopenAssessment = useStore((s) => s.reopenAssessment);
   const amendGrade = useStore((s) => s.amendGrade);
 
   const assessment = assessments.find((a) => a.id === assessmentId);
-  const cls = assessment ? getClassById(assessment.classId) : undefined;
-  const students = assessment ? getStudentsByClassId(assessment.classId) : [];
-  const grades = getGradesByAssessment(assessmentId);
-  const allSubmissions = getSubmissionsByAssessment(assessmentId);
+  const cls = useMemo(
+    () => (assessment ? classes.find((entry) => entry.id === assessment.classId) : undefined),
+    [assessment, classes]
+  );
+  const students = useMemo(
+    () =>
+      cls ? studentsState.filter((student) => cls.studentIds.includes(student.id)) : [],
+    [cls, studentsState]
+  );
+  const grades = useMemo(
+    () => allGrades.filter((grade) => grade.assessmentId === assessmentId),
+    [allGrades, assessmentId]
+  );
+  const allSubmissions = useMemo(
+    () => submissions.filter((submission) => submission.assessmentId === assessmentId),
+    [submissions, assessmentId]
+  );
+  const getClassHref = (classId: string) =>
+    embedded ? getAdminClassWorkspaceHref(classId) : `/classes/${classId}`;
+  const getStudentHref = (studentId: string) =>
+    embedded
+      ? getAdminStudentWorkspaceHref(studentId, { classId: assessment?.classId ?? null })
+      : `/students/${studentId}?classId=${assessment?.classId}`;
 
   // Determine mode
   const isDraft = assessment?.status === "draft";
@@ -224,6 +247,9 @@ export default function AssessmentDetailPage() {
   // Options window state
   const [optionsOpen, setOptionsOpen] = useState(false);
   const [optionsStudent, setOptionsStudent] = useState<Student | null>(null);
+  const [submissionPreviewOpen, setSubmissionPreviewOpen] = useState(false);
+  const [submissionPreviewStudent, setSubmissionPreviewStudent] = useState<Student | null>(null);
+  const [submissionPreviewSubmission, setSubmissionPreviewSubmission] = useState<Submission | null>(null);
 
   // Confirm dialogs
   const [deleteConfirm, setDeleteConfirm] = useState(false);
@@ -409,6 +435,27 @@ export default function AssessmentDetailPage() {
     setGradingStandardsMastery,
   };
 
+  const handleOpenSubmissionPreview = (student: Student) => {
+    const submission = allSubmissions.find((entry) => entry.studentId === student.id);
+    if (!submission) return;
+    setSubmissionPreviewStudent(student);
+    setSubmissionPreviewSubmission(submission);
+    setSubmissionPreviewOpen(true);
+  };
+
+  const submissionPreviewCanOpenGrading =
+    !!assessment &&
+    !!submissionPreviewStudent &&
+    !!submissionPreviewSubmission &&
+    isSubmissionSubmitted(submissionPreviewSubmission) &&
+    (() => {
+      const previewGrade = grades.find(
+        (grade) => grade.studentId === submissionPreviewStudent.id
+      );
+      const previewStatus = getTeacherReviewStatus(previewGrade, assessment);
+      return previewStatus !== "pending" && previewStatus !== "excused";
+    })();
+
   const handleSaveGrade = () => {
     if (!assessment || !gradingStudent) return;
     const existingGrade = grades.find((g) => g.studentId === gradingStudent.id);
@@ -484,7 +531,6 @@ export default function AssessmentDetailPage() {
 
   const handleAmendUpdate = () => {
     if (!assessment || !gradingStudent) return;
-    const now = new Date().toISOString();
     const existingGrade = grades.find((g) => g.studentId === gradingStudent.id);
     if (!existingGrade) return;
 
@@ -1322,7 +1368,14 @@ export default function AssessmentDetailPage() {
               (() => {
                 const linkedUnit = unitPlans.find((u) => u.id === assessment.unitId);
                 return linkedUnit ? (
-                  <Link href={`/classes/${assessment.classId}?tab=units`}>
+                  <Link
+                    href={
+                      embedded
+                        ? getAdminClassWorkspaceHref(assessment.classId, { tab: "units" })
+                        : `/classes/${assessment.classId}?tab=units`
+                    }
+                    target={embedded ? "_top" : undefined}
+                  >
                     <Badge
                       variant="outline"
                       className="text-[11px] cursor-pointer hover:bg-muted"
@@ -1379,7 +1432,8 @@ export default function AssessmentDetailPage() {
                 <p className="text-[14px]">
                   {cls ? (
                     <Link
-                      href={`/classes/${cls.id}`}
+                      href={getClassHref(cls.id)}
+                      target={embedded ? "_top" : undefined}
                       className="text-[#c24e3f] hover:underline"
                     >
                       {cls.name}
@@ -1619,7 +1673,8 @@ export default function AssessmentDetailPage() {
                                   {student.lastName[0]}
                                 </div>
                                 <Link
-                                  href={`/students/${student.id}?classId=${assessment.classId}`}
+                                  href={getStudentHref(student.id)}
+                                  target={embedded ? "_top" : undefined}
                                   className="text-[13px] font-medium hover:text-[#c24e3f] transition-colors"
                                 >
                                   {student.firstName} {student.lastName}
@@ -1645,6 +1700,17 @@ export default function AssessmentDetailPage() {
                             </TableCell>
                             <TableCell className="text-right">
                               <div className="flex items-center gap-1.5 justify-end">
+                                {submission && (
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-7 text-[12px]"
+                                    onClick={() => handleOpenSubmissionPreview(student)}
+                                  >
+                                    View work
+                                  </Button>
+                                )}
+
                                 {/* Pending / Late → Options */}
                                 {status === "pending" && (
                                   <Button
@@ -1771,6 +1837,34 @@ export default function AssessmentDetailPage() {
         onSave={handleSaveGrade}
         onRelease={handleReleaseGrade}
         onAmendUpdate={handleAmendUpdate}
+      />
+
+      <SubmissionPreviewDrawer
+        open={submissionPreviewOpen}
+        onOpenChange={(open) => {
+          setSubmissionPreviewOpen(open);
+          if (!open) {
+            setSubmissionPreviewStudent(null);
+            setSubmissionPreviewSubmission(null);
+          }
+        }}
+        submission={submissionPreviewSubmission}
+        student={submissionPreviewStudent}
+        onGradeStudent={
+          submissionPreviewStudent && submissionPreviewCanOpenGrading && assessment
+            ? () => {
+                setSubmissionPreviewOpen(false);
+                const previewGrade = grades.find(
+                  (grade) => grade.studentId === submissionPreviewStudent.id
+                );
+                const previewStatus = getTeacherReviewStatus(previewGrade, assessment);
+                openGradingSheet(
+                  submissionPreviewStudent,
+                  previewStatus === "released"
+                );
+              }
+            : undefined
+        }
       />
 
       {/* Options Window */}

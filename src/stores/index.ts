@@ -320,9 +320,8 @@ export const useStore = create<AppStore>()(
       // Submissions
 
       // ── Private helper: sync Submission.status → GradeRecord.submissionStatus ──
-      // Called by addSubmission (first submit) and updateSubmission (resubmit).
-      // Fires for "submitted" and "resubmitted" (both mean "student has work to mark").
-      // Always sets GradeRecord.submissionStatus to "submitted" (teacher-facing = "To mark").
+      // Called by addSubmission and by updateSubmission when a draft becomes submitted.
+      // Sets GradeRecord.submissionStatus to "submitted" (teacher-facing = "To mark").
       // Guardrails:
       //   - Never touch excused GradeRecords (terminal state)
       //   - Never clear grade data fields (score, rubric, feedback, etc.)
@@ -384,7 +383,7 @@ export const useStore = create<AppStore>()(
         }));
 
         // ── Sync side-effect: Submission.status → GradeRecord.submissionStatus ──
-        // Fires for "submitted" transition.
+        // Fires when a submission transitions from draft to submitted.
         if (updates.status === "submitted") {
           const currentState = get();
           const updatedSub = currentState.submissions.find((sub) => sub.id === id);
@@ -657,7 +656,9 @@ export const useStore = create<AppStore>()(
       storage: createJSONStorage(() => localStorage),
       partialize: (state) => {
         // Don't persist UI transient state
-        const { ui, ...rest } = state;
+        const rest = Object.fromEntries(
+          Object.entries(state).filter(([key]) => key !== "ui")
+        ) as Record<string, unknown>;
         // Remove functions from what we persist
         const dataOnly: Record<string, unknown> = {};
         for (const [key, value] of Object.entries(rest)) {

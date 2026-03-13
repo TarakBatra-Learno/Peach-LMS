@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import {
   Sheet,
   SheetContent,
@@ -9,23 +8,20 @@ import {
   SheetDescription,
 } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
-import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { StatusBadge } from "@/components/shared/status-badge";
-import { FileText, Image, Link as LinkIcon, Clock, Send, RotateCcw } from "lucide-react";
+import { FileText, Image, Link as LinkIcon, Clock, Send, Save } from "lucide-react";
 import { format } from "date-fns";
-import { toast } from "sonner";
-import type { Submission, SubmissionAttachment } from "@/types/submission";
+import type { Submission } from "@/types/submission";
 import type { Student } from "@/types/student";
+import { getCanonicalSubmissionStatus } from "@/lib/submission-state";
 
 interface SubmissionPreviewDrawerProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   submission: Submission | null;
   student: Student | null;
-  onReturnWithFeedback: (submissionId: string, comment: string) => void;
   onGradeStudent?: () => void;
 }
 
@@ -42,34 +38,12 @@ export function SubmissionPreviewDrawer({
   onOpenChange,
   submission,
   student,
-  onReturnWithFeedback,
   onGradeStudent,
 }: SubmissionPreviewDrawerProps) {
-  const [returnComment, setReturnComment] = useState("");
-  const [showReturnForm, setShowReturnForm] = useState(false);
-
   if (!submission || !student) return null;
 
-  const handleReturn = () => {
-    if (!returnComment.trim()) {
-      toast.error("Please add feedback before returning");
-      return;
-    }
-    onReturnWithFeedback(submission.id, returnComment.trim());
-    setReturnComment("");
-    setShowReturnForm(false);
-    onOpenChange(false);
-    toast.success(`Submission returned to ${student.firstName} ${student.lastName}`);
-  };
-
-  const statusVariant =
-    submission.status === "submitted" || submission.status === "resubmitted"
-      ? "success"
-      : submission.status === "returned"
-      ? "warning"
-      : submission.status === "draft"
-      ? "info"
-      : "neutral";
+  const canonicalStatus = getCanonicalSubmissionStatus(submission.status) ?? "draft";
+  const statusVariant = canonicalStatus === "submitted" ? "success" : "info";
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -81,7 +55,7 @@ export function SubmissionPreviewDrawer({
           <SheetDescription className="text-[13px]">
             <span className="flex items-center gap-2">
               <StatusBadge
-                status={submission.status}
+                status={canonicalStatus}
                 variant={statusVariant}
               />
               {submission.isLate && (
@@ -96,22 +70,22 @@ export function SubmissionPreviewDrawer({
         <div className="space-y-5 mt-6">
           {/* Timeline */}
           <div className="space-y-2">
+            {submission.draftSavedAt && (
+              <div className="flex items-center gap-2 text-[12px] text-muted-foreground">
+                <Save className="h-3.5 w-3.5" />
+                Draft saved {format(new Date(submission.draftSavedAt), "MMM d, yyyy 'at' h:mm a")}
+              </div>
+            )}
             {submission.submittedAt && (
               <div className="flex items-center gap-2 text-[12px] text-muted-foreground">
-                <Clock className="h-3.5 w-3.5" />
+                <Send className="h-3.5 w-3.5" />
                 Submitted {format(new Date(submission.submittedAt), "MMM d, yyyy 'at' h:mm a")}
               </div>
             )}
-            {submission.returnedAt && (
+            {!submission.draftSavedAt && !submission.submittedAt && (
               <div className="flex items-center gap-2 text-[12px] text-muted-foreground">
-                <RotateCcw className="h-3.5 w-3.5" />
-                Returned {format(new Date(submission.returnedAt), "MMM d, yyyy 'at' h:mm a")}
-              </div>
-            )}
-            {submission.resubmittedAt && (
-              <div className="flex items-center gap-2 text-[12px] text-muted-foreground">
-                <Send className="h-3.5 w-3.5" />
-                Resubmitted {format(new Date(submission.resubmittedAt), "MMM d, yyyy 'at' h:mm a")}
+                <Clock className="h-3.5 w-3.5" />
+                Added {format(new Date(submission.createdAt), "MMM d, yyyy 'at' h:mm a")}
               </div>
             )}
           </div>
@@ -160,7 +134,7 @@ export function SubmissionPreviewDrawer({
             </div>
           )}
 
-          {/* Student reflection (if resubmission) */}
+          {/* Student reflection */}
           {submission.reflection && (
             <div>
               <p className="text-[12px] font-medium text-muted-foreground uppercase tracking-wide mb-2">
@@ -188,52 +162,9 @@ export function SubmissionPreviewDrawer({
 
           {/* Actions */}
           <div className="space-y-3">
-            {/* Return with feedback form */}
-            {(submission.status === "submitted" || submission.status === "resubmitted") && (
-              <>
-                {showReturnForm ? (
-                  <div className="space-y-3">
-                    <div>
-                      <Label className="text-[13px]">Feedback for student</Label>
-                      <Textarea
-                        value={returnComment}
-                        onChange={(e) => setReturnComment(e.target.value)}
-                        placeholder="Provide feedback on what needs to be revised..."
-                        className="mt-1.5 text-[13px] min-h-[80px]"
-                        autoFocus
-                      />
-                    </div>
-                    <div className="flex gap-2">
-                      <Button size="sm" onClick={handleReturn} disabled={!returnComment.trim()}>
-                        <RotateCcw className="h-3.5 w-3.5 mr-1.5" />
-                        Return with feedback
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => { setShowReturnForm(false); setReturnComment(""); }}
-                      >
-                        Cancel
-                      </Button>
-                    </div>
-                  </div>
-                ) : (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setShowReturnForm(true)}
-                  >
-                    <RotateCcw className="h-3.5 w-3.5 mr-1.5" />
-                    Return with feedback
-                  </Button>
-                )}
-              </>
-            )}
-
-            {/* Grade student button */}
             {onGradeStudent && (
               <Button size="sm" onClick={onGradeStudent}>
-                Grade this student
+                Open grading sheet
               </Button>
             )}
           </div>

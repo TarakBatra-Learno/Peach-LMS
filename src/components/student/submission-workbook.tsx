@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState } from "react";
 import { useStore } from "@/stores";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -28,6 +28,7 @@ import { format } from "date-fns";
 import { toast } from "sonner";
 import { generateId } from "@/services/mock-service";
 import type { Submission, SubmissionAttachment } from "@/types/submission";
+import { getCanonicalSubmissionStatus, isSubmissionSubmitted } from "@/lib/submission-state";
 
 interface SubmissionWorkbookProps {
   submission: Submission | undefined;
@@ -65,11 +66,12 @@ export function SubmissionWorkbook({
   const [attachments, setAttachments] = useState<SubmissionAttachment[]>(
     submission?.attachments ?? []
   );
-  const [reflection, setReflection] = useState(submission?.reflection ?? "");
   const [driveImportOpen, setDriveImportOpen] = useState(false);
   const [submitConfirm, setSubmitConfirm] = useState(false);
+  const reflection = submission?.reflection ?? "";
 
-  const isSubmitted = submission?.status === "submitted";
+  const canonicalStatus = getCanonicalSubmissionStatus(submission?.status);
+  const isSubmitted = isSubmissionSubmitted(submission);
   const canEdit = !isSubmitted;
 
   const handleSaveDraft = () => {
@@ -174,11 +176,11 @@ export function SubmissionWorkbook({
     // Has a draft or previous submission — show read-only so student can always access their work
     return (
       <Card className="p-5 gap-0 bg-muted/30">
-        <div className="flex items-center gap-2 mb-3">
+          <div className="flex items-center gap-2 mb-3">
           <StatusBadge
-            status={submission.status}
+            status={canonicalStatus ?? submission.status}
             variant="neutral"
-            label={getStudentStatusLabel(submission.status)}
+            label={getStudentStatusLabel(canonicalStatus ?? submission.status)}
           />
           <span className="text-[11px] text-muted-foreground">
             This assessment is no longer open for submissions.
@@ -223,21 +225,21 @@ export function SubmissionWorkbook({
             <div className="flex items-center gap-2">
               <StatusBadge
                 status={
-                  submission.status === "submitted" && submission.isLate
+                  canonicalStatus === "submitted" && submission.isLate
                     ? "submitted_late"
-                    : submission.status === "submitted"
+                    : canonicalStatus === "submitted"
                     ? "submitted_on_time"
-                    : submission.status
+                    : canonicalStatus ?? submission.status
                 }
                 showIcon={false}
               />
-              {submission.draftSavedAt && submission.status === "draft" && (
+              {submission.draftSavedAt && canonicalStatus === "draft" && (
                 <span className="text-[11px] text-muted-foreground flex items-center gap-1">
                   <Clock className="h-3 w-3" />
                   Saved {format(new Date(submission.draftSavedAt), "MMM d, h:mm a")}
                 </span>
               )}
-              {submission.submittedAt && submission.status === "submitted" && (
+              {submission.submittedAt && canonicalStatus === "submitted" && (
                 <span className="text-[11px] text-muted-foreground flex items-center gap-1">
                   <Clock className="h-3 w-3" />
                   Submitted {format(new Date(submission.submittedAt), "MMM d, h:mm a")}

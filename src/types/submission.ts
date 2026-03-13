@@ -9,8 +9,8 @@ import { ID } from "./common";
  *
  * - `"draft"` → student has saved but not submitted
  * - `"submitted"` → student has submitted work for review
- * - `"returned"` → @deprecated — return/resubmit path removed. Kept for backward compat.
- * - `"resubmitted"` → @deprecated — return/resubmit path removed. Kept for backward compat.
+ * - `"returned"` → @deprecated legacy value from the removed return/resubmit flow. Treat as `"draft"` in new code.
+ * - `"resubmitted"` → @deprecated legacy value from the removed return/resubmit flow. Treat as `"submitted"` in new code.
  */
 export type SubmissionLifecycleStatus = "draft" | "submitted" | "returned" | "resubmitted";
 
@@ -26,11 +26,11 @@ export interface SubmissionAttachment {
 /**
  * Submission — student-owned entity representing submitted work for an assessment.
  *
- * Persona ownership: SHARED (student advances lifecycle, teacher triggers "returned").
+ * Persona ownership: STUDENT for active demo flows.
  *
  * ⚠️ `Submission.status` and `GradeRecord.submissionStatus` are independent state machines.
- * When student submits (status → "submitted"), a store side-effect should sync
- * `GradeRecord.submissionStatus` to "submitted" so teacher "to mark" counts are accurate.
+ * When a student submits (status → "submitted"), store-side sync should update
+ * `GradeRecord.submissionStatus` to "submitted" so teacher "to mark" counts stay accurate.
  */
 export interface Submission {
   id: ID;
@@ -45,13 +45,13 @@ export interface Submission {
   draftSavedAt?: string;
   /** When the student submitted */
   submittedAt?: string;
-  /** @deprecated Return/resubmit path removed */
+  /** @deprecated Legacy field from removed return/resubmit flow */
   returnedAt?: string;
-  /** @deprecated Return/resubmit path removed */
+  /** @deprecated Legacy field from removed return/resubmit flow */
   resubmittedAt?: string;
-  /** @deprecated Return/resubmit path removed */
+  /** @deprecated Legacy field from removed return/resubmit flow */
   teacherComment?: string;
-  /** @deprecated Return/resubmit path removed */
+  /** Optional student reflection captured alongside the submission in older demo flows. */
   reflection?: string;
   /** Auto-set to true when the student submits after the assessment due date. Treat undefined as false. */
   isLate?: boolean;

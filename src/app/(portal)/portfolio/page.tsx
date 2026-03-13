@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useCallback, useEffect, useRef } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
 import { useStore } from "@/stores";
 import { PageHeader } from "@/components/shared/page-header";
@@ -96,14 +96,18 @@ export default function PortfolioPage() {
   const classes = useStore((s) => s.classes);
   const students = useStore((s) => s.students);
   const learningGoals = useStore((s) => s.learningGoals);
+  const reports = useStore((s) => s.reports);
+  const reportCycles = useStore((s) => s.reportCycles);
   const addArtifact = useStore((s) => s.addArtifact);
   const updateArtifact = useStore((s) => s.updateArtifact);
-  const updateStudent = useStore((s) => s.updateStudent);
-  const getPendingArtifacts = useStore((s) => s.getPendingArtifacts);
 
   // Dialog & sheet state
+  const searchParams = useSearchParams();
+  const urlStudentId = searchParams.get("studentId");
+  const urlArtifactId = searchParams.get("artifactId");
   const [createOpen, setCreateOpen] = useState(false);
-  const [detailArtifact, setDetailArtifact] = useState<PortfolioArtifact | null>(null);
+  const [manualDetailArtifact, setDetailArtifact] = useState<PortfolioArtifact | null>(null);
+  const [dismissedUrlArtifactId, setDismissedUrlArtifactId] = useState<string | null>(null);
 
   const activeClassId = useStore((s) => s.ui.activeClassId);
 
@@ -122,9 +126,9 @@ export default function PortfolioPage() {
   const [formGoalIds, setFormGoalIds] = useState<string[]>([]);
 
   // Detail sheet state
-  const [teacherComment, setTeacherComment] = useState("");
   const [familyPreviewOpen, setFamilyPreviewOpen] = useState(false);
-  const [studentReflectionText, setStudentReflectionText] = useState("");
+  const [teacherCommentDrafts, setTeacherCommentDrafts] = useState<Record<string, string>>({});
+  const [studentReflectionDrafts, setStudentReflectionDrafts] = useState<Record<string, string>>({});
 
   // Confirmation dialog state
   const [revisionConfirm, setRevisionConfirm] = useState<string | null>(null);
@@ -161,21 +165,36 @@ export default function PortfolioPage() {
   const approvedCount = useMemo(() => classFilteredArtifacts.filter((a) => a.approvalStatus === "approved").length, [classFilteredArtifacts]);
   const sharedCount = useMemo(() => classFilteredArtifacts.filter((a) => a.familyShareStatus === "shared" || a.familyShareStatus === "viewed").length, [classFilteredArtifacts]);
 
+  const urlStudentSearchQuery = useMemo(() => {
+    if (!urlStudentId) return "";
+    const student = students.find((entry) => entry.id === urlStudentId);
+    return student ? `${student.firstName} ${student.lastName}` : "";
+  }, [students, urlStudentId]);
+
+  const effectiveSearchQuery = searchQuery || urlStudentSearchQuery;
+
+  const linkedArtifactFromUrl = useMemo(() => {
+    if (!urlArtifactId || dismissedUrlArtifactId === urlArtifactId) return null;
+    return artifacts.find((artifact) => artifact.id === urlArtifactId) || null;
+  }, [artifacts, dismissedUrlArtifactId, urlArtifactId]);
+
+  const detailArtifact = manualDetailArtifact ?? linkedArtifactFromUrl;
+
   // Filtered artifacts for "All" tab
   const filteredArtifacts = useMemo(() => {
     return artifacts.filter((a) => {
       if (activeClassId && a.classId !== activeClassId) return false;
       if (mediaFilter !== "all" && a.mediaType !== mediaFilter) return false;
       if (statusFilter !== "all" && a.approvalStatus !== statusFilter) return false;
-      if (searchQuery) {
-        const q = searchQuery.toLowerCase();
+      if (effectiveSearchQuery) {
+        const q = effectiveSearchQuery.toLowerCase();
         const student = students.find((s) => s.id === a.studentId);
         const studentName = student ? `${student.firstName} ${student.lastName}`.toLowerCase() : "";
         if (!a.title.toLowerCase().includes(q) && !studentName.includes(q)) return false;
       }
       return true;
     });
-  }, [artifacts, activeClassId, mediaFilter, statusFilter, searchQuery, students]);
+  }, [artifacts, activeClassId, mediaFilter, statusFilter, effectiveSearchQuery, students]);
 
   // Helpers
   const getStudentName = useCallback(
@@ -202,6 +221,37 @@ export default function PortfolioPage() {
     },
     [classes, students]
   );
+
+  const linkedReports = useMemo(() => {
+    if (!detailArtifact) return [];
+
+    return reports
+      .filter(
+        (report) =>
+          report.studentId === detailArtifact.studentId &&
+          report.classId === detailArtifact.classId &&
+          report.sections.some((section) => {
+            if (
+              section.type !== "portfolio" &&
+              section.type !== "portfolio_evidence"
+            ) {
+              return false;
+            }
+
+            const artifactIds = (section.content?.artifactIds as string[] | undefined) || [];
+            return artifactIds.includes(detailArtifact.id);
+          })
+      )
+      .map((report) => ({
+        report,
+        cycle: reportCycles.find((cycle) => cycle.id === report.cycleId) ?? null,
+      }))
+      .sort((a, b) => {
+        const aDate = a.cycle?.endDate ?? "";
+        const bDate = b.cycle?.endDate ?? "";
+        return bDate.localeCompare(aDate);
+      });
+  }, [detailArtifact, reportCycles, reports]);
 
   // Create handler
   const handleCreate = () => {
@@ -258,11 +308,19 @@ export default function PortfolioPage() {
 
   const handleSaveTeacherComment = () => {
     if (!detailArtifact) return;
+    const teacherComment =
+      teacherCommentDrafts[detailArtifact.id] ??
+      detailArtifact.reflection?.teacherComment ??
+      "";
     saveTeacherComment(detailArtifact, teacherComment);
   };
 
   const handleSaveStudentReflection = () => {
     if (!detailArtifact) return;
+    const studentReflectionText =
+      studentReflectionDrafts[detailArtifact.id] ??
+      detailArtifact.reflection?.text ??
+      "";
     const now = new Date().toISOString();
     updateArtifact(detailArtifact.id, {
       reflection: {
@@ -297,34 +355,20 @@ export default function PortfolioPage() {
 
   const openDetail = (artifact: PortfolioArtifact) => {
     setDetailArtifact(artifact);
-    setTeacherComment(artifact.reflection?.teacherComment || "");
-    setStudentReflectionText(artifact.reflection?.text || "");
+    setDismissedUrlArtifactId(null);
   };
 
-  // Auto-filter and auto-open when arriving from a student profile or class detail
-  const searchParams = useSearchParams();
-  const urlStudentId = searchParams.get("studentId");
-  const urlArtifactId = searchParams.get("artifactId");
-  const autoOpenedRef = useRef(false);
+  const teacherCommentValue = detailArtifact
+    ? teacherCommentDrafts[detailArtifact.id] ??
+      detailArtifact.reflection?.teacherComment ??
+      ""
+    : "";
 
-  useEffect(() => {
-    if (autoOpenedRef.current) return;
-    // Filter to the student
-    if (urlStudentId && students.length > 0) {
-      const student = students.find((s) => s.id === urlStudentId);
-      if (student) {
-        setSearchQuery(`${student.firstName} ${student.lastName}`);
-      }
-    }
-    // Auto-open the artifact detail Sheet
-    if (urlArtifactId && artifacts.length > 0) {
-      const artifact = artifacts.find((a) => a.id === urlArtifactId);
-      if (artifact) {
-        autoOpenedRef.current = true;
-        openDetail(artifact);
-      }
-    }
-  }, [urlStudentId, urlArtifactId, students.length, artifacts.length]);
+  const studentReflectionValue = detailArtifact
+    ? studentReflectionDrafts[detailArtifact.id] ??
+      detailArtifact.reflection?.text ??
+      ""
+    : "";
 
   // Filter configs
   const mediaFilterOptions = [
@@ -697,7 +741,17 @@ export default function PortfolioPage() {
       </Dialog>
 
       {/* Artifact detail sheet */}
-      <Sheet open={!!detailArtifact} onOpenChange={(open) => { if (!open) setDetailArtifact(null); }}>
+      <Sheet
+        open={!!detailArtifact}
+        onOpenChange={(open) => {
+          if (!open) {
+            if (urlArtifactId) {
+              setDismissedUrlArtifactId(urlArtifactId);
+            }
+            setDetailArtifact(null);
+          }
+        }}
+      >
         <SheetContent className="w-full sm:max-w-[480px]">
           {detailArtifact && (
             <>
@@ -781,8 +835,13 @@ export default function PortfolioPage() {
                     </p>
                   )}
                   <Textarea
-                    value={studentReflectionText}
-                    onChange={(e) => setStudentReflectionText(e.target.value)}
+                    value={studentReflectionValue}
+                    onChange={(e) =>
+                      setStudentReflectionDrafts((prev) => ({
+                        ...prev,
+                        [detailArtifact.id]: e.target.value,
+                      }))
+                    }
                     placeholder="Add or edit student reflection..."
                     className="text-[13px] min-h-[70px]"
                   />
@@ -791,7 +850,7 @@ export default function PortfolioPage() {
                     variant="outline"
                     className="mt-2 h-7 text-[12px]"
                     onClick={handleSaveStudentReflection}
-                    disabled={!studentReflectionText.trim()}
+                    disabled={!studentReflectionValue.trim()}
                   >
                     Save reflection
                   </Button>
@@ -801,8 +860,13 @@ export default function PortfolioPage() {
                 <div>
                   <h4 className="text-[12px] font-medium text-muted-foreground uppercase tracking-wide mb-1.5">Teacher comment</h4>
                   <Textarea
-                    value={teacherComment}
-                    onChange={(e) => setTeacherComment(e.target.value)}
+                    value={teacherCommentValue}
+                    onChange={(e) =>
+                      setTeacherCommentDrafts((prev) => ({
+                        ...prev,
+                        [detailArtifact.id]: e.target.value,
+                      }))
+                    }
                     placeholder="Add your feedback for this artifact..."
                     className="text-[13px] min-h-[80px]"
                   />
@@ -811,7 +875,7 @@ export default function PortfolioPage() {
                     variant="outline"
                     className="mt-2 h-7 text-[12px]"
                     onClick={handleSaveTeacherComment}
-                    disabled={!teacherComment.trim()}
+                    disabled={!teacherCommentValue.trim()}
                   >
                     Save comment
                   </Button>
@@ -923,6 +987,51 @@ export default function PortfolioPage() {
                       onCheckedChange={handleToggleReportEligible}
                     />
                   </div>
+                </div>
+
+                <Separator />
+
+                <div>
+                  <div className="flex items-center gap-1.5 mb-1.5">
+                    <FileText className="h-3.5 w-3.5 text-muted-foreground" />
+                    <h4 className="text-[12px] font-medium text-muted-foreground uppercase tracking-wide">Used in reports</h4>
+                  </div>
+                  {linkedReports.length === 0 ? (
+                    <p className="text-[12px] text-muted-foreground">
+                      {detailArtifact.isReportEligible
+                        ? "Marked for report use, but not attached to a report yet."
+                        : "Not currently linked to a report."}
+                    </p>
+                  ) : (
+                    <div className="space-y-2">
+                      {linkedReports.map(({ report, cycle }) => (
+                        <div
+                          key={report.id}
+                          className="rounded-lg border border-border/50 p-3"
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <NextLink
+                                href={`/reports/${report.id}?cycleId=${report.cycleId}`}
+                                className="text-[13px] font-medium text-[#c24e3f] hover:underline"
+                              >
+                                {cycle?.name || "Report"}
+                              </NextLink>
+                              <p className="text-[12px] text-muted-foreground">
+                                {cycle?.term || "Cycle unavailable"} · {getClassName(report.classId)}
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-1.5">
+                              <StatusBadge status={report.publishState} />
+                              {report.distributionStatus === "completed" && (
+                                <StatusBadge status="distributed" />
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
                 <Separator />

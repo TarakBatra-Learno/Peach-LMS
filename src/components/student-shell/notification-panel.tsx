@@ -4,8 +4,6 @@ import { useMemo } from "react";
 import { useStore } from "@/stores";
 import { useStudentId } from "@/lib/hooks/use-current-user";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
 import {
   Popover,
   PopoverContent,
@@ -21,9 +19,10 @@ import {
   FolderOpen,
   AlertCircle,
 } from "lucide-react";
-import { format, formatDistanceToNow } from "date-fns";
+import { formatDistance } from "date-fns";
 import type { NotificationType } from "@/types/notification";
 import Link from "next/link";
+import { getDemoNow } from "@/lib/demo-time";
 
 const NOTIFICATION_ICONS: Record<NotificationType, typeof Bell> = {
   grade_released: CheckCircle2,
@@ -142,7 +141,9 @@ export function NotificationPanel() {
                         {notification.body}
                       </p>
                       <p className="text-[11px] text-muted-foreground mt-1">
-                        {formatDistanceToNow(new Date(notification.createdAt), { addSuffix: true })}
+                        {formatDistance(new Date(notification.createdAt), getDemoNow(), {
+                          addSuffix: true,
+                        })}
                       </p>
                     </div>
                   </div>

@@ -6,16 +6,17 @@ import { PageHeader } from "@/components/shared/page-header";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { StatusBadge } from "@/components/shared/status-badge";
-import { BookOpen, ClipboardCheck, Target, Bell, Calendar, Clock } from "lucide-react";
-import { getStudentClasses, getStudentAssessments, getStudentReleasedGrades, getStudentTimetable, getStudentSubmission, getStudentSubmissionStatus } from "@/lib/student-selectors";
-import { useEffect, useState, useMemo } from "react";
-import { format } from "date-fns";
+import { BookOpen, ClipboardCheck, Target, Bell, Calendar, Clock, Route, ArrowUpRight } from "lucide-react";
+import { getStudentClasses, getStudentAssessments, getStudentReleasedGrades, getStudentTimetable, getStudentSubmission, getStudentSubmissionStatus, type StudentSubmissionStatus } from "@/lib/student-selectors";
+import { useEffect, useMemo, useState } from "react";
+import { differenceInCalendarDays, format } from "date-fns";
 import Link from "next/link";
 import type { AppState } from "@/stores/types";
 import { StudentClassFilter } from "@/components/student/student-class-filter";
 import { DashboardAnnouncementsPanel } from "@/components/student/dashboard-announcements-panel";
 import { useReleasedAssessmentClick } from "@/lib/hooks/use-released-assessment-click";
 import { GradeResultSheet } from "@/components/student/grade-result-sheet";
+import { getDemoNow } from "@/lib/demo-time";
 
 function StatCardSkeleton() {
   return (
@@ -29,10 +30,41 @@ function StatCardSkeleton() {
 
 export default function StudentHomePage() {
   const studentId = useStudentId();
+  const resolvedStudentId = studentId ?? "";
   const currentUser = useStore((s) => s.currentUser);
   const studentActiveClassId = useStore((s) => s.ui.studentActiveClassId);
   const state = useStore() as AppState;
   const [ready, setReady] = useState(false);
+  const { handleClick: handleGradeClick, sheetProps } = useReleasedAssessmentClick(resolvedStudentId);
+
+  const classes = getStudentClasses(state, resolvedStudentId);
+  const assessments = getStudentAssessments(state, resolvedStudentId);
+  const releasedGrades = getStudentReleasedGrades(state, resolvedStudentId);
+  const notifications = state.studentNotifications.filter((n) => n.studentId === resolvedStudentId && !n.read);
+
+  const now = getDemoNow();
+  const today = format(now, "yyyy-MM-dd");
+  const todaySchedule = getStudentTimetable(state, resolvedStudentId, today, today);
+  const activeGoals = state.studentGoals.filter(
+    (goal) => goal.studentId === resolvedStudentId && goal.status === "active"
+  );
+  const filteredAssessments = studentActiveClassId
+    ? assessments.filter((assessment) => assessment.classId === studentActiveClassId)
+    : assessments;
+  const submissionStatusByAssessmentId = useMemo(() => {
+    const entries = filteredAssessments.map((assessment) => {
+      const submission = getStudentSubmission(state, resolvedStudentId, assessment.id);
+      const grade = state.grades.find(
+        (entry) => entry.studentId === resolvedStudentId && entry.assessmentId === assessment.id
+      );
+      return [
+        assessment.id,
+        getStudentSubmissionStatus(grade, submission, assessment),
+      ] as const;
+    });
+
+    return new Map<string, StudentSubmissionStatus>(entries);
+  }, [filteredAssessments, resolvedStudentId, state]);
 
   useEffect(() => {
     // Simulate brief loading for skeleton demo
@@ -51,35 +83,128 @@ export default function StudentHomePage() {
     );
   }
 
-  const classes = getStudentClasses(state, studentId);
-  const assessments = getStudentAssessments(state, studentId);
-  const releasedGrades = getStudentReleasedGrades(state, studentId);
-  const notifications = state.studentNotifications.filter((n) => n.studentId === studentId && !n.read);
-
-  // Current date reference
-  const now = new Date();
-
-  // Today's schedule
-  const today = format(now, "yyyy-MM-dd");
-  const todaySchedule = useMemo(
-    () => getStudentTimetable(state, studentId, today, today),
-    [state, studentId, today]
-  );
-
   // Upcoming assessments (due in the future), filtered by active class when set
-  const upcomingAssessments = assessments
-    .filter((a) => new Date(a.dueDate) >= now)
-    .filter((a) => !studentActiveClassId || a.classId === studentActiveClassId)
+  const upcomingAssessments = filteredAssessments
+    .filter((a) => {
+      const due = new Date(a.dueDate);
+      due.setHours(23, 59, 59, 999);
+      return due >= now;
+    })
     .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime())
     .slice(0, 5);
+
+  const dueThisWeekCount = filteredAssessments.filter((assessment) => {
+    const due = new Date(assessment.dueDate);
+    due.setHours(23, 59, 59, 999);
+    const daysUntil = differenceInCalendarDays(due, now);
+    const status = submissionStatusByAssessmentId.get(assessment.id);
+    return (
+      daysUntil >= 0 &&
+      daysUntil <= 7 &&
+      status !== "submitted_on_time" &&
+      status !== "submitted_late" &&
+      status !== "excused"
+    );
+  }).length;
 
   // Filtered released grades when class filter is active
   const filteredGrades = studentActiveClassId
     ? releasedGrades.filter((g) => g.classId === studentActiveClassId)
     : releasedGrades;
+  const recentReleasedGrades = [...filteredGrades]
+    .sort((a, b) => {
+      const aTime = a.releasedAt ?? a.gradedAt ?? "";
+      const bTime = b.releasedAt ?? b.gradedAt ?? "";
+      return bTime.localeCompare(aTime);
+    })
+    .slice(0, 5);
+
+  const actionQueue = (() => {
+    const items: {
+      id: string;
+      title: string;
+      subtitle: string;
+      href: string;
+      badge: "draft" | "due" | "overdue" | "graded";
+      meta: string;
+    }[] = [];
+
+    for (const assessment of filteredAssessments) {
+      const status = submissionStatusByAssessmentId.get(assessment.id) ?? "due";
+      const due = new Date(assessment.dueDate);
+      due.setHours(23, 59, 59, 999);
+      const daysUntil = differenceInCalendarDays(due, now);
+      const subtitle = classes.find((entry) => entry.id === assessment.classId)?.name ?? "Class";
+
+      if (status === "draft") {
+        items.push({
+          id: `draft-${assessment.id}`,
+          title: assessment.title,
+          subtitle,
+          href: `/student/classes/${assessment.classId}/assessments/${assessment.id}`,
+          badge: "draft",
+          meta:
+            daysUntil <= 0
+              ? "Finish and submit today"
+              : daysUntil === 1
+              ? "Draft due tomorrow"
+              : `Draft due in ${daysUntil} days`,
+        });
+        continue;
+      }
+
+      if (status === "overdue") {
+        items.push({
+          id: `overdue-${assessment.id}`,
+          title: assessment.title,
+          subtitle,
+          href: `/student/classes/${assessment.classId}/assessments/${assessment.id}`,
+          badge: "overdue",
+          meta: "This work is overdue",
+        });
+        continue;
+      }
+
+      if (status === "due" && daysUntil <= 2) {
+        items.push({
+          id: `due-${assessment.id}`,
+          title: assessment.title,
+          subtitle,
+          href: `/student/classes/${assessment.classId}/assessments/${assessment.id}`,
+          badge: "due",
+          meta: daysUntil === 0 ? "Due today" : "Due tomorrow",
+        });
+      }
+    }
+
+    for (const grade of recentReleasedGrades.filter((entry) => entry.reportStatus === "unseen")) {
+      const assessment = state.assessments.find((entry) => entry.id === grade.assessmentId);
+      if (!assessment) continue;
+      const subtitle = classes.find((entry) => entry.id === grade.classId)?.name ?? "Class";
+      items.push({
+        id: `grade-${grade.id}`,
+        title: assessment.title,
+        subtitle,
+        href: `/student/classes/${assessment.classId}/assessments/${assessment.id}`,
+        badge: "graded",
+        meta: "New released feedback",
+      });
+    }
+
+    const priority: Record<string, number> = {
+      overdue: 0,
+      draft: 1,
+      due: 2,
+      graded: 3,
+    };
+
+    return items
+      .sort((a, b) => priority[a.badge] - priority[b.badge])
+      .slice(0, 4);
+  })();
+  const highlightedFeedbackCount = actionQueue.filter((item) => item.badge === "graded").length;
 
   const firstName = currentUser?.name?.split(" ")[0] ?? "Student";
-  const { handleClick: handleGradeClick, sheetProps } = useReleasedAssessmentClick(studentId ?? "");
 
   if (!ready) {
     return (
@@ -127,42 +252,96 @@ export default function StudentHomePage() {
         </div>
       </div>
 
+      <Card className="p-5 gap-0">
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <div>
+            <h2 className="text-[16px] font-semibold flex items-center gap-2">
+              <Route className="h-4 w-4 text-[#c24e3f]" />
+              What needs attention
+            </h2>
+            <p className="mt-1 text-[12px] text-muted-foreground">
+              Priority items based on your draft work, due dates, and newly released feedback.
+            </p>
+          </div>
+          <StatusBadge
+            status={actionQueue.length > 0 ? "active" : "completed"}
+            label={actionQueue.length > 0 ? `${actionQueue.length} action items` : "All caught up"}
+            showIcon={false}
+            className="text-[10px]"
+          />
+        </div>
+
+        {actionQueue.length === 0 ? (
+          <p className="text-[13px] text-muted-foreground py-4 text-center">
+            Nothing urgent right now. Check your schedule or recent feedback when you&apos;re ready.
+          </p>
+        ) : (
+          <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
+            {actionQueue.map((item) => (
+              <Link
+                key={item.id}
+                href={item.href}
+                className="rounded-[16px] border border-border p-4 transition-colors hover:bg-muted/40"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-[14px] font-medium">{item.title}</p>
+                    <p className="mt-1 text-[12px] text-muted-foreground">{item.subtitle}</p>
+                    <p className="mt-2 text-[12px] text-foreground/80">{item.meta}</p>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <StatusBadge status={item.badge} showIcon={false} className="text-[10px]" />
+                    <ArrowUpRight className="h-4 w-4 text-muted-foreground" />
+                  </div>
+                </div>
+              </Link>
+            ))}
+          </div>
+        )}
+      </Card>
+
       {/* Stat Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card className="p-5">
           <div className="flex items-center gap-2 text-muted-foreground text-[13px] mb-1">
-            <BookOpen className="h-4 w-4" />
-            My Classes
+            <Route className="h-4 w-4" />
+            Needs Attention
           </div>
-          <div className="text-[28px] font-semibold">{classes.length}</div>
-          <p className="text-[12px] text-muted-foreground">Enrolled classes</p>
+          <div className="text-[28px] font-semibold">{actionQueue.length}</div>
+          <p className="text-[12px] text-muted-foreground">
+            {highlightedFeedbackCount > 0 ? `${highlightedFeedbackCount} feedback item${highlightedFeedbackCount === 1 ? "" : "s"} highlighted` : "No new release alerts"}
+          </p>
         </Card>
 
         <Card className="p-5">
           <div className="flex items-center gap-2 text-muted-foreground text-[13px] mb-1">
             <ClipboardCheck className="h-4 w-4" />
-            Assessments
+            Due This Week
           </div>
-          <div className="text-[28px] font-semibold">{assessments.length}</div>
-          <p className="text-[12px] text-muted-foreground">{upcomingAssessments.length} upcoming</p>
+          <div className="text-[28px] font-semibold">{dueThisWeekCount}</div>
+          <p className="text-[12px] text-muted-foreground">{upcomingAssessments.length} upcoming overall</p>
         </Card>
 
         <Card className="p-5">
           <div className="flex items-center gap-2 text-muted-foreground text-[13px] mb-1">
             <Target className="h-4 w-4" />
-            Grades Released
+            Released Results
           </div>
-          <div className="text-[28px] font-semibold">{releasedGrades.length}</div>
-          <p className="text-[12px] text-muted-foreground">Across all classes</p>
+          <div className="text-[28px] font-semibold">{filteredGrades.length}</div>
+          <p className="text-[12px] text-muted-foreground">
+            {recentReleasedGrades.length} recent shown below
+          </p>
         </Card>
 
         <Card className="p-5">
           <div className="flex items-center gap-2 text-muted-foreground text-[13px] mb-1">
-            <Bell className="h-4 w-4" />
-            Notifications
+            <BookOpen className="h-4 w-4" />
+            Active Goals
           </div>
-          <div className="text-[28px] font-semibold">{notifications.length}</div>
-          <p className="text-[12px] text-muted-foreground">Unread</p>
+          <div className="text-[28px] font-semibold">{activeGoals.length}</div>
+          <p className="text-[12px] text-muted-foreground">
+            {classes.length} enrolled class{classes.length === 1 ? "" : "es"}
+          </p>
         </Card>
       </div>
 
@@ -183,7 +362,7 @@ export default function StudentHomePage() {
               {upcomingAssessments.map((asmt) => {
                 const cls = classes.find((c) => c.id === asmt.classId);
                 const dueDate = new Date(asmt.dueDate);
-                const daysUntil = Math.ceil((dueDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+                const daysUntil = differenceInCalendarDays(dueDate, now);
                 return (
                   <Link
                     key={asmt.id}
@@ -196,9 +375,9 @@ export default function StudentHomePage() {
                     </div>
                     <div className="flex items-center gap-2 shrink-0 ml-3">
                       {(() => {
-                        const sub = getStudentSubmission(state, studentId, asmt.id);
-                        const rawGrade = state.grades.find((g: any) => g.studentId === studentId && g.assessmentId === asmt.id);
-                        const subStatus = getStudentSubmissionStatus(rawGrade, sub, asmt as any);
+                        const sub = getStudentSubmission(state, resolvedStudentId, asmt.id);
+                        const rawGrade = state.grades.find((g) => g.studentId === resolvedStudentId && g.assessmentId === asmt.id);
+                        const subStatus = getStudentSubmissionStatus(rawGrade, sub, asmt);
                         if (subStatus !== "due") return <StatusBadge status={subStatus} showIcon={false} className="text-[10px]" />;
                         return (
                           <span className={`text-[12px] font-medium ${daysUntil <= 2 ? "text-[#dc2626]" : "text-muted-foreground"}`}>
@@ -214,11 +393,11 @@ export default function StudentHomePage() {
           )}
         </Card>
 
-        {/* Recent Grades */}
+        {/* Recently Released Feedback */}
         <Card className="p-5 gap-0">
           <h2 className="text-[16px] font-semibold mb-4 flex items-center gap-2">
             <Target className="h-4 w-4 text-muted-foreground" />
-            Recent Grades
+            Recently Released Feedback
           </h2>
           {filteredGrades.length === 0 ? (
             <p className="text-[13px] text-muted-foreground py-4 text-center">
@@ -226,7 +405,7 @@ export default function StudentHomePage() {
             </p>
           ) : (
             <div className="space-y-2">
-              {filteredGrades.slice(0, 5).map((grade) => {
+              {recentReleasedGrades.map((grade) => {
                 const assessment = state.assessments.find((a) => a.id === grade.assessmentId);
                 const cls = classes.find((c) => c.id === grade.classId);
                 const isExcused = grade.submissionStatus === "excused";
@@ -252,7 +431,9 @@ export default function StudentHomePage() {
                         {display}
                       </span>
                       {grade.reportStatus === "unseen" && (
-                        <span className="w-2 h-2 rounded-full bg-[#2563eb] shrink-0" title="New" />
+                        <span className="rounded-full bg-[#dbeafe] px-2 py-0.5 text-[10px] font-medium text-[#2563eb]">
+                          New
+                        </span>
                       )}
                     </div>
                   </div>
@@ -309,16 +490,17 @@ export default function StudentHomePage() {
           ) : (
             <div className="space-y-2">
               {notifications.slice(0, 5).map((notif) => (
-                <div
+                <Link
                   key={notif.id}
-                  className="flex items-start gap-2 py-2 px-3 rounded-lg border border-border bg-muted/30"
+                  href={notif.linkTo ?? "/student/messages"}
+                  className="flex items-start gap-2 rounded-lg border border-border bg-muted/30 px-3 py-2 transition-colors hover:bg-muted/60"
                 >
                   <div className="h-2 w-2 rounded-full bg-[#c24e3f] mt-2 shrink-0" />
                   <div className="min-w-0">
                     <p className="text-[13px] font-medium">{notif.title}</p>
                     <p className="text-[12px] text-muted-foreground line-clamp-1">{notif.body}</p>
                   </div>
-                </div>
+                </Link>
               ))}
             </div>
           )}

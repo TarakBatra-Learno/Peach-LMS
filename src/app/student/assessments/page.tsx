@@ -16,9 +16,11 @@ import { StudentAssessmentCard } from "@/components/student/student-assessment-c
 import { PageHeader } from "@/components/shared/page-header";
 import { EmptyState } from "@/components/shared/empty-state";
 import { DetailSkeleton } from "@/components/shared/skeleton-loader";
+import { StatCard } from "@/components/shared/stat-card";
 import { useMockLoading } from "@/lib/hooks/use-mock-loading";
-import { ClipboardCheck } from "lucide-react";
+import { BellRing, CheckCircle2, ClipboardCheck, Clock3, AlertTriangle } from "lucide-react";
 import type { AppState } from "@/stores/types";
+import { getDemoNow } from "@/lib/demo-time";
 
 type FilterKey = "upcoming" | "past_due" | "submitted" | "graded";
 
@@ -46,7 +48,7 @@ export default function StudentAssessmentsPage() {
   const filteredAssessments = useMemo(() => {
     if (!activeFilter || !studentId) return allAssessments;
 
-    const now = new Date();
+    const now = getDemoNow();
 
     return allAssessments.filter((a) => {
       switch (activeFilter) {
@@ -57,14 +59,14 @@ export default function StudentAssessmentsPage() {
         }
         case "past_due": {
           const submission = getStudentSubmission(state, studentId, a.id);
-          const rawGrade = state.grades.find((g: any) => g.studentId === studentId && g.assessmentId === a.id);
-          const status = getStudentSubmissionStatus(rawGrade, submission, a as any);
+          const rawGrade = state.grades.find((g) => g.studentId === studentId && g.assessmentId === a.id);
+          const status = getStudentSubmissionStatus(rawGrade, submission, a);
           return status === "overdue";
         }
         case "submitted": {
           const submission = getStudentSubmission(state, studentId, a.id);
-          const rawGrade = state.grades.find((g: any) => g.studentId === studentId && g.assessmentId === a.id);
-          const status = getStudentSubmissionStatus(rawGrade, submission, a as any);
+          const rawGrade = state.grades.find((g) => g.studentId === studentId && g.assessmentId === a.id);
+          const status = getStudentSubmissionStatus(rawGrade, submission, a);
           return status === "submitted_on_time" || status === "submitted_late";
         }
         case "graded": {
@@ -93,7 +95,7 @@ export default function StudentAssessmentsPage() {
       const className = cls?.name ?? classId;
 
       // Sort: upcoming ascending (nearest first), past descending (most recent first)
-      const now = new Date();
+      const now = getDemoNow();
       const sorted = [...assessments].sort((a, b) => {
         const dueA = new Date(a.dueDate);
         const dueB = new Date(b.dueDate);
@@ -122,6 +124,37 @@ export default function StudentAssessmentsPage() {
 
     return groups;
   }, [filteredAssessments, classes]);
+
+  const assessmentStats = useMemo(() => {
+    if (!studentId) {
+      return { upcoming: 0, overdue: 0, submitted: 0, released: 0 };
+    }
+
+    let upcoming = 0;
+    let overdue = 0;
+    let submitted = 0;
+    let released = 0;
+    const now = getDemoNow();
+
+    for (const assessment of allAssessments) {
+      const submission = getStudentSubmission(state, studentId, assessment.id);
+      const rawGrade = state.grades.find(
+        (grade) => grade.studentId === studentId && grade.assessmentId === assessment.id
+      );
+      const status = getStudentSubmissionStatus(rawGrade, submission, assessment);
+      const due = new Date(assessment.dueDate);
+      due.setHours(23, 59, 59, 999);
+
+      if (due >= now) upcoming++;
+      if (status === "overdue") overdue++;
+      if (status === "submitted_on_time" || status === "submitted_late") submitted++;
+      if (getStudentReleasedGrades(state, studentId).some((grade) => grade.assessmentId === assessment.id)) {
+        released++;
+      }
+    }
+
+    return { upcoming, overdue, submitted, released };
+  }, [allAssessments, state, studentId]);
 
   if (loading) return <DetailSkeleton />;
 
@@ -153,6 +186,13 @@ export default function StudentAssessmentsPage() {
             {f.label}
           </button>
         ))}
+      </div>
+
+      <div className="grid gap-4 mb-6 md:grid-cols-4">
+        <StatCard label="Upcoming" value={assessmentStats.upcoming} icon={Clock3} />
+        <StatCard label="Needs Attention" value={assessmentStats.overdue} icon={AlertTriangle} />
+        <StatCard label="Submitted" value={assessmentStats.submitted} icon={CheckCircle2} />
+        <StatCard label="Released Results" value={assessmentStats.released} icon={BellRing} />
       </div>
 
       {filteredAssessments.length === 0 ? (

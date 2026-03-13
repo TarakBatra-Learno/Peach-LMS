@@ -9,7 +9,6 @@ import {
   getStudentReleasedGrades,
   getStudentSubmissionStatus,
 } from "@/lib/student-selectors";
-import { isAssessmentPastDue } from "@/lib/student-permissions";
 import type { StudentAssessmentView } from "@/lib/student-permissions";
 import { Calendar, ChevronRight } from "lucide-react";
 import { format } from "date-fns";
@@ -43,7 +42,7 @@ export function StudentAssessmentCard({
   const submissionStatus = getStudentSubmissionStatus(
     grade,
     submission,
-    assessment as any
+    assessment
   );
 
   // Teacher marking status (only relevant when submitted)
@@ -55,7 +54,7 @@ export function StudentAssessmentCard({
     : undefined;
 
   // Map submission status to badge key
-  const submissionBadgeKey = submissionStatus; // "due" | "overdue" | "excused" | "submitted_on_time" | "submitted_late"
+  const submissionBadgeKey = submissionStatus;
 
   const handleClick = () => {
     if (isGraded && onGradeClick) {
@@ -93,7 +92,7 @@ export function StudentAssessmentCard({
             {/* Submission status badge */}
             <StatusBadge status={submissionBadgeKey} showIcon={false} />
             {/* Show arrow for actionable states */}
-            {(submissionStatus === "due" || submissionStatus === "overdue") && (
+            {(submissionStatus === "due" || submissionStatus === "overdue" || submissionStatus === "draft") && (
               <ChevronRight className="h-4 w-4 text-muted-foreground" />
             )}
           </div>

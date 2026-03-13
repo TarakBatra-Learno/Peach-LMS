@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useParams, useSearchParams, useRouter } from "next/navigation";
 import { useStore } from "@/stores";
 import { PageHeader } from "@/components/shared/page-header";
@@ -71,6 +71,11 @@ import { getGradePercentage, getGradeCellDisplay, isGradeComplete, getStudentAss
 import { useArtifactActions } from "@/lib/hooks/use-artifact-actions";
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import { StudentStandardsTab } from "@/components/student-tabs/student-standards-tab";
+import {
+  getAdminClassWorkspaceHref,
+  getAdminStudentAssessmentHref,
+  getAdminStudentReportHref,
+} from "@/lib/admin-embed-routes";
 
 export default function StudentProfilePage() {
   const params = useParams();
@@ -79,29 +84,51 @@ export default function StudentProfilePage() {
   const studentId = params.studentId as string;
   const urlClassId = searchParams.get("classId");
   const loading = useMockLoading([studentId]);
+  const embedded = searchParams.get("embed") === "1";
+  const adminPreview = searchParams.get("admin") === "1";
+  const adminReturnTo = searchParams.get("from") ?? "/admin/students";
 
-  const getStudentById = useStore((s) => s.getStudentById);
+  const allStudents = useStore((s) => s.students);
   const classes = useStore((s) => s.classes);
-  const getGradesByStudent = useStore((s) => s.getGradesByStudent);
+  const allGrades = useStore((s) => s.grades);
   const assessments = useStore((s) => s.assessments);
-  const getArtifactsByStudent = useStore((s) => s.getArtifactsByStudent);
-  const getSessionsByStudent = useStore((s) => s.getSessionsByStudent);
-  const getReportsByStudent = useStore((s) => s.getReportsByStudent);
+  const allArtifacts = useStore((s) => s.artifacts);
+  const allSessions = useStore((s) => s.attendanceSessions);
+  const allReports = useStore((s) => s.reports);
   const reportCycles = useStore((s) => s.reportCycles);
-  const getIncidentsByStudent = useStore((s) => s.getIncidentsByStudent);
-  const getSupportPlansByStudent = useStore((s) => s.getSupportPlansByStudent);
+  const allIncidents = useStore((s) => s.incidents);
+  const allSupportPlans = useStore((s) => s.supportPlans);
   const addSupportPlan = useStore((s) => s.addSupportPlan);
   const updateArtifact = useStore((s) => s.updateArtifact);
-  const updateStudent = useStore((s) => s.updateStudent);
-  const students = useStore((s) => s.students);
 
-  const student = getStudentById(studentId);
-  const studentGrades = getGradesByStudent(studentId);
-  const artifacts = getArtifactsByStudent(studentId);
-  const sessions = getSessionsByStudent(studentId);
-  const reports = getReportsByStudent(studentId);
-  const incidents = getIncidentsByStudent(studentId);
-  const supportPlans = getSupportPlansByStudent(studentId);
+  const student = useMemo(
+    () => allStudents.find((entry) => entry.id === studentId),
+    [allStudents, studentId]
+  );
+  const studentGrades = useMemo(
+    () => allGrades.filter((grade) => grade.studentId === studentId),
+    [allGrades, studentId]
+  );
+  const artifacts = useMemo(
+    () => allArtifacts.filter((artifact) => artifact.studentId === studentId),
+    [allArtifacts, studentId]
+  );
+  const sessions = useMemo(
+    () => allSessions.filter((session) => session.records.some((record) => record.studentId === studentId)),
+    [allSessions, studentId]
+  );
+  const reports = useMemo(
+    () => allReports.filter((report) => report.studentId === studentId),
+    [allReports, studentId]
+  );
+  const incidents = useMemo(
+    () => allIncidents.filter((incident) => incident.studentId === studentId),
+    [allIncidents, studentId]
+  );
+  const supportPlans = useMemo(
+    () => allSupportPlans.filter((plan) => plan.studentId === studentId),
+    [allSupportPlans, studentId]
+  );
 
   const learningGoals = useStore((s) => s.learningGoals);
   const unitPlans = useStore((s) => s.unitPlans);
@@ -187,6 +214,31 @@ export default function StudentProfilePage() {
     ? unitPlans.filter((u) => u.classId === validClassFilter)
     : [];
 
+  const getClassHref = (classId: string, tab?: string | null) => {
+    if (embedded) {
+      return getAdminClassWorkspaceHref(classId, { tab });
+    }
+    return `/classes/${classId}${
+      adminPreview ? `?admin=1&from=${encodeURIComponent(adminReturnTo)}` : ""
+    }`;
+  };
+  const getReportHref = (reportId: string, reportClassId?: string | null) => {
+    if (embedded) {
+      return getAdminStudentReportHref(studentId, reportId, {
+        classId: reportClassId ?? validClassFilter,
+      });
+    }
+    return `/reports/${reportId}`;
+  };
+  const getAssessmentHref = (assessmentId: string, reportClassId?: string | null) => {
+    if (embedded) {
+      return getAdminStudentAssessmentHref(studentId, assessmentId, {
+        classId: reportClassId ?? validClassFilter,
+      });
+    }
+    return `/assessments/${assessmentId}?studentId=${studentId}`;
+  };
+
   // Filtered data for class-scoped tabs
   const filteredGrades = (() => {
     let result = validClassFilter
@@ -221,6 +273,9 @@ export default function StudentProfilePage() {
   const filteredSessions = validClassFilter
     ? sessions.filter((s) => s.classId === validClassFilter)
     : sessions;
+  const filteredReports = validClassFilter
+    ? reports.filter((report) => report.classId === validClassFilter)
+    : reports;
 
   // Calculate stats (using filtered data)
   const avgGrade = (() => {
@@ -324,6 +379,23 @@ export default function StudentProfilePage() {
 
   return (
     <div>
+      {adminPreview ? (
+        <Card className="mb-4 border-[#ffe1dc] bg-[#fffaf9] p-4 shadow-1">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-[12px] font-medium uppercase tracking-[0.12em] text-[#b9483a]">
+                Admin preview
+              </p>
+              <p className="mt-1 text-[13px] leading-6 text-muted-foreground">
+                You are viewing the live student profile from the admin portal. The content below is the seeded teacher-facing student record, not a duplicate admin-only version.
+              </p>
+            </div>
+            <Button asChild variant="outline" size="sm">
+              <Link href={adminReturnTo}>Back to admin</Link>
+            </Button>
+          </div>
+        </Card>
+      ) : null}
       <div className="flex items-center gap-3 mb-2">
         <Avatar className="h-12 w-12">
           {student.avatarUrl && <AvatarImage src={student.avatarUrl} alt={`${student.firstName} ${student.lastName}`} />}
@@ -338,7 +410,11 @@ export default function StudentProfilePage() {
       >
         <div className="flex gap-2 mt-2">
           {studentClasses.map((cls) => (
-            <Link key={cls.id} href={`/classes/${cls.id}`}>
+            <Link
+              key={cls.id}
+              href={getClassHref(cls.id)}
+              target={embedded ? "_top" : undefined}
+            >
               <Badge variant="outline" className="cursor-pointer hover:bg-muted">
                 {cls.name}
               </Badge>
@@ -419,7 +495,8 @@ export default function StudentProfilePage() {
                 {studentClasses.map((cls) => (
                   <Link
                     key={cls.id}
-                    href={`/classes/${cls.id}`}
+                    href={getClassHref(cls.id)}
+                    target={embedded ? "_top" : undefined}
                     className="flex items-center justify-between py-2 px-3 rounded-lg hover:bg-muted transition-colors"
                   >
                     <div>
@@ -564,6 +641,7 @@ export default function StudentProfilePage() {
             learningGoals={learningGoals}
             classFilter={validClassFilter}
             classes={studentClasses}
+            embedded={embedded}
           />
         </TabsContent>
 
@@ -667,7 +745,7 @@ export default function StudentProfilePage() {
 
         {/* ── Reports ── */}
         <TabsContent value="reports">
-          {reports.length === 0 ? (
+          {filteredReports.length === 0 ? (
             <EmptyState
               icon={FileText}
               title="No reports"
@@ -675,13 +753,17 @@ export default function StudentProfilePage() {
             />
           ) : (
             <div className="space-y-2">
-              {reports.map((report) => {
+              {filteredReports.map((report) => {
                 const cycle = reportCycles.find(
                   (c) => c.id === report.cycleId
                 );
                 const cls = classes.find((c) => c.id === report.classId);
                 return (
-                  <Link key={report.id} href={`/reports/${report.id}`}>
+                  <Link
+                    key={report.id}
+                    href={getReportHref(report.id, report.classId)}
+                    target={embedded ? "_top" : undefined}
+                  >
                     <Card className="p-4 gap-0 hover:shadow-[0_1px_2px_rgba(16,24,40,0.06)] transition-all cursor-pointer">
                       <div className="flex items-center justify-between">
                         <div>
@@ -1003,13 +1085,19 @@ export default function StudentProfilePage() {
 
                   <Separator />
 
-                  <Link
-                    href={`/portfolio?studentId=${studentId}&artifactId=${detailArtifact.id}`}
-                    className="flex items-center gap-2 text-[13px] font-medium text-[#c24e3f] hover:underline"
-                  >
-                    Open in Portfolio
-                    <ArrowRight className="h-3.5 w-3.5" />
-                  </Link>
+                  {!embedded ? (
+                    <Link
+                      href={`/portfolio?studentId=${studentId}&artifactId=${detailArtifact.id}`}
+                      className="flex items-center gap-2 text-[13px] font-medium text-[#c24e3f] hover:underline"
+                    >
+                      Open in Portfolio
+                      <ArrowRight className="h-3.5 w-3.5" />
+                    </Link>
+                  ) : (
+                    <p className="text-[12px] text-muted-foreground">
+                      Portfolio opens inline here for admin because the full portfolio surface spans multiple classes.
+                    </p>
+                  )}
                 </div>
               </>
             );
@@ -1117,7 +1205,8 @@ export default function StudentProfilePage() {
                   <Separator />
 
                   <Link
-                    href={`/assessments/${detailGrade.assessmentId}?studentId=${studentId}`}
+                    href={getAssessmentHref(detailGrade.assessmentId, detailGrade.classId)}
+                    target={embedded ? "_top" : undefined}
                     className="flex items-center gap-2 text-[13px] font-medium text-[#c24e3f] hover:underline"
                   >
                     Open in Assessments

@@ -8,6 +8,7 @@ import type {
   FamilyMessage,
   FamilyNotification,
   FamilyThread,
+  FamilyUnitPlanView,
   ParentProfile,
   SchoolPolicy,
 } from "@/types/family";
@@ -16,7 +17,6 @@ import type { PortfolioArtifact } from "@/types/portfolio";
 import type { Report } from "@/types/report";
 import type { Student } from "@/types/student";
 import type { Submission } from "@/types/submission";
-import type { UnitPlan } from "@/types/unit-planning";
 import {
   getStudentAssessments,
   getStudentReleasedGrades,
@@ -24,6 +24,12 @@ import {
   getStudentSubmissionStatus,
   getStudentTimetable,
 } from "./student-selectors";
+import {
+  isArtifactVisibleToFamily,
+  isReportDistributedToViewer,
+  isUnitVisibleToFamily,
+  projectFamilyUnitPlan,
+} from "./visibility-rules";
 
 export interface FamilyAssessmentEntry {
   studentId: string;
@@ -33,7 +39,7 @@ export interface FamilyAssessmentEntry {
   submissionStatus: ReturnType<typeof getStudentSubmissionStatus>;
   className: string;
   studentName: string;
-  unit?: UnitPlan;
+  unit?: FamilyUnitPlanView;
 }
 
 export interface FamilyAttendanceEntry {
@@ -109,8 +115,7 @@ export function getFamilyVisibleArtifacts(
   return state.artifacts
     .filter((artifact) =>
       scopedIds.includes(artifact.studentId) &&
-      artifact.approvalStatus === "approved" &&
-      artifact.familyShareStatus !== "not_shared"
+      isArtifactVisibleToFamily(artifact)
     )
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
@@ -130,11 +135,12 @@ export function getFamilyVisibleUnits(
   state: AppState,
   parentId: string,
   studentId: string
-): UnitPlan[] {
+): FamilyUnitPlanView[] {
   const child = state.students.find((student) => student.id === studentId);
   if (!child) return [];
   return state.unitPlans
-    .filter((unit) => child.classIds.includes(unit.classId) && unit.status !== "draft" && unit.status !== "archived")
+    .filter((unit) => child.classIds.includes(unit.classId) && isUnitVisibleToFamily(unit))
+    .map(projectFamilyUnitPlan)
     .sort((a, b) => b.startDate.localeCompare(a.startDate));
 }
 
@@ -160,7 +166,7 @@ export function getFamilyAssessmentEntries(
       );
       const releasedGrade = releasedGrades.find((grade) => grade.assessmentId === assessment.id);
       const unit = assessment.unitId
-        ? state.unitPlans.find((entry) => entry.id === assessment.unitId && entry.status !== "draft")
+        ? state.unitPlans.find((entry) => entry.id === assessment.unitId && isUnitVisibleToFamily(entry))
         : undefined;
 
       const entry: FamilyAssessmentEntry = {
@@ -172,7 +178,7 @@ export function getFamilyAssessmentEntries(
       };
       if (submission) entry.submission = submission;
       if (releasedGrade) entry.grade = releasedGrade;
-      if (unit) entry.unit = unit;
+      if (unit) entry.unit = projectFamilyUnitPlan(unit);
       return entry;
     })
     .filter((entry): entry is FamilyAssessmentEntry => entry !== null)
@@ -187,7 +193,7 @@ export function getFamilyVisibleReports(
   const parent = getParentProfile(state, parentId);
   if (!parent || !parent.linkedStudentIds.includes(studentId)) return [];
   return state.reports
-    .filter((report) => report.studentId === studentId && report.distributionStatus === "completed")
+    .filter((report) => report.studentId === studentId && isReportDistributedToViewer(report))
     .sort((a, b) => (b.distributedAt ?? "").localeCompare(a.distributedAt ?? ""));
 }
 

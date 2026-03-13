@@ -47,8 +47,6 @@ import {
   getUnassignedLessonPlans,
   getUnitAssessments,
   materializeTimetableOccurrences,
-  getUnitStatusVariant,
-  getLessonStatusVariant,
 } from "@/lib/unit-planning-utils";
 import type { Programme } from "@/types/common";
 import type { Assessment, LearningGoal } from "@/types/assessment";
@@ -63,10 +61,15 @@ import type {
   MaterializedOccurrence,
 } from "@/types/unit-planning";
 import { getGradeCellDisplay, getGradePercentage, GRADING_MODE_LABELS } from "@/lib/grade-helpers";
+import {
+  getAdminClassAssessmentHref,
+  getAdminStudentWorkspaceHref,
+} from "@/lib/admin-embed-routes";
 
 interface UnitPlansTabProps {
   classId: string;
   programme: Programme;
+  embedded?: boolean;
   units: UnitPlan[];
   lessonPlans: LessonPlan[];
   lessonSlotAssignments: LessonSlotAssignment[];
@@ -80,6 +83,7 @@ interface UnitPlansTabProps {
 export function UnitPlansTab({
   classId,
   programme,
+  embedded = false,
   units,
   lessonPlans,
   lessonSlotAssignments,
@@ -90,13 +94,20 @@ export function UnitPlansTab({
   grades,
 }: UnitPlansTabProps) {
   const router = useRouter();
+  const getAssessmentHref = (assessmentId: string) =>
+    embedded
+      ? getAdminClassAssessmentHref(classId, assessmentId)
+      : `/assessments/${assessmentId}?classId=${classId}`;
+  const getStudentHref = (studentId: string) =>
+    embedded
+      ? getAdminStudentWorkspaceHref(studentId, { classId })
+      : `/students/${studentId}?classId=${classId}`;
 
   // Store actions
   const addUnitPlan = useStore((s) => s.addUnitPlan);
   const updateUnitPlan = useStore((s) => s.updateUnitPlan);
   const deleteUnitPlan = useStore((s) => s.deleteUnitPlan);
   const addLessonPlan = useStore((s) => s.addLessonPlan);
-  const updateLessonPlan = useStore((s) => s.updateLessonPlan);
   const assignLessonToSlot = useStore((s) => s.assignLessonToSlot);
   const unassignLessonFromSlot = useStore((s) => s.unassignLessonFromSlot);
   const autoFillLessonSequence = useStore((s) => s.autoFillLessonSequence);
@@ -503,23 +514,101 @@ export function UnitPlansTab({
                   {/* Progress snapshot */}
                   {(() => {
                     const progress = getUnitProgress(unitLessonPlans);
+                    const conceptualFraming = selectedUnit.strategy.conceptualFraming;
+                    const liveAssessments = unitAssessments.filter(
+                      (assessment) => assessment.status === "live" || assessment.status === "published"
+                    );
+                    const nextAssessment = [...unitAssessments].sort((a, b) =>
+                      a.dueDate.localeCompare(b.dueDate)
+                    )[0] ?? null;
                     return (
-                      <div className="grid grid-cols-4 gap-3">
-                        <div className="rounded-lg bg-muted/50 p-3 text-center">
-                          <p className="text-[18px] font-semibold">{progress.total}</p>
-                          <p className="text-[11px] text-muted-foreground">Lessons</p>
+                      <div className="space-y-4">
+                        <div className="grid grid-cols-4 gap-3">
+                          <div className="rounded-lg bg-muted/50 p-3 text-center">
+                            <p className="text-[18px] font-semibold">{progress.total}</p>
+                            <p className="text-[11px] text-muted-foreground">Lessons</p>
+                          </div>
+                          <div className="rounded-lg bg-muted/50 p-3 text-center">
+                            <p className="text-[18px] font-semibold">{progress.assigned}</p>
+                            <p className="text-[11px] text-muted-foreground">Assigned</p>
+                          </div>
+                          <div className="rounded-lg bg-muted/50 p-3 text-center">
+                            <p className="text-[18px] font-semibold">{progress.taught}</p>
+                            <p className="text-[11px] text-muted-foreground">Taught</p>
+                          </div>
+                          <div className="rounded-lg bg-muted/50 p-3 text-center">
+                            <p className="text-[18px] font-semibold">{unitAssessments.length}</p>
+                            <p className="text-[11px] text-muted-foreground">Assessments</p>
+                          </div>
                         </div>
-                        <div className="rounded-lg bg-muted/50 p-3 text-center">
-                          <p className="text-[18px] font-semibold">{progress.assigned}</p>
-                          <p className="text-[11px] text-muted-foreground">Assigned</p>
-                        </div>
-                        <div className="rounded-lg bg-muted/50 p-3 text-center">
-                          <p className="text-[18px] font-semibold">{progress.taught}</p>
-                          <p className="text-[11px] text-muted-foreground">Taught</p>
-                        </div>
-                        <div className="rounded-lg bg-muted/50 p-3 text-center">
-                          <p className="text-[18px] font-semibold">{unitAssessments.length}</p>
-                          <p className="text-[11px] text-muted-foreground">Assessments</p>
+
+                        <div className="grid gap-4 lg:grid-cols-2">
+                          <div className="rounded-xl border border-border/60 bg-muted/20 p-4">
+                            <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground mb-2">
+                              Inquiry Snapshot
+                            </p>
+                            {conceptualFraming ? (
+                              <div className="space-y-2 text-[13px]">
+                                {conceptualFraming.keyConcept && (
+                                  <p>
+                                    <span className="text-muted-foreground">Key concept:</span>{" "}
+                                    {conceptualFraming.keyConcept}
+                                  </p>
+                                )}
+                                {conceptualFraming.statementOfInquiry && (
+                                  <p>
+                                    <span className="text-muted-foreground">Statement of inquiry:</span>{" "}
+                                    <em>{conceptualFraming.statementOfInquiry}</em>
+                                  </p>
+                                )}
+                                {conceptualFraming.atlFocus && conceptualFraming.atlFocus.length > 0 && (
+                                  <div className="flex flex-wrap gap-1.5 pt-1">
+                                    {conceptualFraming.atlFocus.map((focus) => (
+                                      <Badge key={focus} variant="outline" className="text-[11px]">
+                                        {focus}
+                                      </Badge>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            ) : (
+                              <p className="text-[13px] text-muted-foreground">
+                                Add conceptual framing to make the unit narrative easier to scan at a glance.
+                              </p>
+                            )}
+                          </div>
+
+                          <div className="rounded-xl border border-border/60 bg-muted/20 p-4">
+                            <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground mb-2">
+                              Assessment Signal
+                            </p>
+                            <div className="space-y-2 text-[13px]">
+                              <p>
+                                <span className="text-muted-foreground">Live or published:</span>{" "}
+                                {liveAssessments.length}
+                              </p>
+                              <p>
+                                <span className="text-muted-foreground">Linked standards:</span>{" "}
+                                {selectedUnit.strategy.linkedStandardIds.length}
+                              </p>
+                              {nextAssessment ? (
+                                <Link
+                                  href={getAssessmentHref(nextAssessment.id)}
+                                  target={embedded ? "_top" : undefined}
+                                  className="block rounded-lg border border-border/50 bg-background px-3 py-2 hover:bg-muted/30"
+                                >
+                                  <p className="font-medium text-[#c24e3f]">{nextAssessment.title}</p>
+                                  <p className="text-[12px] text-muted-foreground">
+                                    Due {format(parseISO(nextAssessment.dueDate), "MMM d, yyyy")} · {GRADING_MODE_LABELS[nextAssessment.gradingMode]}
+                                  </p>
+                                </Link>
+                              ) : (
+                                <p className="text-[13px] text-muted-foreground">
+                                  Link an assessment to show due dates and evidence points here.
+                                </p>
+                              )}
+                            </div>
+                          </div>
                         </div>
                       </div>
                     );
@@ -736,17 +825,19 @@ export function UnitPlansTab({
                         <LinkIcon className="h-3.5 w-3.5 mr-1" />
                         Link Existing
                       </Button>
-                      <Button
-                        size="sm"
-                        onClick={() =>
-                          router.push(
-                            `/assessments?createFor=${classId}&unitId=${selectedUnit.id}`
-                          )
-                        }
-                      >
-                        <Plus className="h-3.5 w-3.5 mr-1" />
-                        Create New
-                      </Button>
+                      {!embedded ? (
+                        <Button
+                          size="sm"
+                          onClick={() =>
+                            router.push(
+                              `/assessments?createFor=${classId}&unitId=${selectedUnit.id}`
+                            )
+                          }
+                        >
+                          <Plus className="h-3.5 w-3.5 mr-1" />
+                          Create New
+                        </Button>
+                      ) : null}
                     </div>
                   </div>
 
@@ -764,7 +855,8 @@ export function UnitPlansTab({
                           >
                             <div className="flex-1 min-w-0">
                               <Link
-                                href={`/assessments/${asmt.id}?classId=${classId}`}
+                                href={getAssessmentHref(asmt.id)}
+                                target={embedded ? "_top" : undefined}
                                 className="text-[13px] font-medium hover:text-[#c24e3f] transition-colors"
                               >
                                 {asmt.title}
@@ -787,7 +879,10 @@ export function UnitPlansTab({
                             >
                               <Unlink className="h-3.5 w-3.5" />
                             </Button>
-                            <Link href={`/assessments/${asmt.id}?classId=${classId}`}>
+                            <Link
+                              href={getAssessmentHref(asmt.id)}
+                              target={embedded ? "_top" : undefined}
+                            >
                               <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0">
                                 <ExternalLink className="h-3.5 w-3.5" />
                               </Button>
@@ -821,7 +916,8 @@ export function UnitPlansTab({
                                         className="text-center py-2 px-2 font-medium text-muted-foreground min-w-[80px]"
                                       >
                                         <Link
-                                          href={`/assessments/${asmt.id}?classId=${classId}`}
+                                          href={getAssessmentHref(asmt.id)}
+                                          target={embedded ? "_top" : undefined}
                                           className="hover:text-[#c24e3f] transition-colors"
                                           title={asmt.title}
                                         >
@@ -878,7 +974,8 @@ export function UnitPlansTab({
                                         >
                                           <td className="py-1.5 px-3 sticky left-0 bg-background z-10">
                                             <Link
-                                              href={`/students/${student.id}?classId=${classId}`}
+                                              href={getStudentHref(student.id)}
+                                              target={embedded ? "_top" : undefined}
                                               className="text-[12px] font-medium hover:text-[#c24e3f] transition-colors"
                                             >
                                               {student.firstName}{" "}

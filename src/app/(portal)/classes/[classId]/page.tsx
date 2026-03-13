@@ -69,6 +69,13 @@ import { AttendanceTab } from "@/components/class-tabs/attendance-tab";
 import { AttendanceDialog } from "@/components/shared/attendance-dialog";
 import { UnitPlansTab } from "@/components/class-tabs/unit-plans-tab";
 import { LessonPlanDrawer } from "@/components/unit-planning/lesson-plan-drawer";
+import {
+  getAdminClassAssessmentHref,
+  getAdminClassReportHref,
+  getAdminClassWorkspaceHref,
+  getAdminCommunicationsHref,
+  getAdminStudentWorkspaceHref,
+} from "@/lib/admin-embed-routes";
 
 const VALID_TABS = new Set(["overview", "assessments", "grades", "attendance", "portfolio", "reports", "communication", "schedule", "standards", "units"]);
 
@@ -103,6 +110,9 @@ export default function ClassHubPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const tabParam = searchParams.get("tab");
+  const embedded = searchParams.get("embed") === "1";
+  const adminPreview = searchParams.get("admin") === "1";
+  const adminReturnTo = searchParams.get("from") ?? "/admin/classes";
   const [activeTab, setActiveTab] = useState(
     tabParam && VALID_TABS.has(tabParam) ? tabParam : "overview"
   );
@@ -223,7 +233,14 @@ export default function ClassHubPage() {
       (ch) => ch.type === "dm" && ch.classId === classId && ch.participantIds?.includes(studentId)
     );
     if (existingDm) {
-      router.push(`/communication`);
+      if (embedded) {
+        window.open(
+          getAdminCommunicationsHref({ classId, studentId }),
+          "_top"
+        );
+      } else {
+        router.push(`/communication`);
+      }
       return;
     }
 
@@ -237,7 +254,11 @@ export default function ClassHubPage() {
       participantIds: [currentUser?.id ?? "tchr_01", studentId],
       createdAt: new Date().toISOString(),
     });
-    router.push(`/communication`);
+    if (embedded) {
+      window.open(getAdminCommunicationsHref({ classId, studentId }), "_top");
+    } else {
+      router.push(`/communication`);
+    }
     toast.success(`Conversation started with ${student.firstName}`);
   };
 
@@ -256,6 +277,33 @@ export default function ClassHubPage() {
   // Lesson plan drawer state (opened from inside the schedule sheet)
   const [scheduleLessonDrawerOpen, setScheduleLessonDrawerOpen] = useState(false);
   const [scheduleLessonId, setScheduleLessonId] = useState<string | null>(null);
+
+  const getStudentProfileHref = (studentId: string) => {
+    if (embedded) {
+      return getAdminStudentWorkspaceHref(studentId, { classId });
+    }
+    return `/students/${studentId}?classId=${classId}${
+      adminPreview ? `&admin=1&from=${encodeURIComponent(adminReturnTo)}` : ""
+    }`;
+  };
+  const getAssessmentHref = (assessmentId: string) => {
+    if (embedded) {
+      return getAdminClassAssessmentHref(classId, assessmentId);
+    }
+    return `/assessments/${assessmentId}?classId=${classId}`;
+  };
+  const getReportHref = (reportId: string) => {
+    if (embedded) {
+      return getAdminClassReportHref(classId, reportId);
+    }
+    return `/reports/${reportId}?classId=${classId}`;
+  };
+  const getClassWorkspaceHref = (tab?: string) => {
+    if (embedded) {
+      return getAdminClassWorkspaceHref(classId, { tab });
+    }
+    return `/classes/${classId}${tab ? `?tab=${tab}` : ""}`;
+  };
   // Analytics section state (Grades tab)
   const [showAttention, setShowAttention] = useState(true);
   const [showAllAttention, setShowAllAttention] = useState(false);
@@ -290,6 +338,23 @@ export default function ClassHubPage() {
 
   return (
     <div>
+      {adminPreview ? (
+        <Card className="mb-4 border-[#ffe1dc] bg-[#fffaf9] p-4 shadow-1">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-[12px] font-medium uppercase tracking-[0.12em] text-[#b9483a]">
+                Admin preview
+              </p>
+              <p className="mt-1 text-[13px] leading-6 text-muted-foreground">
+                You are viewing the live teacher class hub from the admin portal. This reuses the seeded teacher experience rather than duplicating it inside admin.
+              </p>
+            </div>
+            <Button asChild variant="outline" size="sm">
+              <Link href={adminReturnTo}>Back to admin</Link>
+            </Button>
+          </div>
+        </Card>
+      ) : null}
       <PageHeader title={cls.name} description={`${cls.subject} · ${cls.gradeLevel}`}>
         <div className="flex gap-2 mt-2">
           <Badge variant="outline">{cls.programme}</Badge>
@@ -339,7 +404,8 @@ export default function ClassHubPage() {
                   className="flex items-center gap-2 py-2 px-3 rounded-lg hover:bg-muted transition-colors group"
                 >
                   <Link
-                    href={`/students/${student.id}?classId=${classId}`}
+                    href={getStudentProfileHref(student.id)}
+                    target={embedded ? "_top" : undefined}
                     className="flex items-center gap-2 flex-1 min-w-0"
                   >
                     <Avatar className="h-7 w-7">
@@ -454,7 +520,8 @@ export default function ClassHubPage() {
                           assessment={asmt}
                           grades={asmtGrades}
                           studentIds={studentIds}
-                          href={`/assessments/${asmt.id}?classId=${classId}`}
+                          href={getAssessmentHref(asmt.id)}
+                          target={embedded ? "_top" : undefined}
                           variant="card"
                           unitTitle={asmt.unitId ? unitPlans.find((u) => u.id === asmt.unitId)?.title : undefined}
                           gradedCount={gradedCount}
@@ -511,7 +578,8 @@ export default function ClassHubPage() {
                           className="text-[12px] font-medium text-center min-w-[90px]"
                         >
                           <Link
-                            href={`/assessments/${asmt.id}?classId=${classId}`}
+                            href={getAssessmentHref(asmt.id)}
+                            target={embedded ? "_top" : undefined}
                             className="hover:text-[#c24e3f] transition-colors"
                             title={`${asmt.title}\nDue: ${asmt.dueDate ? format(parseISO(asmt.dueDate), "MMM d, yyyy") : "No date"}\nMode: ${GRADING_MODE_LABELS[asmt.gradingMode]}`}
                           >
@@ -558,7 +626,8 @@ export default function ClassHubPage() {
                                 {student.lastName[0]}
                               </div>
                               <Link
-                                href={`/students/${student.id}?classId=${classId}`}
+                                href={getStudentProfileHref(student.id)}
+                                target={embedded ? "_top" : undefined}
                                 className="text-[13px] font-medium hover:text-[#c24e3f] transition-colors"
                               >
                                 {student.firstName} {student.lastName}
@@ -662,7 +731,11 @@ export default function ClassHubPage() {
                             <div className="h-6 w-6 rounded-full bg-[#c24e3f]/10 flex items-center justify-center text-[10px] font-semibold text-[#c24e3f]">
                               {student.firstName[0]}{student.lastName[0]}
                             </div>
-                            <Link href={`/students/${student.id}?classId=${classId}`} className="text-[13px] font-medium hover:text-[#c24e3f] transition-colors min-w-[120px]">
+                            <Link
+                              href={getStudentProfileHref(student.id)}
+                              target={embedded ? "_top" : undefined}
+                              className="text-[13px] font-medium hover:text-[#c24e3f] transition-colors min-w-[120px]"
+                            >
                               {student.firstName} {student.lastName}
                             </Link>
                             <div className="flex gap-1 flex-wrap">
@@ -786,6 +859,7 @@ export default function ClassHubPage() {
           <UnitPlansTab
             classId={classId}
             programme={cls.programme}
+            embedded={embedded}
             units={unitPlans}
             lessonPlans={unitLessonPlans}
             lessonSlotAssignments={unitSlotAssignments}
@@ -809,6 +883,7 @@ export default function ClassHubPage() {
         <TabsContent value="portfolio">
           <PortfolioTab
             classId={classId}
+            embedded={embedded}
             artifacts={artifacts}
             students={students}
             learningGoals={learningGoals}
@@ -837,17 +912,19 @@ export default function ClassHubPage() {
                     <p className="text-[14px] font-medium">{openCycle.name}</p>
                     <p className="text-[12px] text-muted-foreground">{openCycle.term} · {openCycle.academicYear}</p>
                   </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-7 text-[12px]"
-                    onClick={() => {
-                      setActiveClass(null);
-                      router.push("/reports");
-                    }}
-                  >
-                    View cycle <ArrowRight className="h-3 w-3 ml-1" />
-                  </Button>
+                  {!embedded ? (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-7 text-[12px]"
+                      onClick={() => {
+                        setActiveClass(null);
+                        router.push("/reports");
+                      }}
+                    >
+                      View cycle <ArrowRight className="h-3 w-3 ml-1" />
+                    </Button>
+                  ) : null}
                 </div>
 
                 {/* Stats row */}
@@ -896,7 +973,11 @@ export default function ClassHubPage() {
                         return (
                           <tr key={rpt.id} className="border-b border-border/50 hover:bg-muted/30 transition-colors">
                             <td className="py-2 pr-4">
-                              <Link href={`/reports/${rpt.id}?classId=${classId}`} className="font-medium hover:text-[#c24e3f] transition-colors">
+                              <Link
+                                href={getReportHref(rpt.id)}
+                                target={embedded ? "_top" : undefined}
+                                className="font-medium hover:text-[#c24e3f] transition-colors"
+                              >
                                 {st ? `${st.firstName} ${st.lastName}` : "Unknown"}
                               </Link>
                             </td>
@@ -915,7 +996,10 @@ export default function ClassHubPage() {
                               </div>
                             </td>
                             <td className="text-right py-2 pl-2">
-                              <Link href={`/reports/${rpt.id}?classId=${classId}`}>
+                              <Link
+                                href={getReportHref(rpt.id)}
+                                target={embedded ? "_top" : undefined}
+                              >
                                 <Button variant="outline" size="sm" className="h-7 text-[12px]">Edit</Button>
                               </Link>
                             </td>
@@ -1234,7 +1318,8 @@ export default function ClassHubPage() {
                       </Button>
                     )}
                     <Link
-                      href={`/classes/${classId}`}
+                      href={getClassWorkspaceHref()}
+                      target={embedded ? "_top" : undefined}
                       className="inline-flex items-center gap-1.5 text-[13px] text-[#c24e3f] hover:underline"
                       onClick={() => setScheduleSheetOpen(false)}
                     >

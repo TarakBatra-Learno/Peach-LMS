@@ -14,6 +14,12 @@ import type { GradeRecord } from "@/types/gradebook";
 import type { Report } from "@/types/report";
 import type { PortfolioArtifact } from "@/types/portfolio";
 import type { Announcement, ThreadReply } from "@/types/communication";
+import {
+  isAnnouncementVisibleToLearner,
+  isGradeReleasedToLearner,
+  isReportDistributedToViewer,
+} from "./visibility-rules";
+import { getDemoNow } from "./demo-time";
 
 // ─── Projected View Models ──────────────────────────────────────────────────
 
@@ -171,7 +177,7 @@ export type StudentWorkState =
  * - hasCompletedGrade: whether teacher has entered a complete grade
  * - isGradeVisible: whether grade data is released to student
  * - isFeedbackVisible: whether feedback is released (today === isGradeVisible; future seam)
- * - canSubmit: whether the student can submit/resubmit right now
+ * - canSubmit: whether the student can submit right now
  * - isPastDue: whether the due date has passed
  */
 export interface StudentAssessmentStateProjection {
@@ -187,7 +193,7 @@ export interface StudentAssessmentStateProjection {
    * Future: may diverge when `Assessment.feedbackReleasedAt` is added.
    */
   isFeedbackVisible: boolean;
-  /** Student can submit or resubmit work right now. */
+  /** Student can submit work right now. */
   canSubmit: boolean;
   /** Assessment due date has passed. */
   isPastDue: boolean;
@@ -201,18 +207,18 @@ export interface StudentAssessmentStateProjection {
  * Returns true if the per-student `grade.releasedAt` is set.
  */
 export function canStudentViewGrade(assessment: Assessment, grade?: GradeRecord): boolean {
-  return !!grade?.releasedAt;
+  return isGradeReleasedToLearner(grade);
 }
 
 /** Can student view this report? (requires distributed status) */
 export function canStudentViewReport(report: Report): boolean {
-  return report.distributionStatus === "completed";
+  return isReportDistributedToViewer(report);
 }
 
 /** Is this assessment past its due date? Pure date check, no status gating.
  *  Accepts any object with a dueDate string — works with both Assessment and StudentAssessmentView. */
 export function isAssessmentPastDue(assessment: { dueDate: string }): boolean {
-  const now = new Date();
+  const now = getDemoNow();
   const due = new Date(assessment.dueDate);
   due.setHours(23, 59, 59, 999);
   return now > due;
@@ -238,7 +244,7 @@ export function projectStudentGradeRecord(grade: GradeRecord): GradeRecord {
 
 /** Announcements visible to student = sent status only */
 export function isAnnouncementVisibleToStudent(announcement: Announcement): boolean {
-  return announcement.status === "sent";
+  return isAnnouncementVisibleToLearner(announcement);
 }
 
 /** LessonSlotAssignment is fully safe for student viewing — it's structural join data */

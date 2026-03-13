@@ -31,6 +31,7 @@ import { GlobalSearch } from "@/components/shell/global-search";
 
 export function TopBar() {
   const classes = useStore((s) => s.classes);
+  const currentUser = useStore((s) => s.currentUser);
   const activeClassId = useStore((s) => s.ui.activeClassId);
   const activeAcademicYear = useStore((s) => s.ui.activeAcademicYear);
   const setActiveClass = useStore((s) => s.setActiveClass);
@@ -61,6 +62,19 @@ export function TopBar() {
     useStore.getState().resetAllData(seed);
     toast.success("Demo data reset to defaults");
   };
+
+  const displayName = currentUser?.name ?? TEACHER.name;
+  const displayEmail =
+    currentUser?.role === "admin"
+      ? "leadership@peachschool.edu"
+      : TEACHER.email;
+  const displayInitials =
+    currentUser?.name
+      ?.split(" ")
+      .map((part) => part[0])
+      .slice(0, 2)
+      .join("")
+      .toUpperCase() ?? TEACHER.avatarInitials;
 
   return (
     <>
@@ -168,17 +182,17 @@ export function TopBar() {
               <button className="flex items-center gap-2 rounded-full px-2 py-1 hover:bg-muted transition-colors">
                 <Avatar className="h-8 w-8">
                   <AvatarFallback className="bg-[#c24e3f] text-white text-[12px] font-semibold">
-                    {TEACHER.avatarInitials}
+                    {displayInitials}
                   </AvatarFallback>
                 </Avatar>
                 <span className="text-[13px] font-medium hidden md:block">
-                  {TEACHER.name}
+                  {displayName}
                 </span>
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-[260px]">
               <DropdownMenuLabel className="text-[12px] text-muted-foreground font-normal">
-                {TEACHER.email}
+                {displayEmail}
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
               <div className="px-2 py-2 space-y-3">

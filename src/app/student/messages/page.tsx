@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState, useEffect, useRef } from "react";
+import Link from "next/link";
+import { useMemo, useState, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
 import { useStore } from "@/stores";
 import { useStudentId, useCurrentUser } from "@/lib/hooks/use-current-user";
@@ -34,7 +35,7 @@ import {
 } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
-import type { Announcement, Channel } from "@/types/communication";
+import type { Announcement, Channel, PinnedContext } from "@/types/communication";
 
 export default function StudentMessagesPage() {
   const studentId = useStudentId();
@@ -66,26 +67,35 @@ export default function StudentMessagesPage() {
 
   const searchParams = useSearchParams();
   const startDmClassId = searchParams.get("startDm");
-  const startDmHandled = useRef(false);
   const channelParam = searchParams.get("channel");
-  const channelParamHandled = useRef(false);
+  const [manualActiveChannelId, setManualActiveChannelId] = useState<string | null>(null);
 
-  const [activeChannelId, setActiveChannelId] = useState<string | null>(
-    () => channels[0]?.id ?? null
-  );
-  const activeChannel = channels.find((ch) => ch.id === activeChannelId);
-
-  const announcements = useMemo(
-    () => (activeChannelId ? getStudentAnnouncements(state, activeChannelId) : []),
-    [state, activeChannelId]
-  );
-
-  // DM compose state
-  const [showDmCompose, setShowDmCompose] = useState(false);
   const enrolledClasses = useMemo(
     () => (studentId ? getStudentClasses(state, studentId) : []),
     [state, studentId]
   );
+  const requestedDmClass = useMemo(
+    () => enrolledClasses.find((entry) => entry.id === startDmClassId) ?? null,
+    [enrolledClasses, startDmClassId]
+  );
+  const existingTeacherDm = useMemo(
+    () =>
+      studentId
+        ? dmChannels.find(
+            (channel) =>
+              channel.participantIds?.includes("tchr_01") &&
+              channel.participantIds?.includes(studentId)
+          ) ?? null
+        : null,
+    [dmChannels, studentId]
+  );
+  const requestedChannelId = useMemo(
+    () => (channelParam && channels.some((channel) => channel.id === channelParam) ? channelParam : null),
+    [channelParam, channels]
+  );
+
+  // DM compose state
+  const [showDmCompose, setShowDmCompose] = useState(false);
 
   const handleCreateDm = (teacherId: string, teacherName: string, classId: string) => {
     // Check if DM already exists
@@ -93,7 +103,7 @@ export default function StudentMessagesPage() {
       (ch) => ch.participantIds?.includes(teacherId) && ch.participantIds?.includes(studentId!)
     );
     if (existing) {
-      setActiveChannelId(existing.id);
+      setManualActiveChannelId(existing.id);
       setShowDmCompose(false);
       return;
     }
@@ -106,32 +116,62 @@ export default function StudentMessagesPage() {
       participantIds: [studentId!, teacherId],
       createdAt: new Date().toISOString(),
     });
-    setActiveChannelId(channelId);
+    setManualActiveChannelId(channelId);
     setShowDmCompose(false);
     toast.success("New conversation started");
   };
 
-  useEffect(() => {
-    if (startDmClassId && studentId && !startDmHandled.current && !loading) {
-      startDmHandled.current = true;
-      const cls = enrolledClasses.find((c) => c.id === startDmClassId);
-      if (cls) {
-        // Auto-trigger DM creation for this class's teacher
-        handleCreateDm("tchr_01", "Ms. Mitchell", startDmClassId);
-      }
-    }
-  }, [startDmClassId, studentId, loading, enrolledClasses]);
+  const defaultChannelId =
+    requestedChannelId ??
+    (requestedDmClass ? existingTeacherDm?.id ?? null : null) ??
+    classChannels[0]?.id ??
+    projectChannels[0]?.id ??
+    dmChannels[0]?.id ??
+    null;
 
-  useEffect(() => {
-    if (channelParam && !channelParamHandled.current && !loading && channels.length > 0) {
-      channelParamHandled.current = true;
-      const found = channels.find((ch) => ch.id === channelParam);
-      if (found) {
-        setActiveChannelId(found.id);
+  const activeChannelId =
+    manualActiveChannelId && channels.some((channel) => channel.id === manualActiveChannelId)
+      ? manualActiveChannelId
+      : defaultChannelId;
+
+  const activeChannel = channels.find((ch) => ch.id === activeChannelId) ?? null;
+
+  const announcements = useMemo(
+    () => (activeChannelId ? getStudentAnnouncements(state, activeChannelId) : []),
+    [state, activeChannelId]
+  );
+
+  const shouldShowDmCompose =
+    showDmCompose ||
+    (!!requestedDmClass && !existingTeacherDm && !requestedChannelId && !manualActiveChannelId);
+
+  const resolvePinnedContextHref = useCallback(
+    (context: PinnedContext): string | null => {
+      if (context.type === "assessment") {
+        const assessment = state.assessments.find((entry) => entry.id === context.referenceId);
+        return assessment
+          ? `/student/classes/${assessment.classId}/assessments/${assessment.id}`
+          : null;
       }
-      // Silently ignore invalid channelId (fallback behavior per plan)
-    }
-  }, [channelParam, loading, channels]);
+
+      if (context.type === "report") {
+        const report = state.reports.find(
+          (entry) =>
+            entry.id === context.referenceId &&
+            entry.studentId === studentId &&
+            entry.distributionStatus === "completed"
+        );
+        return report ? `/student/progress/reports/${report.id}` : null;
+      }
+
+      if (context.type === "event") {
+        return "/student/calendar";
+      }
+
+      return null;
+    },
+    [state.assessments, state.reports, studentId]
+  );
 
   if (loading) return <DetailSkeleton />;
 
@@ -171,7 +211,10 @@ export default function StudentMessagesPage() {
                         ? "bg-[#fff2f0] text-[#c24e3f] font-medium"
                         : "text-muted-foreground hover:bg-muted"
                     }`}
-                    onClick={() => { setActiveChannelId(ch.id); setShowDmCompose(false); }}
+                    onClick={() => {
+                      setManualActiveChannelId(ch.id);
+                      setShowDmCompose(false);
+                    }}
                   >
                     # {ch.name}
                   </button>
@@ -196,7 +239,10 @@ export default function StudentMessagesPage() {
                         ? "bg-[#fff2f0] text-[#c24e3f] font-medium"
                         : "text-muted-foreground hover:bg-muted"
                     }`}
-                    onClick={() => { setActiveChannelId(ch.id); setShowDmCompose(false); }}
+                    onClick={() => {
+                      setManualActiveChannelId(ch.id);
+                      setShowDmCompose(false);
+                    }}
                   >
                     <Users className="h-3 w-3 inline mr-1" />
                     {ch.name}
@@ -232,7 +278,10 @@ export default function StudentMessagesPage() {
                       ? "bg-[#fff2f0] text-[#c24e3f] font-medium"
                       : "text-muted-foreground hover:bg-muted"
                   }`}
-                  onClick={() => { setActiveChannelId(ch.id); setShowDmCompose(false); }}
+                  onClick={() => {
+                    setManualActiveChannelId(ch.id);
+                    setShowDmCompose(false);
+                  }}
                 >
                   <Mail className="h-3 w-3 inline mr-1" />
                   {ch.name.replace(/^DM:\s*/, "")}
@@ -252,9 +301,10 @@ export default function StudentMessagesPage() {
 
         {/* Main content */}
         <div className="flex-1 min-w-0">
-          {showDmCompose ? (
+          {shouldShowDmCompose ? (
             <DmCompose
               enrolledClasses={enrolledClasses}
+              preferredClassId={requestedDmClass?.id ?? null}
               onSelect={handleCreateDm}
               onCancel={() => setShowDmCompose(false)}
             />
@@ -266,6 +316,7 @@ export default function StudentMessagesPage() {
               studentName={student ? `${student.firstName} ${student.lastName}` : "Student"}
               addThreadReply={addThreadReply}
               addAnnouncement={addAnnouncement}
+              resolvePinnedContextHref={resolvePinnedContextHref}
             />
           ) : (
             <div className="flex items-center justify-center h-full">
@@ -285,10 +336,12 @@ export default function StudentMessagesPage() {
 
 function DmCompose({
   enrolledClasses,
+  preferredClassId,
   onSelect,
   onCancel,
 }: {
   enrolledClasses: import("@/types/class").Class[];
+  preferredClassId: string | null;
   onSelect: (teacherId: string, teacherName: string, classId: string) => void;
   onCancel: () => void;
 }) {
@@ -310,21 +363,49 @@ function DmCompose({
       });
   }, [enrolledClasses]);
 
+  const orderedTeacherOptions = useMemo(() => {
+    if (!preferredClassId) return teacherOptions;
+    return [...teacherOptions].sort((a, b) => {
+      if (a.classId === preferredClassId) return -1;
+      if (b.classId === preferredClassId) return 1;
+      return a.className.localeCompare(b.className);
+    });
+  }, [preferredClassId, teacherOptions]);
+
   return (
     <Card className="p-6 gap-0">
       <h3 className="text-[16px] font-semibold mb-1">New Direct Message</h3>
       <p className="text-[13px] text-muted-foreground mb-4">
         Start a conversation with one of your teachers
       </p>
+      {preferredClassId && (
+        <div className="rounded-lg border border-[#c24e3f]/20 bg-[#fff2f0] px-3 py-2 mb-4">
+          <p className="text-[12px] font-medium text-[#c24e3f]">
+            Starting from class context
+          </p>
+          <p className="text-[12px] text-muted-foreground">
+            Your teacher options are prioritized for this class.
+          </p>
+        </div>
+      )}
       <div className="space-y-2">
-        {teacherOptions.map((opt) => (
+        {orderedTeacherOptions.map((opt) => (
           <button
             key={`${opt.teacherId}-${opt.classId}`}
             className="w-full text-left px-4 py-3 rounded-lg border hover:bg-muted transition-colors"
             onClick={() => onSelect(opt.teacherId, opt.teacherName, opt.classId)}
           >
-            <p className="text-[14px] font-medium">{opt.teacherName}</p>
-            <p className="text-[12px] text-muted-foreground">{opt.className}</p>
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-[14px] font-medium">{opt.teacherName}</p>
+                <p className="text-[12px] text-muted-foreground">{opt.className}</p>
+              </div>
+              {opt.classId === preferredClassId && (
+                <Badge className="bg-[#fff2f0] text-[#c24e3f] border border-[#ffc1b7]">
+                  Recommended
+                </Badge>
+              )}
+            </div>
           </button>
         ))}
       </div>
@@ -347,6 +428,7 @@ function ChannelView({
   studentName,
   addThreadReply,
   addAnnouncement,
+  resolvePinnedContextHref,
 }: {
   channel: Channel;
   announcements: Announcement[];
@@ -354,6 +436,7 @@ function ChannelView({
   studentName: string;
   addThreadReply: (announcementId: string, reply: { id: string; authorName: string; authorId?: string; authorRole?: "teacher" | "student"; body: string; createdAt: string }) => void;
   addAnnouncement: (announcement: Announcement) => void;
+  resolvePinnedContextHref: (context: PinnedContext) => string | null;
 }) {
   const [replyStates, setReplyStates] = useState<Record<string, { open: boolean; text: string }>>({});
   const [newMessageText, setNewMessageText] = useState("");
@@ -451,6 +534,28 @@ function ChannelView({
                           {att.label}
                         </Badge>
                       ))}
+                    </div>
+                  )}
+
+                  {announcement.pinnedContext && (
+                    <div className="mt-3">
+                      {(() => {
+                        const href = resolvePinnedContextHref(announcement.pinnedContext);
+                        const content = (
+                          <span className="inline-flex items-center gap-1.5 rounded-full border border-[#ffc1b7] bg-[#fff2f0] px-2.5 py-1 text-[11px] text-[#c24e3f]">
+                            <Pin className="h-3 w-3" />
+                            {announcement.pinnedContext.label}
+                          </span>
+                        );
+
+                        return href ? (
+                          <Link href={href} className="hover:opacity-80">
+                            {content}
+                          </Link>
+                        ) : (
+                          content
+                        );
+                      })()}
                     </div>
                   )}
 

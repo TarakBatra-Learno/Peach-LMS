@@ -19,6 +19,8 @@ interface AssessmentListItemProps {
   className?: string;
   /** Override default href (/assessments/{id}) — class detail uses ?classId= */
   href?: string;
+  /** Optional target for embedded admin navigation */
+  target?: string;
   /** Card layout: "card" (grid card with full info) or "row" (compact list row) */
   variant?: "card" | "row";
   /** Optional unit title to show a unit tag */
@@ -32,13 +34,11 @@ interface AssessmentListItemProps {
 export function AssessmentListItem({
   assessment,
   grades,
-  studentIds,
   className,
   href,
+  target,
   variant = "row",
   unitTitle,
-  gradedCount,
-  totalStudents,
 }: AssessmentListItemProps) {
   const unreleasedCount = assessment.status === "live"
     ? computeUnreleasedGradesCount(grades, assessment.id)
@@ -48,7 +48,7 @@ export function AssessmentListItem({
 
   if (variant === "card") {
     return (
-      <Link href={resolvedHref}>
+      <Link href={resolvedHref} target={target}>
         <Card className="p-5 gap-0 hover:shadow-[0_1px_2px_rgba(16,24,40,0.06)] hover:border-border/80 transition-all cursor-pointer h-full">
           <div className="flex items-start justify-between mb-3">
             <div className="min-w-0 flex-1">
@@ -105,7 +105,7 @@ export function AssessmentListItem({
 
   // Row variant (compact, for class detail assessments tab)
   return (
-    <Link href={resolvedHref}>
+    <Link href={resolvedHref} target={target}>
       <Card className="p-4 gap-0 hover:shadow-[0_1px_2px_rgba(16,24,40,0.06)] transition-all cursor-pointer">
         <div className="flex items-center justify-between">
           <div>
