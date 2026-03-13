@@ -25,7 +25,8 @@ export default function DashboardPage() {
   const activeClassId = useStore((s) => s.ui.activeClassId);
   const setActiveClass = useStore((s) => s.setActiveClass);
 
-  const now = getDemoNow();
+  // Memoize demo time to avoid new Date object every render
+  const now = useMemo(() => getDemoNow(), []);
   const todayStr = format(now, "yyyy-MM-dd");
 
   // Dismiss/snooze (session-only)

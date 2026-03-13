@@ -4,7 +4,6 @@ import { useState } from "react";
 import type { Recommendation } from "@/lib/recommendation-engine";
 import { RecommendationItem } from "./recommendation-item";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Zap, ListTodo, PartyPopper } from "lucide-react";
 
 interface RecommendationListProps {
