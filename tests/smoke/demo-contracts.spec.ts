@@ -59,6 +59,14 @@ test("redirects persona-protected routes to entry without an active persona", as
 test("teacher dashboard uses the teacher shell and a live demo-day timetable", async ({ page }) => {
   await enterTeacher(page);
 
+  await expect(page.getByRole("link", { name: "Dashboard" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Classes" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Assessments" })).toBeVisible();
+  await expect(page.getByText("Planning")).toBeVisible();
+  await expect(page.getByRole("combobox").nth(0)).toBeVisible();
+  await expect(page.getByRole("combobox").nth(1)).toBeVisible();
+  await expect(page.getByRole("combobox").nth(1)).toContainText("All classes");
+
   await expect(page.getByRole("heading", { name: "Right Now" })).toBeVisible();
   await expect(page.getByText("Take attendance")).toBeVisible();
   await expect(page.getByText("MYP 5 Sciences (09:00–10:00)")).toBeVisible();
@@ -77,6 +85,20 @@ test("teacher dashboard uses the teacher shell and a live demo-day timetable", a
   await aaravRow.getByRole("button", { name: "View work" }).click();
   await expect(page.getByText("Aarav Patel's Submission")).toBeVisible();
   await expect(page.getByText("Draft saved")).toBeVisible();
+});
+
+test("teacher shell reset control reseeds the demo safely", async ({ page }) => {
+  await enterTeacher(page);
+
+  await page.getByRole("button", { name: /Ms\. Sarah Mitchell/i }).click();
+  await page.getByRole("menuitem", { name: "Reset demo data" }).click();
+
+  await expect(page.getByRole("dialog", { name: "Reset demo data" })).toBeVisible();
+  await page.getByRole("button", { name: "Reset" }).click();
+
+  await expect(page.getByText("Demo data reset to defaults")).toBeVisible();
+  await expect(page).toHaveURL(/\/dashboard$/);
+  await expect(page.getByRole("heading", { name: "Right Now" })).toBeVisible();
 });
 
 test("teacher report publish flow updates immediately without a refresh", async ({ page }) => {

@@ -649,7 +649,10 @@ export const useStore = create<AppStore>()(
       },
 
       // Reset
-      resetAllData: (data) => set({ ...data }),
+      resetAllData: (data) => set((s) => ({
+        ...data,
+        currentUser: s.currentUser ?? data.currentUser,
+      })),
     }),
     {
       name: STORAGE_KEY,

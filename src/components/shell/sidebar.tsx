@@ -5,8 +5,9 @@ import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { NAV_ITEMS } from "@/lib/constants";
 import { useStore } from "@/stores";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { BookOpen, ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import {
   Tooltip,
   TooltipContent,
@@ -27,6 +28,11 @@ export function Sidebar() {
   const collapsed = useStore((s) => s.ui.sidebarCollapsed);
   const toggleSidebar = useStore((s) => s.toggleSidebar);
   const pathname = usePathname();
+  const planningItem = {
+    label: "Planning",
+    href: "/planning",
+    icon: BookOpen,
+  } as const;
 
   return (
     <aside
@@ -36,6 +42,52 @@ export function Sidebar() {
       )}
     >
       <nav className="flex-1 py-3 px-3 space-y-0.5 overflow-y-auto">
+        {(() => {
+          const isActive = isNavActive(pathname, planningItem.href);
+          const Icon = planningItem.icon;
+
+          const itemContent = (
+            <div
+              aria-disabled="true"
+              className={cn(
+                "flex items-center gap-3 rounded-[10px] px-3 py-2.5 text-[14px] font-medium transition-colors relative cursor-default border border-dashed",
+                isActive
+                  ? "border-[#f3c7c0] bg-[#fff2f0] text-[#c24e3f]"
+                  : "border-border/60 text-muted-foreground"
+              )}
+            >
+              {isActive && (
+                <div className="absolute left-0 top-1/2 -translate-y-1/2 w-[4px] h-[20px] rounded-r-full bg-[#c24e3f]" />
+              )}
+              <Icon className={cn("h-5 w-5 shrink-0", collapsed && "mx-auto")} />
+              {!collapsed && (
+                <>
+                  <span>{planningItem.label}</span>
+                  <Badge
+                    variant="outline"
+                    className="ml-auto border-[#f3c7c0] bg-[#fff7f5] text-[#c24e3f] text-[10px] uppercase"
+                  >
+                    Soon
+                  </Badge>
+                </>
+              )}
+            </div>
+          );
+
+          if (collapsed) {
+            return (
+              <Tooltip key={planningItem.href}>
+                <TooltipTrigger asChild>{itemContent}</TooltipTrigger>
+                <TooltipContent side="right" sideOffset={8}>
+                  Planning
+                </TooltipContent>
+              </Tooltip>
+            );
+          }
+
+          return <div key={planningItem.href}>{itemContent}</div>;
+        })()}
+
         {NAV_ITEMS.map((item) => {
           const isActive = isNavActive(pathname, item.href);
           const Icon = item.icon;
