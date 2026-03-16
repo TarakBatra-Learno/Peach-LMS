@@ -65,6 +65,7 @@ import {
 import Link from "next/link";
 import { COMMENT_GUIDANCE } from "@/lib/comment-guidance";
 import { getMYPBoundaryGrade } from "@/lib/grade-helpers";
+import { buildReportPrefillContext } from "@/lib/report-prefill";
 import {
   getAdminStudentAssessmentHref,
   getAdminStudentWorkspaceHref,
@@ -209,6 +210,8 @@ export default function ReportDetailPage() {
   const artifacts = useStore((s) => s.artifacts);
   const incidents = useStore((s) => s.incidents);
   const learningGoals = useStore((s) => s.learningGoals);
+  const unitPlans = useStore((s) => s.unitPlans);
+  const assessmentReports = useStore((s) => s.assessmentReports);
 
   const [previewOpen, setPreviewOpen] = useState(false);
   const [familyPreviewOpen, setFamilyPreviewOpen] = useState(false);
@@ -293,6 +296,20 @@ export default function ReportDetailPage() {
       (a) => a.studentId === report.studentId && a.classId === report.classId
     );
   }, [report, artifacts]);
+  const reportPrefillContext = useMemo(
+    () =>
+      report
+        ? buildReportPrefillContext({
+            report,
+            assessments,
+            grades,
+            learningGoals,
+            unitPlans,
+            assessmentReports,
+          })
+        : null,
+    [report, assessments, grades, learningGoals, unitPlans, assessmentReports],
+  );
 
   const getAssessmentName = (assessmentId: string) => {
     const asmt = assessments.find((a) => a.id === assessmentId);
@@ -1712,6 +1729,115 @@ export default function ReportDetailPage() {
           Auto-fill
         </Button>
       </div>
+
+      {reportPrefillContext ? (
+        <div className="grid gap-4 mb-4 lg:grid-cols-3">
+          <Card className="p-4 gap-0">
+            <h3 className="text-[14px] font-semibold">Report evidence sources</h3>
+            <p className="mt-1 text-[12px] text-muted-foreground">
+              Linked assessments and mastery signals currently feeding this report draft.
+            </p>
+            <div className="mt-4 space-y-3">
+              {reportPrefillContext.assessmentSources.length === 0 ? (
+                <p className="text-[13px] text-muted-foreground">
+                  Auto-filled assessment signals will appear here once this learner has class evidence.
+                </p>
+              ) : (
+                reportPrefillContext.assessmentSources.slice(0, 3).map((source) => (
+                  <Link
+                    key={source.assessmentId}
+                    href={getAssessmentHref(source.assessmentId)}
+                    target={embedded ? "_top" : undefined}
+                    className="block rounded-xl border border-border/60 p-3 hover:bg-muted/30 transition-colors"
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="text-[13px] font-medium">{source.assessmentTitle}</p>
+                      <Badge variant="outline" className="text-[10px]">
+                        {source.gradeLabel}
+                      </Badge>
+                    </div>
+                    <p className="mt-1 text-[11px] text-muted-foreground">
+                      {source.typeLabel} · {source.intentLabel}
+                      {source.unitTitle ? ` · ${source.unitTitle}` : ""}
+                    </p>
+                    {source.standards.length > 0 ? (
+                      <div className="mt-2 flex flex-wrap gap-1">
+                        {source.standards.slice(0, 3).map((standard) => (
+                          <Badge key={`${source.assessmentId}-${standard.goalId}`} variant="secondary" className="text-[10px]">
+                            {standard.code}
+                          </Badge>
+                        ))}
+                      </div>
+                    ) : null}
+                  </Link>
+                ))
+              )}
+            </div>
+          </Card>
+
+          <Card className="p-4 gap-0">
+            <h3 className="text-[14px] font-semibold">Suggested from assessment reports</h3>
+            <p className="mt-1 text-[12px] text-muted-foreground">
+              AI assessment summaries can be accepted, edited, or ignored before they influence final reporting.
+            </p>
+            <div className="mt-4 space-y-3">
+              {reportPrefillContext.aiSuggestionSources.length === 0 ? (
+                <p className="text-[13px] text-muted-foreground">
+                  No assessment report suggestions are available for this learner yet.
+                </p>
+              ) : (
+                reportPrefillContext.aiSuggestionSources.slice(0, 3).map((source) => (
+                  <div key={source.reportId} className="rounded-xl border border-border/60 p-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="text-[13px] font-medium">{source.assessmentTitle}</p>
+                      <Badge variant="secondary" className="text-[10px] capitalize">
+                        {source.status}
+                      </Badge>
+                    </div>
+                    <p className="mt-2 text-[12px] text-muted-foreground line-clamp-2">{source.summary}</p>
+                    {source.sourceLabels.length > 0 ? (
+                      <p className="mt-2 text-[11px] text-muted-foreground">
+                        Source cues: {source.sourceLabels.join(", ")}
+                      </p>
+                    ) : null}
+                  </div>
+                ))
+              )}
+            </div>
+          </Card>
+
+          <Card className="p-4 gap-0">
+            <h3 className="text-[14px] font-semibold">Teacher-authored sections</h3>
+            <p className="mt-1 text-[12px] text-muted-foreground">
+              These sections currently contain teacher-written narrative and should remain clearly editable.
+            </p>
+            <div className="mt-4 space-y-2">
+              {reportPrefillContext.teacherAuthoredSections.length === 0 ? (
+                <p className="text-[13px] text-muted-foreground">
+                  No teacher-authored sections have been filled yet.
+                </p>
+              ) : (
+                reportPrefillContext.teacherAuthoredSections.map((label) => (
+                  <div
+                    key={label}
+                    className="flex items-center justify-between rounded-lg border border-border/60 px-3 py-2"
+                  >
+                    <span className="text-[13px] font-medium">{label}</span>
+                    <Badge variant="outline" className="text-[10px]">
+                      Teacher written
+                    </Badge>
+                  </div>
+                ))
+              )}
+              {reportPrefillContext.coveredUnitTitles.length > 0 ? (
+                <p className="pt-2 text-[11px] text-muted-foreground">
+                  Covered units: {reportPrefillContext.coveredUnitTitles.join(", ")}
+                </p>
+              ) : null}
+            </div>
+          </Card>
+        </div>
+      ) : null}
 
       {/* Publish Flow */}
       <div className="flex items-center gap-3 mb-6 p-4 rounded-lg bg-muted/50 border border-border/50">

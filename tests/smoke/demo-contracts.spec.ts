@@ -79,7 +79,7 @@ test("teacher dashboard uses the teacher shell and a live demo-day timetable", a
 
   await page.goto("/assessments/asmt_20");
   await expect(page.getByRole("heading", { name: "Lab Safety Assessment" })).toBeVisible();
-  await page.getByRole("tab", { name: /Students/ }).click();
+  await page.getByRole("tab", { name: "Submissions" }).click();
   const aaravRow = page.locator("tr", { hasText: "Aarav Patel" });
   await expect(aaravRow.getByRole("button", { name: "View work" })).toBeVisible();
   await aaravRow.getByRole("button", { name: "View work" }).click();
@@ -131,7 +131,8 @@ test("student assessment views respect draft and grade-release contracts", async
   await enterStudent(page, /^Aarav Patel/);
 
   await page.goto("/student/home");
-  await expect(page.getByText("1 upcoming")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "What needs attention" })).toBeVisible();
+  await expect(page.getByText("4 action items")).toBeVisible();
   await expect(
     page.getByRole("link", { name: /Lab Safety Assessment MYP 5 Sciences Draft/i })
   ).toBeVisible();

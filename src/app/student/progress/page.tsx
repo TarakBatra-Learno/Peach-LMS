@@ -19,6 +19,7 @@ import {
   computeStudentGoalProgress,
   type StudentGoalProgress,
 } from "@/lib/student-selectors";
+import { buildStudentReleasedMasteryContext } from "@/lib/mastery-selectors";
 import { getGradePercentage } from "@/lib/grade-helpers";
 import type { Assessment } from "@/types/assessment";
 import type { GradeRecord } from "@/types/gradebook";
@@ -63,6 +64,7 @@ export default function StudentProgressPage() {
   const loading = useMockLoading([studentId]);
   const state = useStore((s) => s);
   const rawAssessments = useStore((s) => s.assessments);
+  const assessmentReports = useStore((s) => s.assessmentReports);
 
   const enrolledClasses = useMemo(
     () => (studentId ? getStudentClasses(state, studentId) : []),
@@ -89,6 +91,16 @@ export default function StudentProgressPage() {
   const goalProgress = useMemo(
     () => (studentId ? computeStudentGoalProgress(state, studentId) : []),
     [state, studentId]
+  );
+  const releasedMasteryContext = useMemo(
+    () =>
+      buildStudentReleasedMasteryContext({
+        goalProgress,
+        assessmentReports: assessmentReports.filter((report) => report.studentId === studentId),
+        assessments: rawAssessments,
+        classes: enrolledClasses,
+      }),
+    [goalProgress, assessmentReports, rawAssessments, enrolledClasses, studentId],
   );
 
   // Only count standards (not ATL skills / learner profile) for the stat card
@@ -277,7 +289,11 @@ export default function StudentProgressPage() {
 
         {/* Learning Goals Tab */}
         <TabsContent value="goals">
-          <LearningGoalTracker goalProgress={goalProgress} assessmentMap={rawAssessmentMap} />
+          <LearningGoalTracker
+            goalProgress={goalProgress}
+            assessmentMap={rawAssessmentMap}
+            releasedMasteryContext={releasedMasteryContext}
+          />
         </TabsContent>
       </Tabs>
     </div>
@@ -465,9 +481,11 @@ function ProgressReportsTab({
 function LearningGoalTracker({
   goalProgress,
   assessmentMap,
+  releasedMasteryContext,
 }: {
   goalProgress: StudentGoalProgress[];
   assessmentMap: Map<string, Assessment>;
+  releasedMasteryContext: ReturnType<typeof buildStudentReleasedMasteryContext>;
 }) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
@@ -509,6 +527,56 @@ function LearningGoalTracker({
 
   return (
     <div className="space-y-6">
+      <div className="grid gap-4 md:grid-cols-2">
+        <Card className="p-4 gap-0">
+          <h3 className="text-[14px] font-semibold">Released mastery context</h3>
+          <p className="mt-1 text-[12px] text-muted-foreground">
+            This summary only includes learning signals from grades and assessment reports that have been released to you.
+          </p>
+          <div className="mt-4 space-y-3">
+            {releasedMasteryContext.categorySummaries.map((summary) => (
+              <div key={summary.category} className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-[13px] font-medium">{summary.label}</p>
+                  <p className="text-[11px] text-muted-foreground">
+                    {summary.trackedGoals} tracked goal{summary.trackedGoals !== 1 ? "s" : ""}
+                  </p>
+                </div>
+                <Badge className={`text-[10px] ${MASTERY_COLORS[summary.strongestLevel ?? "not_assessed"] ?? ""}`}>
+                  {(summary.strongestLevel ?? "not_assessed").replace(/_/g, " ")}
+                </Badge>
+              </div>
+            ))}
+          </div>
+        </Card>
+
+        <Card className="p-4 gap-0">
+          <h3 className="text-[14px] font-semibold">Assessment insights</h3>
+          <p className="mt-1 text-[12px] text-muted-foreground">
+            Recent released assessment reports provide the clearest explanation of your strengths and next steps.
+          </p>
+          <div className="mt-4 space-y-3">
+            {releasedMasteryContext.releasedAssessmentInsights.length === 0 ? (
+              <p className="text-[13px] text-muted-foreground">
+                Assessment insights will appear here once teachers release typed assessment reports.
+              </p>
+            ) : (
+              releasedMasteryContext.releasedAssessmentInsights.map((insight) => (
+                <Link
+                  key={insight.reportId}
+                  href={`/student/classes/${assessmentMap.get(insight.assessmentId)?.classId ?? ""}/assessments/${insight.assessmentId}`}
+                  className="block rounded-xl border border-border/60 p-3 hover:bg-muted/30"
+                >
+                  <p className="text-[13px] font-medium">{insight.assessmentTitle}</p>
+                  <p className="mt-1 text-[11px] text-muted-foreground">{insight.className}</p>
+                  <p className="mt-2 text-[12px] text-muted-foreground line-clamp-2">{insight.summary}</p>
+                </Link>
+              ))
+            )}
+          </div>
+        </Card>
+      </div>
+
       {categories.map((cat) => {
         const withData = cat.goals.filter((g) => g.assessmentCount > 0).length;
         return (

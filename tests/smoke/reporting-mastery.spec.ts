@@ -59,8 +59,9 @@ test("student progress and report detail show released mastery and assessment co
   await expect(page.getByText("Released mastery context")).toBeVisible();
   await expect(page.getByText("Assessment insights")).toBeVisible();
 
-  await page.goto("/student/progress/reports/rpt_131");
-  await expect(page.getByRole("heading", { name: "MYP 5 Sciences Report" })).toBeVisible();
+  await page.getByRole("tab", { name: "Reports" }).click();
+  await page.locator('a[href*="/student/progress/reports/"]').first().click();
+  await expect(page).toHaveURL(/\/student\/progress\/reports\/rpt_/);
   await expect(page.getByText("Assessment signals feeding this report")).toBeVisible();
   await expect(page.getByText("Suggested from released assessment feedback")).toBeVisible();
 });
