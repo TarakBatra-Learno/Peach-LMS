@@ -143,6 +143,52 @@ export function AdminMetricBar({
   );
 }
 
+export function AdminUtilityBar({
+  children,
+  actions,
+  className,
+}: {
+  children: React.ReactNode;
+  actions?: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <div
+      className={cn(
+        "flex flex-col gap-3 rounded-[18px] border border-border/80 bg-[#fcfcfd] px-4 py-3 shadow-1 lg:flex-row lg:items-center lg:justify-between",
+        className,
+      )}
+    >
+      <div className="flex flex-wrap items-center gap-2">{children}</div>
+      {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
+    </div>
+  );
+}
+
+export function AdminMiniStat({
+  label,
+  value,
+  helper,
+  tone = "neutral",
+}: {
+  label: string;
+  value: string;
+  helper?: string;
+  tone?: AdminTone;
+}) {
+  return (
+    <div className="rounded-2xl border border-border/80 bg-white p-4">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-[12px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
+          {label}
+        </p>
+        <AdminToneBadge tone={tone}>{value}</AdminToneBadge>
+      </div>
+      {helper ? <p className="mt-2 text-[13px] leading-6 text-muted-foreground">{helper}</p> : null}
+    </div>
+  );
+}
+
 export function AdminListItem({
   title,
   body,

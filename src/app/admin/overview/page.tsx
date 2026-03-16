@@ -1,10 +1,14 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import {
   Activity,
   BookOpenText,
   Building2,
+  GraduationCap,
+  Megaphone,
+  School,
   ShieldCheck,
   Users,
 } from "lucide-react";
@@ -19,7 +23,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { adminDemoData } from "@/features/admin/data/admin-demo-data";
-import { AdminDetailDrawer, AdminKpiCard, AdminListItem, AdminPanel, AdminRowLink, AdminToneBadge } from "@/features/admin/components/admin-ui";
+import { AdminDetailDrawer, AdminKpiCard, AdminListItem, AdminPanel, AdminRowLink, AdminToneBadge, AdminUtilityBar } from "@/features/admin/components/admin-ui";
 
 const KPI_ICONS = {
   students: Users,
@@ -28,6 +32,23 @@ const KPI_ICONS = {
   attendance: Activity,
   curriculum: BookOpenText,
   integrations: ShieldCheck,
+} as const;
+
+const MODULE_LAUNCHES = [
+  { id: "classes", title: "Classes", description: "Operational class directory with live class drill-ins.", metric: "49 live classes", href: "/admin/classes", tone: "peach" as const, icon: School },
+  { id: "students", title: "Students", description: "Master student roster with live student drill-ins.", metric: "724 student records", href: "/admin/students", tone: "info" as const, icon: GraduationCap },
+  { id: "curriculum", title: "Curriculum", description: "Subjects, insights, standards, templates, and policy oversight.", metric: "6 oversight surfaces", href: "/admin/curriculum", tone: "warning" as const, icon: BookOpenText },
+  { id: "performance", title: "Performance", description: "Gradebook, standards, reports, and watchlist analytics.", metric: "5 performance tabs", href: "/admin/performance", tone: "danger" as const, icon: Activity },
+  { id: "communications", title: "Communications", description: "Dashboard, moderation, announcements, and privacy controls.", metric: "Inbox + matrix governance", href: "/admin/communications", tone: "warning" as const, icon: Megaphone },
+  { id: "operations", title: "Operations", description: "Attendance, timetable, calendar, and branding settings.", metric: "5 operational modules", href: "/admin/operations", tone: "info" as const, icon: Building2 },
+  { id: "platform", title: "Platform", description: "Users, integrations, exports, and plan settings.", metric: "6 settings modules", href: "/admin/platform", tone: "neutral" as const, icon: ShieldCheck },
+] as const;
+
+const HERO_CARD_LINKS = {
+  "curriculum-health": "/admin/curriculum",
+  "performance-risk": "/admin/performance",
+  "communications-health": "/admin/communications",
+  "platform-health": "/admin/platform",
 } as const;
 
 type OverviewDetailState =
@@ -81,6 +102,39 @@ export default function AdminOverviewPage() {
         })}
       </div>
 
+      <AdminUtilityBar>
+        <AdminToneBadge tone="info">{adminDemoData.school.academicYear}</AdminToneBadge>
+        <AdminToneBadge tone="neutral">{adminDemoData.school.termLabel}</AdminToneBadge>
+        <span className="text-[13px] text-muted-foreground">{adminDemoData.school.dataFreshness}</span>
+      </AdminUtilityBar>
+
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        {MODULE_LAUNCHES.map((module) => {
+          const Icon = module.icon;
+          return (
+            <Link
+              key={module.id}
+              href={module.href}
+              className="rounded-[24px] border border-border/80 bg-white/95 p-5 shadow-1 transition hover:border-[#ffc1b7] hover:bg-[#fffaf9]"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-[15px] font-semibold tracking-tight text-foreground">{module.title}</p>
+                  <p className="mt-2 text-[13px] leading-6 text-muted-foreground">{module.description}</p>
+                </div>
+                <div className="rounded-2xl border border-border/80 bg-[#fcfcfd] p-2.5">
+                  <Icon className="h-4 w-4 text-[#b9483a]" />
+                </div>
+              </div>
+              <div className="mt-4 flex items-center justify-between gap-3">
+                <AdminToneBadge tone={module.tone}>{module.metric}</AdminToneBadge>
+                <span className="text-[13px] font-medium text-[#b9483a]">Open module</span>
+              </div>
+            </Link>
+          );
+        })}
+      </div>
+
       <div className="grid gap-4 lg:grid-cols-3">
         {adminDemoData.overview.programmes.map((programme) => (
           <AdminPanel
@@ -110,18 +164,21 @@ export default function AdminOverviewPage() {
 
       <div className="grid gap-4 xl:grid-cols-2">
         {adminDemoData.overview.heroCards.map((card) => (
-          <AdminPanel key={card.id} title={card.title} description={card.takeaway}>
-            <div className="mb-4 flex items-center gap-2">
-              <AdminToneBadge tone={card.tone}>{card.eyebrow}</AdminToneBadge>
-            </div>
-            <div className="space-y-3">
-              {card.details.map((detail) => (
-                <div key={detail} className="rounded-2xl border border-border/80 bg-[#fcfcfd] p-3 text-[13px] leading-6 text-muted-foreground">
-                  {detail}
-                </div>
-              ))}
-            </div>
-          </AdminPanel>
+          <Link key={card.id} href={HERO_CARD_LINKS[card.id as keyof typeof HERO_CARD_LINKS] ?? "/admin/overview"}>
+            <AdminPanel title={card.title} description={card.takeaway} className="h-full transition hover:border-[#ffc1b7] hover:bg-[#fffaf9]">
+              <div className="mb-4 flex items-center justify-between gap-2">
+                <AdminToneBadge tone={card.tone}>{card.eyebrow}</AdminToneBadge>
+                <span className="text-[13px] font-medium text-[#b9483a]">Open</span>
+              </div>
+              <div className="space-y-3">
+                {card.details.map((detail) => (
+                  <div key={detail} className="rounded-2xl border border-border/80 bg-[#fcfcfd] p-3 text-[13px] leading-6 text-muted-foreground">
+                    {detail}
+                  </div>
+                ))}
+              </div>
+            </AdminPanel>
+          </Link>
         ))}
       </div>
 

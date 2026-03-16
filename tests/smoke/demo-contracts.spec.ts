@@ -59,9 +59,9 @@ test("redirects persona-protected routes to entry without an active persona", as
 test("teacher dashboard uses the teacher shell and a live demo-day timetable", async ({ page }) => {
   await enterTeacher(page);
 
-  await expect(page.getByText("Today's timetable")).toBeVisible();
-  await expect(page.getByText("Take registration")).toBeVisible();
-  await expect(page.getByText("MYP 5 Sciences · Lab 3")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Right Now" })).toBeVisible();
+  await expect(page.getByText("Take attendance")).toBeVisible();
+  await expect(page.getByText("MYP 5 Sciences (09:00–10:00)")).toBeVisible();
 
   await page.goto("/communication");
   await expect(page).toHaveURL(/\/communication$/);
@@ -167,7 +167,7 @@ test("admin portal exposes the dedicated leadership shell and core overview surf
   await enterAdmin(page);
 
   await expect(page.getByRole("heading", { name: "School leadership overview" })).toBeVisible();
-  await expect(page.getByText("724")).toBeVisible();
+  await expect(page.getByText("724", { exact: true })).toBeVisible();
   await expect(page.getByText("Leadership alerts")).toBeVisible();
 
   await page.goto("/admin/curriculum");
