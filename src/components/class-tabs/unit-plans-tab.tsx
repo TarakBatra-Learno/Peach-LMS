@@ -728,12 +728,14 @@ export function UnitPlansTab({
                   )}
 
                   {/* Differentiation */}
-                  {selectedUnit.strategy.differentiationNotes && (
+                  {selectedUnit.strategy.action?.differentiationNotes && (
                     <div>
                       <p className="text-[12px] font-medium text-muted-foreground mb-1">
                         Differentiation
                       </p>
-                      <p className="text-[13px]">{selectedUnit.strategy.differentiationNotes}</p>
+                      <p className="text-[13px]">
+                        {selectedUnit.strategy.action.differentiationNotes}
+                      </p>
                     </div>
                   )}
 

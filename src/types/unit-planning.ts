@@ -4,6 +4,22 @@ import { ID, Programme } from "./common";
 
 export type UnitStatus = "draft" | "active" | "completed" | "archived";
 
+export interface PlanningCollaborator {
+  id: ID;
+  name: string;
+  initials: string;
+  role?: "owner" | "reviewer" | "collaborator";
+}
+
+export interface SectionComment {
+  id: ID;
+  sectionKey: string;
+  authorId: ID;
+  authorName: string;
+  body: string;
+  createdAt: string;
+}
+
 export interface ConceptualFraming {
   // MYP fields (optional — only relevant for MYP classes)
   keyConcept?: string;
@@ -16,14 +32,50 @@ export interface ConceptualFraming {
   casOpportunity?: string;
 }
 
+export interface UnitInquiryBlock {
+  statement?: string;
+  factualQuestions?: string[];
+  conceptualQuestions?: string[];
+  debatableQuestions?: string[];
+}
+
+export interface UnitLearningFocus {
+  atlSkillIds?: ID[];
+  learnerProfileIds?: ID[];
+  objectiveLabels?: string[];
+}
+
+export interface UnitActionPlan {
+  differentiationNotes?: string;
+  resourceLinks?: string[];
+  linkedAssessmentIds?: ID[];
+  communityConnections?: string[];
+}
+
+export interface UnitEvidencePlan {
+  portfolioSignals?: string[];
+  standardsFocusIds?: ID[];
+  learningGoalIds?: ID[];
+}
+
+export interface UnitReflectionPlan {
+  prompts: string[];
+  teacherNotes?: string;
+}
+
 export interface UnitStrategy {
   learningGoals: string[];
   linkedStandardIds: ID[];
+  durationWeeks?: number;
+  durationHours?: number;
   conceptualFraming?: ConceptualFraming;
+  inquiry?: UnitInquiryBlock;
+  learningFocus?: UnitLearningFocus;
   assessmentApproach?: string;
-  differentiationNotes?: string;
+  action?: UnitActionPlan;
+  evidence?: UnitEvidencePlan;
+  reflection?: UnitReflectionPlan;
   learningArc?: string;
-  resourceLinks?: string[];
 }
 
 export interface UnitPlan {
@@ -39,6 +91,8 @@ export interface UnitPlan {
   strategy: UnitStrategy;
   lessonPlanIds: ID[];
   order: number;
+  collaborators?: PlanningCollaborator[];
+  sectionComments?: SectionComment[];
   createdAt: string;
   updatedAt: string;
 }
@@ -70,11 +124,16 @@ export interface LessonPlan {
   classId: ID;
   title: string;
   objectives?: string[];
+  category?: string;
   sequence: number;
   activities: LessonActivity[];
   teachingNotes?: string;
+  teacherNotes?: string;
+  audioDescription?: string;
+  submissionTemplate?: string;
   resourceLinks?: string[];
   linkedStandardIds: ID[];
+  linkedAssessmentIds?: ID[];
   status: LessonPlanStatus;
   estimatedDurationMinutes?: number;
   teacherReflection?: string;

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import {
   Sheet,
   SheetContent,
@@ -37,24 +37,55 @@ export function StrategyEditDrawer({
   learningGoals,
   onSave,
 }: StrategyEditDrawerProps) {
-  const [goals, setGoals] = useState<string[]>([]);
-  const [newGoal, setNewGoal] = useState("");
-  const [linkedStandardIds, setLinkedStandardIds] = useState<string[]>([]);
-  const [framing, setFraming] = useState<ConceptualFraming>({});
-  const [assessmentApproach, setAssessmentApproach] = useState("");
-  const [differentiationNotes, setDifferentiationNotes] = useState("");
-  const [learningArc, setLearningArc] = useState("");
+  const draftKey = JSON.stringify({
+    goals: strategy.learningGoals,
+    standards: strategy.linkedStandardIds,
+    framing: strategy.conceptualFraming,
+    assessmentApproach: strategy.assessmentApproach,
+    differentiationNotes: strategy.action?.differentiationNotes,
+    learningArc: strategy.learningArc,
+  });
 
-  useEffect(() => {
-    if (open) {
-      setGoals([...strategy.learningGoals]);
-      setLinkedStandardIds([...strategy.linkedStandardIds]);
-      setFraming({ ...strategy.conceptualFraming });
-      setAssessmentApproach(strategy.assessmentApproach || "");
-      setDifferentiationNotes(strategy.differentiationNotes || "");
-      setLearningArc(strategy.learningArc || "");
-    }
-  }, [open, strategy]);
+  return (
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      {open ? (
+        <StrategyEditDrawerForm
+          key={draftKey}
+          onOpenChange={onOpenChange}
+          strategy={strategy}
+          programme={programme}
+          learningGoals={learningGoals}
+          onSave={onSave}
+        />
+      ) : null}
+    </Sheet>
+  );
+}
+
+type StrategyEditDrawerFormProps = Omit<StrategyEditDrawerProps, "open">;
+
+function StrategyEditDrawerForm({
+  onOpenChange,
+  strategy,
+  programme,
+  learningGoals,
+  onSave,
+}: StrategyEditDrawerFormProps) {
+  const [goals, setGoals] = useState<string[]>(() => [...strategy.learningGoals]);
+  const [newGoal, setNewGoal] = useState("");
+  const [linkedStandardIds, setLinkedStandardIds] = useState<string[]>(() => [
+    ...strategy.linkedStandardIds,
+  ]);
+  const [framing, setFraming] = useState<ConceptualFraming>(
+    () => ({ ...strategy.conceptualFraming })
+  );
+  const [assessmentApproach, setAssessmentApproach] = useState(
+    () => strategy.assessmentApproach || ""
+  );
+  const [differentiationNotes, setDifferentiationNotes] = useState(
+    () => strategy.action?.differentiationNotes || ""
+  );
+  const [learningArc, setLearningArc] = useState(() => strategy.learningArc || "");
 
   const addGoal = () => {
     if (newGoal.trim()) {
@@ -79,22 +110,24 @@ export function StrategyEditDrawer({
       linkedStandardIds,
       conceptualFraming: framing,
       assessmentApproach: assessmentApproach || undefined,
-      differentiationNotes: differentiationNotes || undefined,
+      action: {
+        ...(strategy.action ?? {}),
+        differentiationNotes: differentiationNotes || undefined,
+        resourceLinks: strategy.action?.resourceLinks,
+      },
       learningArc: learningArc || undefined,
-      resourceLinks: strategy.resourceLinks,
     });
     onOpenChange(false);
   };
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="w-[480px] sm:max-w-[480px] p-0 flex flex-col">
-        <SheetHeader className="px-6 pt-6 pb-4">
-          <SheetTitle>Edit Unit Strategy</SheetTitle>
-        </SheetHeader>
+    <SheetContent className="w-[480px] sm:max-w-[480px] p-0 flex flex-col">
+      <SheetHeader className="px-6 pt-6 pb-4">
+        <SheetTitle>Edit Unit Strategy</SheetTitle>
+      </SheetHeader>
 
-        <ScrollArea className="flex-1 px-6">
-          <div className="space-y-6 pb-6">
+      <ScrollArea className="flex-1 px-6">
+        <div className="space-y-6 pb-6">
             {/* Learning Goals */}
             <div className="space-y-2">
               <Label className="text-[13px]">Learning Goals</Label>
@@ -321,16 +354,15 @@ export function StrategyEditDrawer({
                 className="text-[13px] min-h-[60px]"
               />
             </div>
-          </div>
-        </ScrollArea>
+        </div>
+      </ScrollArea>
 
-        <SheetFooter className="px-6 py-4 border-t">
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
-          </Button>
-          <Button onClick={handleSave}>Save Strategy</Button>
-        </SheetFooter>
-      </SheetContent>
-    </Sheet>
+      <SheetFooter className="px-6 py-4 border-t">
+        <Button variant="outline" onClick={() => onOpenChange(false)}>
+          Cancel
+        </Button>
+        <Button onClick={handleSave}>Save Strategy</Button>
+      </SheetFooter>
+    </SheetContent>
   );
 }

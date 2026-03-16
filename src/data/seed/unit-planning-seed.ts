@@ -1,4 +1,3 @@
-import { format, subDays, addDays } from "date-fns";
 import type {
   UnitPlan,
   LessonPlan,
@@ -9,8 +8,6 @@ import type {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-const TODAY = new Date(2026, 1, 28); // 2026-02-28
-const iso = (d: Date) => format(d, "yyyy-MM-dd");
 const now = () => new Date().toISOString();
 
 const pad = (n: number, len = 2) => String(n).padStart(len, "0");
@@ -27,6 +24,24 @@ const CLS_MYP_HR = "cls_myp_hr";
 const CLS_DP_ENG = "cls_dp_eng";
 
 const lgId = (n: number) => `lg_${pad(n)}`;
+const commentId = (n: number) => `plan_comment_${pad(n)}`;
+
+const planningCollaborators = {
+  science: [
+    { id: "teacher_01", name: "Khushboo Bhatia", initials: "KB", role: "owner" as const },
+    { id: "teacher_03", name: "Tom Spencer", initials: "TS", role: "reviewer" as const },
+    { id: "teacher_07", name: "Keiko Endo", initials: "KE", role: "collaborator" as const },
+  ],
+  homeroom: [
+    { id: "teacher_01", name: "Khushboo Bhatia", initials: "KB", role: "owner" as const },
+    { id: "teacher_09", name: "Nadia Rahman", initials: "NR", role: "collaborator" as const },
+  ],
+  english: [
+    { id: "teacher_02", name: "Adrian Cole", initials: "AC", role: "owner" as const },
+    { id: "teacher_05", name: "Mina Shah", initials: "MS", role: "reviewer" as const },
+    { id: "teacher_08", name: "Leo Morgan", initials: "LM", role: "collaborator" as const },
+  ],
+};
 
 // ---------------------------------------------------------------------------
 // Generator
@@ -59,6 +74,8 @@ export function generateUnitPlanningData() {
           "Interpret data from field observations and lab experiments",
         ],
         linkedStandardIds: [lgId(1), lgId(2)],
+        durationWeeks: 5,
+        durationHours: 20,
         conceptualFraming: {
           keyConcept: "Systems",
           relatedConcepts: ["Balance", "Interaction"],
@@ -67,17 +84,75 @@ export function generateUnitPlanningData() {
             "Living systems maintain balance through interdependent relationships",
           atlFocus: ["ATL.RES", "ATL.THK"],
         },
+        inquiry: {
+          statement: "Living systems maintain balance through interdependent relationships.",
+          factualQuestions: [
+            "What happens when one organism is removed from a food web?",
+            "How do abiotic factors affect biodiversity in a habitat?",
+          ],
+          conceptualQuestions: [
+            "How do systems maintain equilibrium when conditions change?",
+            "Why do small ecological shifts create larger downstream consequences?",
+          ],
+          debatableQuestions: [
+            "Should humans intervene to restore ecosystems they have damaged?",
+          ],
+        },
+        learningFocus: {
+          atlSkillIds: [lgId(9), lgId(10)],
+          learnerProfileIds: [lgId(11), lgId(14)],
+          objectiveLabels: ["Criterion B: Inquiring and designing", "Criterion C: Processing and evaluating"],
+        },
         assessmentApproach:
           "Criterion B/C lab reports, formative exit tickets, and a summative investigation on osmosis.",
-        differentiationNotes:
-          "Sentence starters for EAL learners; extension data-analysis tasks for advanced students.",
-        resourceLinks: [
-          "https://education.nationalgeographic.org/ecosystems",
-          "https://www.khanacademy.org/science/biology/ecology",
-        ],
+        action: {
+          differentiationNotes:
+            "Sentence starters for EAL learners; extension data-analysis tasks for advanced students.",
+          resourceLinks: [
+            "https://education.nationalgeographic.org/ecosystems",
+            "https://www.khanacademy.org/science/biology/ecology",
+          ],
+          linkedAssessmentIds: ["asmt_11", "asmt_13"],
+          communityConnections: ["School biodiversity audit", "Native pollinator garden proposal"],
+        },
+        evidence: {
+          portfolioSignals: [
+            "Field-notebook observations",
+            "Annotated data table from the osmosis investigation",
+          ],
+          standardsFocusIds: [lgId(1), lgId(2)],
+          learningGoalIds: [lgId(1), lgId(2)],
+        },
+        reflection: {
+          prompts: [
+            "Which inquiry question generated the strongest student thinking this cycle?",
+            "Where did students need more modelling before the practical investigation?",
+          ],
+          teacherNotes:
+            "Keep the ecology data wall visible during Week 4 so students can refer back to field observations during the summative write-up.",
+        },
       },
       lessonPlanIds: [lpId(1), lpId(2), lpId(3), lpId(4)],
       order: 1,
+      collaborators: planningCollaborators.science,
+      sectionComments: [
+        {
+          id: commentId(1),
+          sectionKey: "inquiry",
+          authorId: "teacher_03",
+          authorName: "Tom Spencer",
+          body: "The inquiry questions are strong. Add a local ecosystem case so the task feels less abstract for students.",
+          createdAt: "2026-01-28T16:30:00.000Z",
+        },
+        {
+          id: commentId(2),
+          sectionKey: "reflection",
+          authorId: "teacher_01",
+          authorName: "Khushboo Bhatia",
+          body: "Keeping the biodiversity audit visible helped students connect the practical to the SOI during moderation.",
+          createdAt: "2026-02-21T18:05:00.000Z",
+        },
+      ],
       createdAt,
       updatedAt,
     },
@@ -101,6 +176,8 @@ export function generateUnitPlanningData() {
           "Design a controlled experiment to test a hypothesis about force and motion",
         ],
         linkedStandardIds: [lgId(1)],
+        durationWeeks: 4,
+        durationHours: 10,
         conceptualFraming: {
           keyConcept: "Change",
           relatedConcepts: ["Movement", "Energy"],
@@ -109,13 +186,57 @@ export function generateUnitPlanningData() {
             "Understanding the forces that cause change allows us to predict and control motion",
           atlFocus: ["ATL.THK"],
         },
+        inquiry: {
+          statement: "Understanding the forces that cause change allows us to predict and control motion.",
+          factualQuestions: [
+            "How do balanced and unbalanced forces affect motion?",
+          ],
+          conceptualQuestions: [
+            "How does the way we model force influence our predictions?",
+          ],
+          debatableQuestions: [
+            "Should all force-and-motion demonstrations prioritise precision over curiosity?",
+          ],
+        },
+        learningFocus: {
+          atlSkillIds: [lgId(10)],
+          learnerProfileIds: [lgId(11)],
+          objectiveLabels: ["Criterion A: Knowing and understanding", "Criterion B: Inquiring and designing"],
+        },
         assessmentApproach:
           "Problem set covering quantitative force calculations and a practical friction investigation.",
-        differentiationNotes:
-          "Visual force-diagram scaffolds; challenge problems for higher-ability students.",
+        action: {
+          differentiationNotes:
+            "Visual force-diagram scaffolds; challenge problems for higher-ability students.",
+          linkedAssessmentIds: ["asmt_14"],
+          communityConnections: ["Formula 1 aerodynamics case study"],
+        },
+        evidence: {
+          portfolioSignals: ["Worked force diagrams", "Friction investigation planning sheet"],
+          standardsFocusIds: [lgId(1)],
+          learningGoalIds: [lgId(1)],
+        },
+        reflection: {
+          prompts: [
+            "Where do students typically confuse force with motion?",
+            "Which representation helps them move from intuition to calculation?",
+          ],
+          teacherNotes: "Keep this unit intentionally lighter; it functions as a shorter pacing bridge before the next summative sequence.",
+        },
       },
       lessonPlanIds: [lpId(5), lpId(6)],
       order: 2,
+      collaborators: planningCollaborators.science,
+      sectionComments: [
+        {
+          id: commentId(3),
+          sectionKey: "unit_flow",
+          authorId: "teacher_07",
+          authorName: "Keiko Endo",
+          body: "Keep the friction investigation in Week 2 so the problem set can be assigned as consolidation rather than pre-teaching.",
+          createdAt: "2026-02-25T09:12:00.000Z",
+        },
+      ],
       createdAt,
       updatedAt,
     },
@@ -140,6 +261,8 @@ export function generateUnitPlanningData() {
           "Reflect on personal growth through service-learning experiences",
         ],
         linkedStandardIds: [lgId(5), lgId(6), lgId(7)],
+        durationWeeks: 5,
+        durationHours: 9,
         conceptualFraming: {
           keyConcept: "Identity",
           relatedConcepts: ["Community", "Perspective"],
@@ -148,13 +271,58 @@ export function generateUnitPlanningData() {
             "Our identities are shaped by the communities we belong to and the perspectives we encounter",
           atlFocus: ["ATL.COM", "ATL.COL"],
         },
+        inquiry: {
+          statement: "Our identities are shaped by the communities we belong to and the perspectives we encounter.",
+          factualQuestions: [
+            "What communities influence our day-to-day decisions?",
+          ],
+          conceptualQuestions: [
+            "How do identity and belonging influence action?",
+          ],
+          debatableQuestions: [
+            "Can a community challenge someone's identity in productive ways?",
+          ],
+        },
+        learningFocus: {
+          atlSkillIds: [lgId(6), lgId(7)],
+          learnerProfileIds: [lgId(11), lgId(15)],
+          objectiveLabels: ["Communication", "Collaboration", "Reflection"],
+        },
         assessmentApproach:
           "Personal project proposal and community-service reflection, assessed via rubric.",
-        differentiationNotes:
-          "Audio/visual reflection options for students who find extended writing challenging.",
+        action: {
+          differentiationNotes:
+            "Audio/visual reflection options for students who find extended writing challenging.",
+          linkedAssessmentIds: ["asmt_01", "asmt_02"],
+          communityConnections: ["Local service partner visit", "Student-led advisory circle"],
+        },
+        evidence: {
+          portfolioSignals: ["Identity map artefact", "Service proposal snapshot"],
+          standardsFocusIds: [lgId(5), lgId(6), lgId(7)],
+          learningGoalIds: [lgId(5), lgId(6), lgId(7)],
+        },
+        reflection: {
+          prompts: [
+            "Which discussion prompt created the richest perspective-taking?",
+            "Where did students need more support turning reflection into action?",
+          ],
+          teacherNotes:
+            "This is the lightest, most family-readable planner in the set and should stay low-jargon in the demo.",
+        },
       },
       lessonPlanIds: [lpId(7), lpId(8), lpId(9)],
       order: 1,
+      collaborators: planningCollaborators.homeroom,
+      sectionComments: [
+        {
+          id: commentId(4),
+          sectionKey: "inquiry",
+          authorId: "teacher_09",
+          authorName: "Nadia Rahman",
+          body: "Keep the prompt language simple here. This unit needs to read more like an advisory/social-emotional planner than a subject unit.",
+          createdAt: "2026-02-03T14:05:00.000Z",
+        },
+      ],
       createdAt,
       updatedAt,
     },
@@ -178,6 +346,8 @@ export function generateUnitPlanningData() {
           "Reflect on personal growth as a writer using the Learner Profile",
         ],
         linkedStandardIds: [lgId(5), lgId(14)],
+        durationWeeks: 4,
+        durationHours: 8,
         conceptualFraming: {
           keyConcept: "Creativity",
           relatedConcepts: ["Self-expression", "Communication"],
@@ -186,13 +356,58 @@ export function generateUnitPlanningData() {
             "Creative expression allows us to communicate who we are and what we value",
           atlFocus: ["ATL.COM"],
         },
+        inquiry: {
+          statement: "Creative expression allows us to communicate who we are and what we value.",
+          factualQuestions: [
+            "Which genre features shape reader expectations most clearly?",
+          ],
+          conceptualQuestions: [
+            "How does choice of form affect voice and meaning?",
+          ],
+          debatableQuestions: [
+            "Should a portfolio prioritise polish or creative risk-taking?",
+          ],
+        },
+        learningFocus: {
+          atlSkillIds: [lgId(6)],
+          learnerProfileIds: [lgId(14)],
+          objectiveLabels: ["Communication", "Self-management"],
+        },
         assessmentApproach:
           "Learner Profile self-reflection rubric assessed against portfolio evidence.",
-        differentiationNotes:
-          "Choice of genre (poem, short story, script); graphic organisers for planning.",
+        action: {
+          differentiationNotes:
+            "Choice of genre (poem, short story, script); graphic organisers for planning.",
+          linkedAssessmentIds: ["asmt_04"],
+          communityConnections: ["Creative writing showcase evening"],
+        },
+        evidence: {
+          portfolioSignals: ["Draft-to-final revision arc", "Voice reflection excerpt"],
+          standardsFocusIds: [lgId(5), lgId(14)],
+          learningGoalIds: [lgId(5), lgId(14)],
+        },
+        reflection: {
+          prompts: [
+            "Which revision protocol changed student writing most noticeably?",
+            "How did students talk about voice once they had to curate their own work?",
+          ],
+          teacherNotes:
+            "This completed unit is the best example for showing how reflection and evidence look after a unit closes.",
+        },
       },
       lessonPlanIds: [lpId(10), lpId(11), lpId(12)],
       order: 2,
+      collaborators: planningCollaborators.homeroom,
+      sectionComments: [
+        {
+          id: commentId(5),
+          sectionKey: "evidence",
+          authorId: "teacher_01",
+          authorName: "Khushboo Bhatia",
+          body: "The revision snapshots are stronger than the final piece alone. Keep them visible in the evidence tab for demo purposes.",
+          createdAt: "2026-01-29T11:45:00.000Z",
+        },
+      ],
       createdAt,
       updatedAt,
     },
@@ -217,23 +432,70 @@ export function generateUnitPlanningData() {
           "Deliver an effective oral commentary under timed conditions",
         ],
         linkedStandardIds: [lgId(3), lgId(4)],
+        durationWeeks: 6,
+        durationHours: 24,
         conceptualFraming: {
           tokConnection:
             "How does language shape our understanding of literary truth?",
           casOpportunity:
             "Literary mentoring with younger students",
         },
+        inquiry: {
+          statement: "Comparative reading reveals how authors position readers to see culture, power, and truth differently.",
+          factualQuestions: [
+            "Which narrative techniques recur across the studied texts?",
+          ],
+          conceptualQuestions: [
+            "How does context shape comparative interpretation?",
+          ],
+          debatableQuestions: [
+            "Is a stronger comparative essay driven more by textual detail or by conceptual framing?",
+          ],
+        },
+        learningFocus: {
+          atlSkillIds: [lgId(10)],
+          learnerProfileIds: [lgId(14), lgId(15)],
+          objectiveLabels: ["Paper 1 analysis", "Individual oral commentary", "Comparative writing"],
+        },
         assessmentApproach:
           "Paper 1 guided textual analysis and an individual oral commentary on a studied work.",
-        differentiationNotes:
-          "Annotated model essays provided; scaffolded thesis-statement frames for developing writers.",
-        resourceLinks: [
-          "https://www.litcharts.com",
-          "https://www.jstor.org",
-        ],
+        action: {
+          differentiationNotes:
+            "Annotated model essays provided; scaffolded thesis-statement frames for developing writers.",
+          resourceLinks: [
+            "https://www.litcharts.com",
+            "https://www.jstor.org",
+          ],
+          linkedAssessmentIds: ["asmt_22", "asmt_23"],
+          communityConnections: ["Literary mentoring with younger students"],
+        },
+        evidence: {
+          portfolioSignals: ["Oral commentary rehearsal note", "Comparative paragraph exemplar"],
+          standardsFocusIds: [lgId(3), lgId(4)],
+          learningGoalIds: [lgId(3), lgId(4)],
+        },
+        reflection: {
+          prompts: [
+            "Which comparative scaffold actually improved the sophistication of student argument?",
+            "What needs to happen earlier before the oral commentary so students rely less on scripted notes?",
+          ],
+          teacherNotes:
+            "Keep Paper 1 and Oral evidence visible together. That contrast helps show DP planning is still in the same workflow but with different emphasis.",
+        },
       },
       lessonPlanIds: [lpId(13), lpId(14), lpId(15), lpId(16)],
       order: 1,
+      collaborators: planningCollaborators.english,
+      sectionComments: [
+        {
+          id: commentId(6),
+          sectionKey: "unit_flow",
+          authorId: "teacher_05",
+          authorName: "Mina Shah",
+          body: "The oral commentary prep needs to stay visible in Week 3 so the assessment count matches what coordinators expect in the yearly view.",
+          createdAt: "2026-02-06T08:20:00.000Z",
+        },
+      ],
       createdAt,
       updatedAt,
     },
@@ -257,19 +519,63 @@ export function generateUnitPlanningData() {
           "Engage in Socratic discussion on postcolonial themes and perspectives",
         ],
         linkedStandardIds: [lgId(3), lgId(4)],
+        durationWeeks: 4,
+        durationHours: 8,
         conceptualFraming: {
           tokConnection:
             "To what extent does translation alter the knowledge conveyed by a literary text?",
           casOpportunity:
             "Organise a world-literature reading event for the school community",
         },
+        inquiry: {
+          statement: "World literature invites us to question who defines literary value and how meaning shifts across contexts.",
+          factualQuestions: [
+            "What is meant by 'literary canon' in different academic contexts?",
+          ],
+          conceptualQuestions: [
+            "How does translation mediate interpretation?",
+          ],
+          debatableQuestions: [
+            "Can a translated work ever fully preserve the intent of the original text?",
+          ],
+        },
+        learningFocus: {
+          atlSkillIds: [lgId(10)],
+          learnerProfileIds: [lgId(14)],
+          objectiveLabels: ["Seminar dialogue", "Comparative interpretation"],
+        },
         assessmentApproach:
           "Seminar participation rubric and a comparative essay outline.",
-        differentiationNotes:
-          "Pre-reading summaries for complex texts; discussion sentence stems for less confident speakers.",
+        action: {
+          differentiationNotes:
+            "Pre-reading summaries for complex texts; discussion sentence stems for less confident speakers.",
+          communityConnections: ["World literature evening with families"],
+        },
+        evidence: {
+          portfolioSignals: ["Seminar tracker", "Translation comparison annotation"],
+          standardsFocusIds: [lgId(3), lgId(4)],
+          learningGoalIds: [lgId(3), lgId(4)],
+        },
+        reflection: {
+          prompts: [
+            "Which text pairing best surfaces translation choices without overwhelming the class?",
+          ],
+          teacherNotes: "This stays intentionally draft and lighter-touch so the yearly view shows an upcoming DP sequence with incomplete signals.",
+        },
       },
       lessonPlanIds: [lpId(17), lpId(18)],
       order: 2,
+      collaborators: planningCollaborators.english,
+      sectionComments: [
+        {
+          id: commentId(7),
+          sectionKey: "inquiry",
+          authorId: "teacher_08",
+          authorName: "Leo Morgan",
+          body: "Leave this as an in-progress draft. It helps the insight cards show gaps instead of a fully complete dataset.",
+          createdAt: "2026-02-18T13:15:00.000Z",
+        },
+      ],
       createdAt,
       updatedAt,
     },
@@ -323,6 +629,7 @@ export function generateUnitPlanningData() {
         "Define ecosystem, habitat, and niche",
         "Identify biotic and abiotic factors in a local ecosystem",
       ],
+      category: "Launch",
       sequence: 1,
       activities: buildActivities(
         ["Ecosystem photo gallery walk", "intro", 10, "Students examine projected images of diverse ecosystems and note observations."],
@@ -331,6 +638,9 @@ export function generateUnitPlanningData() {
         ["Exit ticket reflection", "reflection", 10, "Students write one new understanding and one question."],
       ),
       teachingNotes: "Bring clipboards for the outdoor audit. Have the vocabulary handout printed.",
+      teacherNotes: "Collect two strong identity-free observation samples for the evidence wall.",
+      audioDescription: "Short teacher voice note introducing the outdoor audit task and success criteria.",
+      submissionTemplate: "Observation log with habitat, niche, and factor columns.",
       linkedStandardIds: [lgId(1)],
       status: "taught",
       estimatedDurationMinutes: 60,
@@ -348,6 +658,7 @@ export function generateUnitPlanningData() {
         "Construct a food web from field observation data",
         "Explain how energy flows through trophic levels",
       ],
+      category: "Knowledge building",
       sequence: 2,
       activities: buildActivities(
         ["Recap quiz: ecosystem vocabulary", "intro", 8, "Quick-fire recall of key terms from Lesson 1."],
@@ -356,6 +667,8 @@ export function generateUnitPlanningData() {
         ["Peer review of food webs", "discussion", 12, "Gallery walk: groups critique each other's webs for accuracy."],
       ),
       teachingNotes: "Print organism cards on coloured card stock. Prepare A3 sheets and markers.",
+      teacherNotes: "Use the gallery walk comments later in Unit Evidence as examples of formative reasoning.",
+      submissionTemplate: "Annotated food-web organiser with arrow labels.",
       linkedStandardIds: [lgId(1), lgId(2)],
       status: "taught",
       estimatedDurationMinutes: 60,
@@ -373,6 +686,7 @@ export function generateUnitPlanningData() {
         "Evaluate at least two ways humans affect biodiversity",
         "Propose a local conservation action plan",
       ],
+      category: "Application",
       sequence: 3,
       activities: buildActivities(
         ["News headline sort", "intro", 10, "Sort headlines into positive and negative human impacts."],
@@ -380,7 +694,10 @@ export function generateUnitPlanningData() {
         ["Conservation action plan", "individual", 20, "Each student drafts a one-page action plan for a local issue."],
       ),
       teachingNotes: "Differentiated reading levels for the case study texts.",
+      teacherNotes: "This lesson should surface the strongest evidence snippets for family-safe learning updates.",
+      submissionTemplate: "One-page conservation action plan with issue, impact, and action sections.",
       linkedStandardIds: [lgId(1), lgId(2)],
+      linkedAssessmentIds: ["asmt_13"],
       status: "assigned",
       estimatedDurationMinutes: 55,
       createdAt,
@@ -395,6 +712,7 @@ export function generateUnitPlanningData() {
         "Design a controlled experiment investigating the effect of pH on plant growth",
         "Record and present raw data with appropriate units",
       ],
+      category: "Assessment prep",
       sequence: 4,
       activities: buildActivities(
         ["Safety briefing & lab setup", "intro", 10, "Review lab safety rules and distribute equipment."],
@@ -403,8 +721,12 @@ export function generateUnitPlanningData() {
         ["Data table reflection", "reflection", 5, "Students note sources of error and suggest improvements."],
       ),
       teachingNotes: "Ensure pH buffer solutions are pre-prepared. Check that all groups have goggles.",
+      teacherNotes: "If time slips, prioritise variable identification before students begin setup.",
+      audioDescription: "Voiceover reminding students how to structure aim, hypothesis, variables, and raw data tables.",
+      submissionTemplate: "Investigation template with hypothesis, method, raw data table, and conclusion prompts.",
       resourceLinks: ["https://www.rsc.org/education/teachers/resources/practical-chemistry"],
       linkedStandardIds: [lgId(1), lgId(2)],
+      linkedAssessmentIds: ["asmt_11", "asmt_13"],
       status: "ready",
       estimatedDurationMinutes: 60,
       createdAt,
@@ -423,6 +745,7 @@ export function generateUnitPlanningData() {
         "State Newton's first and second laws of motion",
         "Calculate acceleration given force and mass",
       ],
+      category: "Concept development",
       sequence: 1,
       activities: buildActivities(
         ["Tablecloth trick demonstration", "intro", 8, "Teacher demonstrates inertia with plates on a cloth."],
@@ -430,6 +753,8 @@ export function generateUnitPlanningData() {
         ["Practice problems", "individual", 20, "Worksheet of graded difficulty problems on net force and acceleration."],
         ["Think-pair-share review", "discussion", 12, "Students compare answers and resolve discrepancies."],
       ),
+      teacherNotes: "Keep the worked examples visible in the planning hub preview card.",
+      submissionTemplate: "Worked-example notes plus two independent F=ma practice problems.",
       linkedStandardIds: [lgId(1)],
       status: "draft",
       estimatedDurationMinutes: 60,
@@ -445,13 +770,17 @@ export function generateUnitPlanningData() {
         "Describe friction as a force and its effect on motion",
         "Apply Newton's third law to everyday situations",
       ],
+      category: "Inquiry lab",
       sequence: 2,
       activities: buildActivities(
         ["Friction video clip", "intro", 5, "Short clip showing friction in sports."],
         ["Friction investigation planning", "group_work", 25, "Groups plan an experiment to measure friction on different surfaces."],
         ["Third-law matching game", "individual", 15, "Match action-reaction force pairs on a worksheet."],
       ),
+      teacherNotes: "Draft only. The friction investigation will become the bridge into the next summative build.",
+      submissionTemplate: "Friction investigation planner with variables and trial table.",
       linkedStandardIds: [lgId(1)],
+      linkedAssessmentIds: ["asmt_14"],
       status: "draft",
       estimatedDurationMinutes: 45,
       createdAt,
@@ -470,6 +799,7 @@ export function generateUnitPlanningData() {
         "Create a personal identity map highlighting cultural, social, and personal dimensions",
         "Share identity narratives respectfully in small groups",
       ],
+      category: "Community launch",
       sequence: 1,
       activities: buildActivities(
         ["Identity iceberg visual", "intro", 5, "Discuss the iceberg model: visible vs. hidden identity."],
@@ -477,6 +807,9 @@ export function generateUnitPlanningData() {
         ["Small-group sharing circle", "discussion", 10, "Share one element of your map and why it matters to you."],
       ),
       teachingNotes: "Emphasise that sharing is voluntary. Ensure a safe and respectful environment.",
+      teacherNotes: "Keep this language calm and family-readable; this is the closest thing to a lighter PYP-style planner in the dataset.",
+      audioDescription: "Gentle framing for the identity map task and circle-sharing norms.",
+      submissionTemplate: "Identity map canvas with visible/hidden identity prompts.",
       linkedStandardIds: [lgId(5), lgId(6)],
       status: "taught",
       estimatedDurationMinutes: 27,
@@ -494,6 +827,7 @@ export function generateUnitPlanningData() {
         "Identify a community need and propose a service-learning project",
         "Collaborate with peers to create a project action plan",
       ],
+      category: "Action planning",
       sequence: 2,
       activities: buildActivities(
         ["Community needs brainstorm", "intro", 5, "Whole-class brainstorm of local community needs."],
@@ -501,7 +835,10 @@ export function generateUnitPlanningData() {
         ["Project proposal writing", "individual", 10, "Draft a one-paragraph service project proposal."],
         ["Peer feedback round", "discussion", 5, "Exchange proposals and provide constructive feedback."],
       ),
+      teacherNotes: "This should visibly feed the personal project proposal assessment in the unit flow.",
+      submissionTemplate: "Service-learning proposal template with need, action, partners, and reflection sections.",
       linkedStandardIds: [lgId(5), lgId(7)],
+      linkedAssessmentIds: ["asmt_01", "asmt_02"],
       status: "assigned",
       estimatedDurationMinutes: 30,
       createdAt,
@@ -516,12 +853,14 @@ export function generateUnitPlanningData() {
         "Analyse a scenario from multiple cultural perspectives",
         "Demonstrate empathy through active listening exercises",
       ],
+      category: "Dialogue workshop",
       sequence: 3,
       activities: buildActivities(
         ["Empathy warm-up: walk-in-their-shoes", "intro", 5, "Read a short scenario and imagine different viewpoints."],
         ["Perspective-taking role play", "group_work", 15, "Groups role-play a scenario from assigned perspectives."],
         ["Debrief discussion", "discussion", 10, "Whole-class discussion on what was learned."],
       ),
+      teacherNotes: "Use one transcript excerpt later in the unit reflection panel.",
       linkedStandardIds: [lgId(5), lgId(6), lgId(7)],
       status: "ready",
       estimatedDurationMinutes: 30,
@@ -541,6 +880,7 @@ export function generateUnitPlanningData() {
         "Identify features of at least three creative writing genres",
         "Select a genre for the first portfolio piece",
       ],
+      category: "Genre exploration",
       sequence: 1,
       activities: buildActivities(
         ["Genre gallery walk", "intro", 5, "Read excerpts from poetry, fiction, and script pinned around the room."],
@@ -549,6 +889,7 @@ export function generateUnitPlanningData() {
         ["Pair share & feedback", "reflection", 3, "Read your piece aloud to a partner and receive one piece of feedback."],
       ),
       teachingNotes: "Print genre excerpts on coloured paper for the gallery walk.",
+      teacherNotes: "Keep one standout free-write snippet linked in Evidence to show growth over time.",
       linkedStandardIds: [lgId(5)],
       status: "taught",
       estimatedDurationMinutes: 30,
@@ -566,12 +907,15 @@ export function generateUnitPlanningData() {
         "Apply at least two revision strategies to improve a draft",
         "Give and receive constructive peer feedback",
       ],
+      category: "Revision workshop",
       sequence: 2,
       activities: buildActivities(
         ["Revision strategy mini-lesson", "direct_instruction", 8, "Teach 'read aloud', 'cut the clutter', and 'show don't tell'."],
         ["Silent revision time", "individual", 12, "Students revise their draft using the strategies."],
         ["Peer editing circles", "group_work", 10, "Groups of three exchange drafts and annotate with feedback."],
       ),
+      teacherNotes: "Even though this was skipped live, keep it in the yearly flow to show teacher planning intent.",
+      submissionTemplate: "Revision checklist: cut, clarify, strengthen image, and voice.",
       linkedStandardIds: [lgId(5), lgId(14)],
       status: "skipped",
       estimatedDurationMinutes: 30,
@@ -588,6 +932,7 @@ export function generateUnitPlanningData() {
         "Select pieces for the portfolio with a rationale",
         "Write a Learner Profile self-reflection connecting portfolio evidence to growth",
       ],
+      category: "Curation",
       sequence: 3,
       activities: buildActivities(
         ["Portfolio criteria review", "intro", 5, "Revisit the portfolio rubric and quality indicators."],
@@ -595,7 +940,10 @@ export function generateUnitPlanningData() {
         ["Learner Profile self-reflection", "reflection", 12, "Write a paragraph linking portfolio evidence to Learner Profile attributes."],
         ["Whole-class celebration", "discussion", 3, "Volunteers share a favourite line from their portfolio."],
       ),
+      teacherNotes: "This should surface in both report evidence and student portfolio views later.",
+      submissionTemplate: "Portfolio rationale and Learner Profile reflection frame.",
       linkedStandardIds: [lgId(5), lgId(14)],
+      linkedAssessmentIds: ["asmt_04"],
       status: "ready",
       estimatedDurationMinutes: 30,
       createdAt,
@@ -614,6 +962,7 @@ export function generateUnitPlanningData() {
         "Annotate an unseen prose passage for literary technique",
         "Write a thesis statement that addresses the guiding question",
       ],
+      category: "Paper 1 prep",
       sequence: 1,
       activities: buildActivities(
         ["Annotation modelling", "direct_instruction", 20, "Teacher demonstrates close-reading annotation on a projected passage."],
@@ -622,7 +971,10 @@ export function generateUnitPlanningData() {
         ["Self-assessment exit slip", "reflection", 10, "Rate your confidence on a scale and note one area for improvement."],
       ),
       teachingNotes: "Use passages from the supplementary reader; avoid works on the reading list.",
+      teacherNotes: "Flag one annotated response for the assessment insights exemplar.",
+      submissionTemplate: "Unseen prose annotation sheet and thesis scaffold.",
       linkedStandardIds: [lgId(3), lgId(4)],
+      linkedAssessmentIds: ["asmt_22"],
       status: "assigned",
       estimatedDurationMinutes: 90,
       createdAt,
@@ -637,6 +989,7 @@ export function generateUnitPlanningData() {
         "Identify at least three narrative techniques used across two studied works",
         "Analyse how these techniques create different effects",
       ],
+      category: "Comparative workshop",
       sequence: 2,
       activities: buildActivities(
         ["Technique card sort", "intro", 15, "Sort technique cards (irony, foreshadowing, unreliable narrator, etc.) into categories."],
@@ -644,6 +997,8 @@ export function generateUnitPlanningData() {
         ["Mini-presentation", "discussion", 30, "Each group presents findings; class takes notes."],
         ["Individual comparison paragraph", "individual", 10, "Draft one comparative paragraph using the PEE structure."],
       ),
+      teacherNotes: "This is the clearest lesson for showing linked standards, linked assessment, and student output together.",
+      submissionTemplate: "Comparative paragraph frame using thesis, evidence, and effect.",
       linkedStandardIds: [lgId(3), lgId(4)],
       status: "assigned",
       estimatedDurationMinutes: 90,
@@ -659,6 +1014,7 @@ export function generateUnitPlanningData() {
         "Plan a structured oral commentary with introduction, body, and conclusion",
         "Practise delivering commentary within the 15-minute time limit",
       ],
+      category: "Oral rehearsal",
       sequence: 3,
       activities: buildActivities(
         ["Model commentary playback", "direct_instruction", 15, "Listen to an exemplar oral commentary and note structural features."],
@@ -666,7 +1022,10 @@ export function generateUnitPlanningData() {
         ["Timed practice in pairs", "group_work", 35, "Pairs take turns delivering and timing each other; provide peer feedback."],
         ["Feedback consolidation", "reflection", 10, "Record three pieces of feedback and set a target for improvement."],
       ),
+      teacherNotes: "Keep the practice pairing visible in the unit flow; it makes the oral assessment feel grounded in planning.",
+      audioDescription: "Teacher reminder about pacing the oral commentary and signposting structure.",
       linkedStandardIds: [lgId(3)],
+      linkedAssessmentIds: ["asmt_23"],
       status: "ready",
       estimatedDurationMinutes: 90,
       createdAt,
@@ -681,6 +1040,7 @@ export function generateUnitPlanningData() {
         "Draft a comparative essay introduction and two body paragraphs",
         "Apply the assessment criteria to self-evaluate the draft",
       ],
+      category: "Essay drafting",
       sequence: 4,
       activities: buildActivities(
         ["Criteria unpacking", "intro", 10, "Review the DP assessment criteria for Paper 2 essays."],
@@ -688,6 +1048,8 @@ export function generateUnitPlanningData() {
         ["Self-assessment against criteria", "assessment", 20, "Use the rubric to highlight strengths and areas for improvement in your draft."],
         ["Peer review swap", "group_work", 10, "Exchange drafts with a partner; annotate with suggestions."],
       ),
+      teacherNotes: "Good place to preview how essay-type assessments can slot into the same workflow later.",
+      submissionTemplate: "Comparative essay draft template with thesis, body paragraph planner, and self-assessment block.",
       linkedStandardIds: [lgId(3), lgId(4)],
       status: "ready",
       estimatedDurationMinutes: 90,
@@ -707,6 +1069,7 @@ export function generateUnitPlanningData() {
         "Define 'literary canon' and discuss its historical formation",
         "Evaluate whose voices are included and excluded from the canon",
       ],
+      category: "Seminar launch",
       sequence: 1,
       activities: buildActivities(
         ["Canon brainstorm", "intro", 10, "List authors you consider 'essential' — then examine the patterns."],
@@ -714,6 +1077,7 @@ export function generateUnitPlanningData() {
         ["Debate: should there be a canon?", "discussion", 40, "Structured debate in two teams with prepared arguments."],
         ["Reflection journal", "reflection", 15, "Write a personal response: how do you feel about the canon debate?"],
       ),
+      teacherNotes: "Stay draft. We want a visible future-planning example in the hub.",
       linkedStandardIds: [lgId(3), lgId(4)],
       status: "draft",
       estimatedDurationMinutes: 90,
@@ -729,6 +1093,7 @@ export function generateUnitPlanningData() {
         "Analyse how translation choices affect meaning and tone",
         "Compare two translations of the same passage",
       ],
+      category: "Seminar inquiry",
       sequence: 2,
       activities: buildActivities(
         ["Translation comparison warm-up", "intro", 10, "Read two translations of the same poem side by side."],
@@ -736,6 +1101,7 @@ export function generateUnitPlanningData() {
         ["Socratic seminar: does translation betray the original?", "discussion", 40, "Open discussion using the Socratic method with prepared questions."],
         ["Exit reflection", "reflection", 10, "One sentence: what surprised you about translation today?"],
       ),
+      teacherNotes: "This is the cleanest future-facing placeholder for concept coverage gaps in Planning Insights.",
       linkedStandardIds: [lgId(3), lgId(4)],
       status: "draft",
       estimatedDurationMinutes: 90,
