@@ -6,6 +6,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { GRADING_MODE_LABELS } from "@/lib/grade-helpers";
+import { getAssessmentIntentLabel, getAssessmentTypeLabel } from "@/lib/assessment-labels";
 import { computeUnreleasedGradesCount } from "@/lib/selectors/grade-selectors";
 import { Calendar, Users } from "lucide-react";
 import type { Assessment } from "@/types/assessment";
@@ -43,6 +44,13 @@ export function AssessmentListItem({
   const unreleasedCount = assessment.status === "live"
     ? computeUnreleasedGradesCount(grades, assessment.id)
     : 0;
+  const assessmentTypeLabel = getAssessmentTypeLabel(assessment.assessmentType);
+  const assessmentIntentLabel = getAssessmentIntentLabel(assessment.assessmentIntent);
+  const submissionModeLabel =
+    assessment.assessmentType === "off_platform" &&
+    assessment.offPlatformConfig?.submissionMode === "offline_mode"
+      ? "Offline mode"
+      : undefined;
 
   const resolvedHref = href || `/assessments/${assessment.id}`;
 
@@ -85,6 +93,19 @@ export function AssessmentListItem({
 
           <div className="flex items-center gap-1.5 mt-auto flex-wrap">
             <Badge variant="outline" className="text-[11px] font-medium">
+              {assessmentTypeLabel}
+            </Badge>
+            {assessmentIntentLabel ? (
+              <Badge variant="secondary" className="text-[11px] font-medium">
+                {assessmentIntentLabel}
+              </Badge>
+            ) : null}
+            {submissionModeLabel ? (
+              <Badge variant="secondary" className="text-[11px] font-medium">
+                {submissionModeLabel}
+              </Badge>
+            ) : null}
+            <Badge variant="outline" className="text-[11px] font-medium">
               {GRADING_MODE_LABELS[assessment.gradingMode]}
             </Badge>
             {assessment.totalPoints != null && assessment.gradingMode === "score" && (
@@ -111,7 +132,10 @@ export function AssessmentListItem({
           <div>
             <p className="text-[14px] font-medium">{assessment.title}</p>
             <p className="text-[12px] text-muted-foreground">
-              Due {format(parseISO(assessment.dueDate), "MMM d, yyyy")} · {GRADING_MODE_LABELS[assessment.gradingMode]}
+              Due {format(parseISO(assessment.dueDate), "MMM d, yyyy")} · {assessmentTypeLabel}
+              {assessmentIntentLabel ? ` · ${assessmentIntentLabel}` : ""}
+              {submissionModeLabel ? ` · ${submissionModeLabel}` : ""}
+              {` · ${GRADING_MODE_LABELS[assessment.gradingMode]}`}
               {unitTitle && (
                 <span className="text-[11px] text-muted-foreground hover:underline hover:text-foreground cursor-pointer ml-1">
                   · {unitTitle}

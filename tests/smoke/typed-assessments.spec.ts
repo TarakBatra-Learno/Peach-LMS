@@ -31,11 +31,11 @@ test("teacher assessments behave like a cross-class typed work queue", async ({ 
   await expect(page.getByRole("heading", { name: "Assessments" })).toBeVisible();
   await expect(page.getByText("Cross-class work queue")).toBeVisible();
 
-  await expect(page.getByText("Field Investigation Report")).toBeVisible();
-  await expect(page.getByText("Practical Observation Conference")).toBeVisible();
-  await expect(page.getByText("Systems Check Quiz")).toBeVisible();
-  await expect(page.getByText("Ecosystem Reasoning Chat")).toBeVisible();
-  await expect(page.getByText("Scientific Argument Essay")).toBeVisible();
+  await expect(page.getByRole("link", { name: "Field Investigation Report" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Practical Observation Conference" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Systems Check Quiz" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Ecosystem Reasoning Chat" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Scientific Argument Essay" })).toBeVisible();
 
   await expect(page.getByText("Off-platform").first()).toBeVisible();
   await expect(page.getByText("Quiz").first()).toBeVisible();
@@ -50,13 +50,13 @@ test("teacher assessments behave like a cross-class typed work queue", async ({ 
   await expect(page.getByRole("tab", { name: "Submissions" })).toBeVisible();
   await expect(page.getByRole("tab", { name: "Insights" })).toBeVisible();
   await expect(page.getByRole("tab", { name: "Release" })).toBeVisible();
-  await expect(page.getByText("Quiz")).toBeVisible();
-  await expect(page.getByText("Formative")).toBeVisible();
+  await expect(page.getByText("Quiz", { exact: true }).first()).toBeVisible();
+  await expect(page.getByText("Formative", { exact: true }).first()).toBeVisible();
 
   await page.goto("/assessments/asmt_typed_offline");
   await expect(page.getByRole("heading", { name: "Practical Observation Conference" })).toBeVisible();
-  await expect(page.getByText("Off-platform")).toBeVisible();
-  await expect(page.getByText("Offline mode")).toBeVisible();
+  await expect(page.getByText("Off-platform", { exact: true }).first()).toBeVisible();
+  await expect(page.getByText("Offline mode", { exact: true }).first()).toBeVisible();
 });
 
 test("student runners differ by typed assessment and respect release gating", async ({ page }) => {
@@ -70,26 +70,26 @@ test("student runners differ by typed assessment and respect release gating", as
 
   await page.goto("/student/classes/cls_myp_sci/assessments/asmt_typed_quiz");
   await expect(page.getByRole("heading", { name: "Systems Check Quiz" })).toBeVisible();
-  await expect(page.getByText("Quiz")).toBeVisible();
+  await expect(page.getByText("Quiz", { exact: true }).first()).toBeVisible();
   await expect(page.getByText("Quiz runner")).toBeVisible();
   await expect(page.getByRole("button", { name: "Submit quiz" })).toBeVisible();
   await expect(page.getByText("Assessment report")).toHaveCount(0);
 
   await page.goto("/student/classes/cls_myp_sci/assessments/asmt_typed_chat");
   await expect(page.getByRole("heading", { name: "Ecosystem Reasoning Chat" })).toBeVisible();
-  await expect(page.getByText("Chat")).toBeVisible();
-  await expect(page.getByText("Conversation")).toBeVisible();
+  await expect(page.getByText("Chat", { exact: true }).first()).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Conversation" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Send response" })).toBeVisible();
 
   await page.goto("/student/classes/cls_myp_sci/assessments/asmt_typed_essay");
   await expect(page.getByRole("heading", { name: "Scientific Argument Essay" })).toBeVisible();
-  await expect(page.getByText("Essay")).toBeVisible();
+  await expect(page.getByText("Essay", { exact: true }).first()).toBeVisible();
   await expect(page.getByText("Essay editor")).toBeVisible();
   await expect(page.getByRole("button", { name: "Submit essay" })).toBeVisible();
 
   await page.goto("/student/classes/cls_myp_sci/assessments/asmt_typed_offline");
   await expect(page.getByRole("heading", { name: "Practical Observation Conference" })).toBeVisible();
-  await expect(page.getByText("Offline mode")).toBeVisible();
+  await expect(page.getByText("Offline mode", { exact: true }).first()).toBeVisible();
   await expect(page.getByText("Completed off-platform")).toBeVisible();
   await expect(page.getByRole("button", { name: "Save draft" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Submit" })).toHaveCount(0);

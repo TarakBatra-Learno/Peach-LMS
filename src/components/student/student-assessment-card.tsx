@@ -3,12 +3,14 @@
 import { useRouter } from "next/navigation";
 import { useStore } from "@/stores";
 import { Card } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { StatusBadge } from "@/components/shared/status-badge";
 import {
   getStudentSubmission,
   getStudentReleasedGrades,
   getStudentSubmissionStatus,
 } from "@/lib/student-selectors";
+import { getAssessmentIntentLabel, getAssessmentTypeLabel } from "@/lib/assessment-labels";
 import type { StudentAssessmentView } from "@/lib/student-permissions";
 import { Calendar, ChevronRight } from "lucide-react";
 import { format } from "date-fns";
@@ -55,6 +57,8 @@ export function StudentAssessmentCard({
 
   // Map submission status to badge key
   const submissionBadgeKey = submissionStatus;
+  const assessmentTypeLabel = getAssessmentTypeLabel(assessment.assessmentType);
+  const assessmentIntentLabel = getAssessmentIntentLabel(assessment.assessmentIntent);
 
   const handleClick = () => {
     if (isGraded && onGradeClick) {
@@ -78,6 +82,8 @@ export function StudentAssessmentCard({
                 <Calendar className="h-3.5 w-3.5" />
                 Due {format(new Date(assessment.dueDate), "MMM d, yyyy")}
               </span>
+              <span>{assessmentTypeLabel}</span>
+              {assessmentIntentLabel ? <span>{assessmentIntentLabel}</span> : null}
               <span>{assessment.gradingMode.replace(/_/g, " ")}</span>
               {assessment.totalPoints && assessment.gradingMode === "score" && (
                 <span>{assessment.totalPoints} pts</span>
@@ -85,6 +91,9 @@ export function StudentAssessmentCard({
             </div>
           </div>
           <div className="flex items-center gap-2 shrink-0">
+            <Badge variant="outline" className="text-[10px]">
+              {assessmentTypeLabel}
+            </Badge>
             {/* Graded badge (teacher marking status) */}
             {isGraded && !isExcused && (
               <StatusBadge status="graded" showIcon={false} />

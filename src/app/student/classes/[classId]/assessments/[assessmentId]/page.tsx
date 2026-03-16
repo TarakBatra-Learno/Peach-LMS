@@ -12,16 +12,23 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { SubmissionWorkbook } from "@/components/student/submission-workbook";
 import { GradeFeedbackViewer } from "@/components/student/grade-feedback-viewer";
+import { OffPlatformRunner } from "@/components/student/assessment-runners/off-platform-runner";
+import { QuizRunner } from "@/components/student/assessment-runners/quiz-runner";
+import { ChatRunner } from "@/components/student/assessment-runners/chat-runner";
+import { EssayRunner } from "@/components/student/assessment-runners/essay-runner";
+import { AssessmentReportView } from "@/components/student/assessment-report-view";
 import {
   getStudentAssessments,
   getStudentSubmission,
   getStudentSubmissionStatus,
   getStudentReleasedGrades,
+  getStudentReleasedAssessmentReport,
 } from "@/lib/student-selectors";
 import { isAssessmentOpenForSubmission, isAssessmentPastDue } from "@/lib/student-permissions";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { AddToGoalDialog } from "@/components/student/add-to-goal-dialog";
 import { Button } from "@/components/ui/button";
+import { getAssessmentIntentLabel, getAssessmentTypeLabel } from "@/lib/assessment-labels";
 import {
   AlertCircle,
   Calendar,
@@ -177,6 +184,10 @@ export default function StudentAssessmentDetailPage() {
     [state, studentId, classId]
   );
   const grade = releasedGrades.find((g) => g.assessmentId === assessmentId);
+  const releasedAssessmentReport = useMemo(
+    () => (studentId ? getStudentReleasedAssessmentReport(state, studentId, assessmentId) : undefined),
+    [assessmentId, state, studentId]
+  );
 
   // Linked unit plan
   const unitPlan = projectedAssessment?.unitId
@@ -194,6 +205,13 @@ export default function StudentAssessmentDetailPage() {
 
   const isOpen = rawAssessment ? isAssessmentOpenForSubmission(rawAssessment) : false;
   const isPastDue = rawAssessment ? isAssessmentPastDue(rawAssessment) : false;
+  const assessmentTypeLabel = getAssessmentTypeLabel(projectedAssessment?.assessmentType);
+  const assessmentIntentLabel = getAssessmentIntentLabel(projectedAssessment?.assessmentIntent);
+  const offPlatformModeLabel =
+    projectedAssessment?.assessmentType === "off_platform" &&
+    projectedAssessment.offPlatformConfig?.submissionMode === "offline_mode"
+      ? "Offline mode"
+      : undefined;
 
   // Canonical submission status
   const submissionStatusValue = rawAssessment
@@ -233,6 +251,19 @@ export default function StudentAssessmentDetailPage() {
         description={`Due ${format(new Date(projectedAssessment.dueDate), "EEEE, MMMM d, yyyy")}`}
       >
         <div className="flex gap-2 mt-2">
+          <Badge variant="outline" className="text-[11px]">
+            {assessmentTypeLabel}
+          </Badge>
+          {assessmentIntentLabel ? (
+            <Badge variant="secondary" className="text-[11px]">
+              {assessmentIntentLabel}
+            </Badge>
+          ) : null}
+          {offPlatformModeLabel ? (
+            <Badge variant="secondary" className="text-[11px]">
+              {offPlatformModeLabel}
+            </Badge>
+          ) : null}
           <Badge variant="outline" className="text-[11px]">
             {projectedAssessment.gradingMode.replace(/_/g, " ")}
           </Badge>
@@ -281,15 +312,53 @@ export default function StudentAssessmentDetailPage() {
             <GradeFeedbackViewerWithTracking grade={grade} assessment={rawAssessment} />
           )}
 
-          {/* Submission workbook */}
-          <SubmissionWorkbook
-            submission={submission}
-            assessmentId={assessmentId}
-            studentId={studentId}
-            classId={classId}
-            isOpen={isOpen}
-            isPastDue={isPastDue}
-          />
+          {releasedAssessmentReport ? (
+            <AssessmentReportView report={releasedAssessmentReport} />
+          ) : null}
+
+          {rawAssessment.assessmentType === "quiz" ? (
+            <QuizRunner
+              assessment={rawAssessment}
+              submission={submission}
+              studentId={studentId}
+              classId={classId}
+              isPastDue={isPastDue}
+            />
+          ) : rawAssessment.assessmentType === "chat" ? (
+            <ChatRunner
+              assessment={rawAssessment}
+              submission={submission}
+              studentId={studentId}
+              classId={classId}
+            />
+          ) : rawAssessment.assessmentType === "essay" ? (
+            <EssayRunner
+              assessment={rawAssessment}
+              submission={submission}
+              studentId={studentId}
+              classId={classId}
+              isPastDue={isPastDue}
+            />
+          ) : rawAssessment.assessmentType === "off_platform" ? (
+            <OffPlatformRunner
+              assessment={rawAssessment}
+              submission={submission}
+              assessmentId={assessmentId}
+              studentId={studentId}
+              classId={classId}
+              isOpen={isOpen}
+              isPastDue={isPastDue}
+            />
+          ) : (
+            <SubmissionWorkbook
+              submission={submission}
+              assessmentId={assessmentId}
+              studentId={studentId}
+              classId={classId}
+              isOpen={isOpen}
+              isPastDue={isPastDue}
+            />
+          )}
 
           {/* Add to Goal button */}
           {isSubmissionSubmitted(submission) && (
@@ -323,8 +392,15 @@ export default function StudentAssessmentDetailPage() {
               <div className="flex items-center gap-2 text-[13px]">
                 <BookOpen className="h-4 w-4 text-muted-foreground" />
                 <div>
-                  <p className="text-[12px] text-muted-foreground">Grading mode</p>
-                  <p className="font-medium">{projectedAssessment.gradingMode.replace(/_/g, " ")}</p>
+                  <p className="text-[12px] text-muted-foreground">Assessment setup</p>
+                  <p className="font-medium">
+                    {assessmentTypeLabel}
+                    {assessmentIntentLabel ? ` · ${assessmentIntentLabel}` : ""}
+                  </p>
+                  <p className="text-[12px] text-muted-foreground">
+                    {projectedAssessment.gradingMode.replace(/_/g, " ")}
+                    {offPlatformModeLabel ? ` · ${offPlatformModeLabel}` : ""}
+                  </p>
                 </div>
               </div>
               {projectedAssessment.totalPoints && projectedAssessment.gradingMode === "score" && (

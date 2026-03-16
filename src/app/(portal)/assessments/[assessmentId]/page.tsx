@@ -11,6 +11,8 @@ import { SubmissionPreviewDrawer } from "@/components/shared/submission-preview-
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import { GradingSheet } from "@/components/shared/grading-sheet";
 import { OptionsWindow } from "@/components/shared/options-window";
+import { AssessmentAIReportPanel } from "@/components/assessments/assessment-ai-report-panel";
+import { AssessmentInsightsPanel } from "@/components/assessments/assessment-insights-panel";
 import type { GradingSheetState } from "@/components/shared/grading-sheet";
 import {
   Dialog,
@@ -84,6 +86,10 @@ import {
   getChecklistTotalPoints,
   GRADING_MODE_LABELS,
 } from "@/lib/grade-helpers";
+import {
+  getAssessmentIntentLabel,
+  getAssessmentTypeLabel,
+} from "@/lib/assessment-labels";
 import type { TeacherReviewStatus } from "@/lib/grade-helpers";
 import { buildGradePayload } from "@/lib/grade-save";
 import { computeAssessmentAverage, computeUnreleasedGradesCount } from "@/lib/selectors/grade-selectors";
@@ -158,6 +164,9 @@ export default function AssessmentDetailPage() {
   const learningGoals = useStore((s) => s.learningGoals);
   const unitPlans = useStore((s) => s.unitPlans);
   const submissions = useStore((s) => s.submissions);
+  const assessmentReports = useStore((s) => s.assessmentReports);
+  const assessmentInsightSummaries = useStore((s) => s.assessmentInsightSummaries);
+  const updateAssessmentReport = useStore((s) => s.updateAssessmentReport);
   const addStudentNotification = useStore((s) => s.addStudentNotification);
   const closeAssessment = useStore((s) => s.closeAssessment);
   const reopenAssessment = useStore((s) => s.reopenAssessment);
@@ -180,6 +189,16 @@ export default function AssessmentDetailPage() {
   const allSubmissions = useMemo(
     () => submissions.filter((submission) => submission.assessmentId === assessmentId),
     [submissions, assessmentId]
+  );
+  const allAssessmentReports = useMemo(
+    () => assessmentReports.filter((report) => report.assessmentId === assessmentId),
+    [assessmentReports, assessmentId]
+  );
+  const assessmentInsightSummary = useMemo(
+    () =>
+      assessmentInsightSummaries.find((summary) => summary.assessmentId === assessmentId) ??
+      null,
+    [assessmentId, assessmentInsightSummaries]
   );
   const getClassHref = (classId: string) =>
     embedded ? getAdminClassWorkspaceHref(classId) : `/classes/${classId}`;
@@ -250,6 +269,7 @@ export default function AssessmentDetailPage() {
   const [submissionPreviewOpen, setSubmissionPreviewOpen] = useState(false);
   const [submissionPreviewStudent, setSubmissionPreviewStudent] = useState<Student | null>(null);
   const [submissionPreviewSubmission, setSubmissionPreviewSubmission] = useState<Submission | null>(null);
+  const [selectedReleaseStudentId, setSelectedReleaseStudentId] = useState<string | null>(null);
 
   // Confirm dialogs
   const [deleteConfirm, setDeleteConfirm] = useState(false);
@@ -305,6 +325,19 @@ export default function AssessmentDetailPage() {
     : 0;
   const expectedCount = students.length - excusedCount;
   const unreleasedCount = computeUnreleasedGradesCount(grades, assessmentId);
+  const selectedReleaseStudent =
+    students.find((student) => student.id === (selectedReleaseStudentId ?? urlStudentId ?? students[0]?.id)) ??
+    null;
+  const selectedReleaseReport = selectedReleaseStudent
+    ? allAssessmentReports.find((report) => report.studentId === selectedReleaseStudent.id) ?? null
+    : null;
+  const assessmentTypeLabel = getAssessmentTypeLabel(assessment?.assessmentType);
+  const assessmentIntentLabel = getAssessmentIntentLabel(assessment?.assessmentIntent);
+  const offPlatformModeLabel =
+    assessment?.assessmentType === "off_platform" &&
+    assessment.offPlatformConfig?.submissionMode === "offline_mode"
+      ? "Offline mode"
+      : undefined;
 
   const classAvg = useMemo(() => {
     if (!assessment) return "N/A";
@@ -618,6 +651,16 @@ export default function AssessmentDetailPage() {
     } else {
       toast.info("No ready grades to release");
     }
+  };
+
+  const handleAssessmentReportChange = (
+    updates: Partial<(typeof allAssessmentReports)[number]>
+  ) => {
+    if (!selectedReleaseReport) return;
+    updateAssessmentReport(selectedReleaseReport.id, {
+      ...updates,
+      updatedAt: new Date().toISOString(),
+    });
   };
 
   // Excuse a student (from options window)
@@ -1355,10 +1398,25 @@ export default function AssessmentDetailPage() {
             </div>
           </div>
           <p className="mt-1 text-[14px] text-muted-foreground">
-            {cls?.name ?? "Unknown class"} · Due {format(parseISO(assessment.dueDate), "MMM d, yyyy")} · {GRADING_MODE_LABELS[assessment.gradingMode]}
+            {cls?.name ?? "Unknown class"} · Due {format(parseISO(assessment.dueDate), "MMM d, yyyy")} · {assessmentTypeLabel}
+            {assessmentIntentLabel ? ` · ${assessmentIntentLabel}` : ""}
+            {` · ${GRADING_MODE_LABELS[assessment.gradingMode]}`}
           </p>
           <div className="flex items-center gap-2 mt-2">
             <StatusBadge status={assessment.status} />
+            <Badge variant="outline" className="text-[11px]">
+              {assessmentTypeLabel}
+            </Badge>
+            {assessmentIntentLabel ? (
+              <Badge variant="secondary" className="text-[11px]">
+                {assessmentIntentLabel}
+              </Badge>
+            ) : null}
+            {offPlatformModeLabel ? (
+              <Badge variant="secondary" className="text-[11px]">
+                {offPlatformModeLabel}
+              </Badge>
+            ) : null}
             {assessment.gradingMode === "score" && assessment.totalPoints && (
               <Badge variant="secondary" className="text-[11px]">
                 {assessment.totalPoints} points
@@ -1394,21 +1452,16 @@ export default function AssessmentDetailPage() {
         </div>
       </div>
 
-      <Tabs defaultValue={urlStudentId ? "students" : "details"} className="w-full">
+      <Tabs defaultValue={urlStudentId ? "submissions" : "overview"} className="w-full">
         <TabsList className="mb-6">
-          <TabsTrigger value="details">Details</TabsTrigger>
-          <TabsTrigger value="students">Students ({students.length})</TabsTrigger>
-          {(assessment.gradingMode === "rubric" ||
-            assessment.gradingMode === "myp_criteria") && (
-            <TabsTrigger value="rubric">Rubric</TabsTrigger>
-          )}
-          {assessment.gradingMode === "checklist" && (
-            <TabsTrigger value="checklist-builder">Checklist</TabsTrigger>
-          )}
+          <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="submissions">Submissions</TabsTrigger>
+          <TabsTrigger value="insights">Insights</TabsTrigger>
+          <TabsTrigger value="release">Release</TabsTrigger>
         </TabsList>
 
-        {/* ============ Details Tab ============ */}
-        <TabsContent value="details">
+        {/* ============ Overview Tab ============ */}
+        <TabsContent value="overview">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
             <StatCard label="Students" value={students.length} icon={Users} />
             <StatCard label="Graded" value={gradedCount} icon={CheckCircle2} />
@@ -1454,11 +1507,26 @@ export default function AssessmentDetailPage() {
               </div>
               <div>
                 <p className="text-[12px] font-medium text-muted-foreground uppercase tracking-wide mb-1">
-                  Grading mode
+                  Assessment setup
                 </p>
-                <p className="text-[14px]">
-                  {GRADING_MODE_LABELS[assessment.gradingMode]}
-                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  <Badge variant="outline" className="text-[11px]">
+                    {assessmentTypeLabel}
+                  </Badge>
+                  {assessmentIntentLabel ? (
+                    <Badge variant="secondary" className="text-[11px]">
+                      {assessmentIntentLabel}
+                    </Badge>
+                  ) : null}
+                  <Badge variant="outline" className="text-[11px]">
+                    {GRADING_MODE_LABELS[assessment.gradingMode]}
+                  </Badge>
+                  {offPlatformModeLabel ? (
+                    <Badge variant="secondary" className="text-[11px]">
+                      {offPlatformModeLabel}
+                    </Badge>
+                  ) : null}
+                </div>
               </div>
               {assessment.description && (
                 <div className="sm:col-span-2">
@@ -1539,8 +1607,8 @@ export default function AssessmentDetailPage() {
           </Card>
         </TabsContent>
 
-        {/* ============ Students Tab ============ */}
-        <TabsContent value="students">
+        {/* ============ Submissions Tab ============ */}
+        <TabsContent value="submissions">
           {assessment.gradingMode === "checklist" &&
           (!assessment.checklist || assessment.checklist.length === 0) ? (
             <EmptyState
@@ -1796,34 +1864,122 @@ export default function AssessmentDetailPage() {
           )}
         </TabsContent>
 
-        {/* ============ Rubric Tab ============ */}
-        {(assessment.gradingMode === "rubric" ||
-          assessment.gradingMode === "myp_criteria") && (
-          <TabsContent value="rubric">
-            <RubricTab
-              assessment={assessment}
-              onUpdateAssessment={updateAssessment}
-            />
-          </TabsContent>
-        )}
+        <TabsContent value="insights">
+          <AssessmentInsightsPanel summary={assessmentInsightSummary} />
+        </TabsContent>
 
-        {/* ============ Checklist Builder Tab ============ */}
-        {assessment.gradingMode === "checklist" && (
-          <TabsContent value="checklist-builder">
-            <ChecklistBuilder
-              items={assessment.checklist ?? []}
-              sections={assessment.checklistSections ?? []}
-              outcomeModel={assessment.checklistOutcomeModel ?? "feedback_only"}
-              onSave={(items, sections) => {
-                updateAssessment(assessmentId, {
-                  checklist: items,
-                  checklistSections: sections,
-                });
-                toast.success("Checklist saved");
-              }}
-            />
-          </TabsContent>
-        )}
+        <TabsContent value="release">
+          <div className="space-y-4">
+            <Card className="p-5 gap-0">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-[16px] font-semibold">Release controls</p>
+                  <p className="mt-1 text-[13px] text-muted-foreground">
+                    Review the seeded AI assessment report, then release grading when the feedback is ready for learners.
+                  </p>
+                </div>
+                {isLive && readyCount > 0 ? (
+                  <Button variant="outline" size="sm" onClick={handleReleaseAllReady}>
+                    <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />
+                    Release all ready ({readyCount})
+                  </Button>
+                ) : null}
+              </div>
+            </Card>
+
+            <div className="grid gap-4 xl:grid-cols-[280px_minmax(0,1fr)]">
+              <Card className="p-3 gap-0">
+                <div className="space-y-1">
+                  {students.map((student) => {
+                    const grade = grades.find((entry) => entry.studentId === student.id);
+                    const report = allAssessmentReports.find((entry) => entry.studentId === student.id);
+                    const selected = selectedReleaseStudent?.id === student.id;
+                    return (
+                      <button
+                        key={student.id}
+                        type="button"
+                        className={`flex w-full items-start justify-between rounded-xl px-3 py-2 text-left transition-colors ${
+                          selected ? "bg-muted" : "hover:bg-muted/60"
+                        }`}
+                        onClick={() => setSelectedReleaseStudentId(student.id)}
+                      >
+                        <div>
+                          <p className="text-[13px] font-medium">
+                            {student.firstName} {student.lastName}
+                          </p>
+                          <p className="text-[12px] text-muted-foreground">
+                            {grade?.releasedAt
+                              ? "Grade released"
+                              : grade?.gradingStatus === "ready"
+                                ? "Ready to release"
+                                : report?.status === "ready"
+                                  ? "Report ready"
+                                  : "Awaiting review"}
+                          </p>
+                        </div>
+                        {report?.releasedAt ? (
+                          <Badge variant="secondary" className="text-[10px]">
+                            Released
+                          </Badge>
+                        ) : report ? (
+                          <Badge variant="outline" className="text-[10px]">
+                            {report.status}
+                          </Badge>
+                        ) : null}
+                      </button>
+                    );
+                  })}
+                </div>
+              </Card>
+
+              <div className="space-y-4">
+                {selectedReleaseStudent ? (
+                  <Card className="p-5 gap-0">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <p className="text-[15px] font-semibold">
+                          {selectedReleaseStudent.firstName} {selectedReleaseStudent.lastName}
+                        </p>
+                        <p className="text-[13px] text-muted-foreground">
+                          Release view for {assessmentTypeLabel.toLowerCase()} feedback and grading.
+                        </p>
+                      </div>
+                      {(() => {
+                        const grade = grades.find((entry) => entry.studentId === selectedReleaseStudent.id);
+                        const status = getTeacherReviewStatus(grade, assessment);
+                        if (status === "ready") {
+                          return (
+                            <Button size="sm" onClick={() => handleReleaseIndividualGrade(selectedReleaseStudent)}>
+                              Release
+                            </Button>
+                          );
+                        }
+                        if (status === "released") {
+                          return (
+                            <Badge variant="secondary" className="text-[11px]">
+                              Already released
+                            </Badge>
+                          );
+                        }
+                        return (
+                          <Badge variant="outline" className="text-[11px]">
+                            {status.replace(/_/g, " ")}
+                          </Badge>
+                        );
+                      })()}
+                    </div>
+                  </Card>
+                ) : null}
+
+                <AssessmentAIReportPanel
+                  report={selectedReleaseReport}
+                  editable={Boolean(selectedReleaseReport)}
+                  onChange={handleAssessmentReportChange}
+                />
+              </div>
+            </div>
+          </div>
+        </TabsContent>
       </Tabs>
 
       {/* Grading Sheet */}
@@ -1850,6 +2006,7 @@ export default function AssessmentDetailPage() {
         }}
         submission={submissionPreviewSubmission}
         student={submissionPreviewStudent}
+        assessment={assessment}
         onGradeStudent={
           submissionPreviewStudent && submissionPreviewCanOpenGrading && assessment
             ? () => {
