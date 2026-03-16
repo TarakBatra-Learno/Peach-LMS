@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test:smoke": "playwright test tests/smoke/demo-contracts.spec.ts"
+    "test:smoke": "playwright test tests/smoke"
   },
   "dependencies": {
     "class-variance-authority": "^0.7.1",
