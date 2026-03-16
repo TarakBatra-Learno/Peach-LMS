@@ -96,6 +96,21 @@ const MASTERY_COLOR: Record<string, string> = {
   not_assessed: "bg-muted text-muted-foreground",
 };
 
+const STANDARDS_SKILLS_CATEGORY_LABELS: Record<string, string> = {
+  standard: "Standards",
+  atl_skill: "ATL Skills",
+  learner_profile: "Learner Profile",
+};
+
+type ReportStandardsSkillRow = {
+  goalId: string;
+  title: string;
+  code: string;
+  category: "standard" | "atl_skill" | "learner_profile";
+  level: string | null;
+  artifactCount: number;
+};
+
 /**
  * Check if a report section is empty.
  * Some section types render from live store data (grades, behavior_incidents)
@@ -282,6 +297,179 @@ export default function ReportDetailPage() {
   const getAssessmentName = (assessmentId: string) => {
     const asmt = assessments.find((a) => a.id === assessmentId);
     return asmt?.title || assessmentId;
+  };
+
+  const deriveStandardsSkillsRows = (): ReportStandardsSkillRow[] => {
+    if (!report) return [];
+
+    const classAssessments = assessments.filter(
+      (assessment) =>
+        assessment.classId === report.classId &&
+        (assessment.status === "live" || assessment.status === "published" || assessment.status === "closed")
+    );
+    const relevantGoalIds = new Set<string>();
+    classAssessments.forEach((assessment) => {
+      assessment.learningGoalIds.forEach((goalId) => relevantGoalIds.add(goalId));
+    });
+    studentArtifacts.forEach((artifact) => {
+      artifact.learningGoalIds.forEach((goalId) => relevantGoalIds.add(goalId));
+    });
+
+    return learningGoals
+      .filter(
+        (goal): goal is typeof goal & { category: "standard" | "atl_skill" | "learner_profile" } =>
+          relevantGoalIds.has(goal.id) &&
+          (goal.category === "standard" ||
+            goal.category === "atl_skill" ||
+            goal.category === "learner_profile"),
+      )
+      .map((goal) => {
+        let bestLevel: string | null = null;
+        let bestGradedAt: string | null = null;
+
+        studentGrades.forEach((grade) => {
+          grade.standardsMastery?.forEach((mastery) => {
+            if (mastery.standardId !== goal.id) return;
+            const masteryLevel = mastery.level || "not_assessed";
+            const isBetter =
+              !bestLevel ||
+              (grade.gradedAt && (!bestGradedAt || grade.gradedAt > bestGradedAt)) ||
+              (!grade.gradedAt &&
+                !bestGradedAt &&
+                (MASTERY_RANK[masteryLevel] || 0) > (MASTERY_RANK[bestLevel] || 0));
+            if (isBetter) {
+              bestLevel = masteryLevel;
+              bestGradedAt = grade.gradedAt || null;
+            }
+          });
+        });
+
+        const artifactCount = studentArtifacts.filter((artifact) =>
+          artifact.learningGoalIds.includes(goal.id),
+        ).length;
+
+        return {
+          goalId: goal.id,
+          title: goal.title,
+          code: goal.code,
+          category: goal.category,
+          level: bestLevel,
+          artifactCount,
+        };
+      });
+  };
+
+  const getStandardsSkillsRows = (
+    section: ReportSection,
+  ): ReportStandardsSkillRow[] => {
+    const savedSkills = section.content?.skills;
+    if (Array.isArray(savedSkills) && savedSkills.length > 0) {
+      return savedSkills
+        .map((skill) => {
+          if (!skill || typeof skill !== "object") return null;
+          const record = skill as Partial<ReportStandardsSkillRow>;
+          if (!record.goalId) return null;
+          const goal = learningGoals.find((entry) => entry.id === record.goalId);
+          const category = record.category ?? goal?.category;
+          if (
+            category !== "standard" &&
+            category !== "atl_skill" &&
+            category !== "learner_profile"
+          ) {
+            return null;
+          }
+          return {
+            goalId: record.goalId,
+            title: record.title ?? goal?.title ?? "Untitled goal",
+            code: record.code ?? goal?.code ?? "—",
+            category,
+            level: record.level ?? null,
+            artifactCount: record.artifactCount ?? 0,
+          };
+        })
+        .filter((row): row is ReportStandardsSkillRow => Boolean(row));
+    }
+
+    return deriveStandardsSkillsRows();
+  };
+
+  const getStandardsSkillsGroups = (section: ReportSection) => {
+    const rows = getStandardsSkillsRows(section);
+    return (["standard", "atl_skill", "learner_profile"] as const)
+      .map((category) => ({
+        category,
+        label: STANDARDS_SKILLS_CATEGORY_LABELS[category],
+        rows: rows.filter((row) => row.category === category),
+      }))
+      .filter((group) => group.rows.length > 0);
+  };
+
+  const renderStandardsSkillsSection = (
+    section: ReportSection,
+    options?: { tone?: "editor" | "preview" | "print" },
+  ) => {
+    const groups = getStandardsSkillsGroups(section);
+    const tone = options?.tone ?? "editor";
+
+    if (groups.length === 0) {
+      return (
+        <p className="text-[13px] text-muted-foreground">
+          No standards or skills data for this class yet. Use Auto-fill after grading.
+        </p>
+      );
+    }
+
+    return (
+      <div className={tone === "editor" ? "space-y-5" : "space-y-4"}>
+        {groups.map((group) => (
+          <div key={group.category}>
+            <h4 className="mb-2 text-[12px] font-semibold uppercase tracking-wide text-muted-foreground">
+              {group.label}
+            </h4>
+            <table className="w-full text-[13px]">
+              <thead>
+                <tr className="border-b border-border">
+                  <th className="py-2 pr-4 text-left font-medium text-muted-foreground">Goal</th>
+                  <th className="px-2 py-2 text-center font-medium text-muted-foreground">Level</th>
+                  <th className="px-2 py-2 text-center font-medium text-muted-foreground">Evidence</th>
+                </tr>
+              </thead>
+              <tbody>
+                {group.rows.map((row) => (
+                  <tr key={row.goalId} className="border-b border-border/50">
+                    <td className="py-2 pr-4">
+                      <p className="font-medium">{row.title}</p>
+                      <p className="text-[11px] text-muted-foreground">{row.code}</p>
+                    </td>
+                    <td className="px-2 py-2 text-center">
+                      {row.level && row.level !== "not_assessed" ? (
+                        <Badge
+                          className={`text-[11px] ${MASTERY_COLOR[row.level] || ""}`}
+                          variant="secondary"
+                        >
+                          {MASTERY_LABEL[row.level] || row.level}
+                        </Badge>
+                      ) : (
+                        <span className="text-[12px] text-muted-foreground">—</span>
+                      )}
+                    </td>
+                    <td className="px-2 py-2 text-center">
+                      {row.artifactCount > 0 ? (
+                        <span className="text-[12px]">
+                          {row.artifactCount} {row.artifactCount === 1 ? "item" : "items"}
+                        </span>
+                      ) : (
+                        <span className="text-[12px] text-muted-foreground">—</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ))}
+      </div>
+    );
   };
 
   if (loading) return <DetailSkeleton />;
@@ -1378,116 +1566,7 @@ export default function ReportDetailPage() {
 
       // ---------- Standards & Skills ----------
       case "standards_skills": {
-        // Scope to learning goals linked by class assessments + portfolio artifacts
-        const classAssmts = assessments.filter(
-          (a) => a.classId === report.classId && (a.status === "live" || a.status === "published")
-        );
-        const relevantGoalIds = new Set<string>();
-        classAssmts.forEach((a) =>
-          a.learningGoalIds.forEach((gid) => relevantGoalIds.add(gid))
-        );
-        studentArtifacts.forEach((a) =>
-          a.learningGoalIds.forEach((gid) => relevantGoalIds.add(gid))
-        );
-        const scopedGoals = learningGoals.filter((g) => relevantGoalIds.has(g.id));
-
-        // Resolve best mastery per goal
-        const ssRows = scopedGoals.map((goal) => {
-          let bestLevel: string | null = null;
-          let bestGradedAt: string | null = null;
-
-          studentGrades.forEach((g) => {
-            g.standardsMastery?.forEach((sm) => {
-              if (sm.standardId === goal.id) {
-                const smLevel = sm.level || "not_assessed";
-                const isBetter =
-                  !bestLevel ||
-                  (g.gradedAt && (!bestGradedAt || g.gradedAt > bestGradedAt)) ||
-                  (!g.gradedAt && !bestGradedAt && (MASTERY_RANK[smLevel] || 0) > (MASTERY_RANK[bestLevel] || 0));
-                if (isBetter) {
-                  bestLevel = smLevel;
-                  bestGradedAt = g.gradedAt || null;
-                }
-              }
-            });
-          });
-
-          const artifactCount = studentArtifacts.filter((a) =>
-            a.learningGoalIds.includes(goal.id)
-          ).length;
-
-          return { goal, level: bestLevel, artifactCount };
-        });
-
-        // Group by category
-        const CATEGORY_LABELS: Record<string, string> = {
-          standard: "Standards",
-          atl_skill: "ATL Skills",
-          learner_profile: "Learner Profile",
-        };
-        const categories = ["standard", "atl_skill", "learner_profile"] as const;
-        const groupedRows = categories
-          .map((cat) => ({
-            category: cat,
-            label: CATEGORY_LABELS[cat],
-            rows: ssRows.filter((r) => r.goal.category === cat),
-          }))
-          .filter((g) => g.rows.length > 0);
-
-        if (groupedRows.length === 0) {
-          return (
-            <p className="text-[13px] text-muted-foreground">
-              No standards or skills data for this class yet. Use Auto-fill after grading.
-            </p>
-          );
-        }
-
-        return (
-          <div className="space-y-5">
-            {groupedRows.map((group) => (
-              <div key={group.category}>
-                <h4 className="text-[12px] font-semibold text-muted-foreground uppercase tracking-wide mb-2">
-                  {group.label}
-                </h4>
-                <table className="w-full text-[13px]">
-                  <thead>
-                    <tr className="border-b border-border">
-                      <th className="text-left py-2 pr-4 font-medium text-muted-foreground">Goal</th>
-                      <th className="text-center py-2 px-2 font-medium text-muted-foreground">Level</th>
-                      <th className="text-center py-2 px-2 font-medium text-muted-foreground">Evidence</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {group.rows.map((row) => (
-                      <tr key={row.goal.id} className="border-b border-border/50">
-                        <td className="py-2 pr-4">
-                          <p className="font-medium">{row.goal.title}</p>
-                          <p className="text-[11px] text-muted-foreground">{row.goal.code}</p>
-                        </td>
-                        <td className="text-center py-2 px-2">
-                          {row.level && row.level !== "not_assessed" ? (
-                            <Badge className={`text-[11px] ${MASTERY_COLOR[row.level] || ""}`} variant="secondary">
-                              {MASTERY_LABEL[row.level] || row.level}
-                            </Badge>
-                          ) : (
-                            <span className="text-[12px] text-muted-foreground">—</span>
-                          )}
-                        </td>
-                        <td className="text-center py-2 px-2">
-                          {row.artifactCount > 0 ? (
-                            <span className="text-[12px]">{row.artifactCount} {row.artifactCount === 1 ? "item" : "items"}</span>
-                          ) : (
-                            <span className="text-[12px] text-muted-foreground">—</span>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ))}
-          </div>
-        );
+        return renderStandardsSkillsSection(section);
       }
 
       // ---------- Portfolio Highlights / Selected Work Samples ----------
@@ -1954,6 +2033,8 @@ export default function ReportDetailPage() {
                     <Image className="h-4 w-4 text-purple-600" />
                   ) : section.type === "learning_goals" || section.type === "atl_skills" ? (
                     <BookOpen className="h-4 w-4 text-emerald-600" />
+                  ) : section.type === "standards_skills" ? (
+                    <Target className="h-4 w-4 text-emerald-600" />
                   ) : section.type === "behavior_incidents" ? (
                     <ShieldAlert className="h-4 w-4 text-amber-600" />
                   ) : null}
@@ -2088,6 +2169,13 @@ export default function ReportDetailPage() {
                         );
                       });
                     })()}
+                  </div>
+                ) : section.type === "standards_skills" ? (
+                  <div className="bg-white rounded-md border p-3 space-y-2">
+                    <p className="text-[12px] text-muted-foreground">
+                      Standards, ATL skills, and learner profile signals gathered from this class report.
+                    </p>
+                    {renderStandardsSkillsSection(section, { tone: "preview" })}
                   </div>
                 ) : section.type === "portfolio" ? (
                   <div className="bg-white rounded-md border p-3">
@@ -2272,6 +2360,10 @@ export default function ReportDetailPage() {
                         );
                       });
                     })()}
+                  </div>
+                ) : section.type === "standards_skills" ? (
+                  <div className="text-[13px]">
+                    {renderStandardsSkillsSection(section, { tone: "print" })}
                   </div>
                 ) : section.type === "portfolio" ? (
                   <div className="text-[13px]">
