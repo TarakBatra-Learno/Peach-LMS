@@ -46,9 +46,9 @@ test("class planning upgrades expose yearly, unit, lessons, and insight subviews
   await expect(page.getByRole("tab", { name: "Lessons" })).toBeVisible();
   await expect(page.getByRole("tab", { name: "Insights" })).toBeVisible();
 
-  await expect(page.getByText("Lesson count")).toBeVisible();
-  await expect(page.getByText("Assessment count")).toBeVisible();
-  await expect(page.getByText("Collaborators")).toBeVisible();
+  await expect(page.getByText("Lesson count").first()).toBeVisible();
+  await expect(page.getByText("Assessment count").first()).toBeVisible();
+  await expect(page.getByText("Collaborators").first()).toBeVisible();
 
   await page.getByRole("tab", { name: "Unit detail" }).click();
   await expect(page.getByRole("tab", { name: "Inquiry & action" })).toBeVisible();
