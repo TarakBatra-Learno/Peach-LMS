@@ -78,6 +78,23 @@ Make the teacher portal feel like a coherent IB LMS working environment, not a c
 - Top-level Planning year-plan clicks open this route
 - Class planning unit clicks also open this route
 
+### Create unit flow
+
+- `Create unit` remains available from both top-level `Planning` and class context
+- the create flow is a lightweight setup step, not the place where full unit authoring happens
+- required create fields should stay minimal and practical:
+  - linked class
+  - title
+  - programme or year context if needed by the existing model
+  - dates or duration
+  - optional subject or template framing
+- after creation, the teacher lands directly in the dedicated unit route on the `Strategy` tab
+- creation must not depend on hidden class-tab selection state or sticky query-param UI state
+- the new unit must immediately appear in:
+  - top-level yearly plans
+  - class planning lists
+- canceling the create flow should not leave behind partial or orphaned unit records
+
 ### Unit route top-level tabs
 
 - `Strategy`
@@ -227,6 +244,17 @@ Unit planning is spread across Planning Hub, class planning tabs, and selection 
 The dedicated unit route becomes the main unit-centered working surface.
 
 It should feel large enough to justify its own route and stable enough that both Planning and Classes can launch into it without ambiguity.
+
+### Create unit responsibilities
+
+The create flow should only establish the unit shell and routing context. It should not try to capture the full planning document up front.
+
+After create:
+
+- the teacher lands in the dedicated unit route
+- `Strategy` is the default first tab
+- full planning work happens inside the route, not inside the create modal or drawer
+- collaboration visibility begins in the route-level `Strategy` surface
 
 ## 4. Unit route tabs
 
@@ -416,6 +444,8 @@ The implementation should support these end-to-end demo moments:
 8. Teacher uses `Reflection` to review or add unit observations and portfolio-worthy items.
 9. Student sees the released assessment report only after teacher release.
 10. Family sees only the allowed downstream academic visibility.
+11. Teacher creates a unit from top-level Planning and lands directly in the dedicated unit route on `Strategy`, with the new unit immediately visible in yearly plans and class planning.
+12. Teacher creates a unit from class context and lands in the same dedicated unit route without relying on hidden selection state.
 
 ## Detailed success criteria
 
@@ -482,7 +512,19 @@ Build is successful when:
 - route entry does not depend on hidden selection state from another page
 - the header context makes it obvious which class and unit the teacher is currently in
 
-## 7. Strategy tab
+## 7. Create unit
+
+Build is successful when:
+
+- teachers can create a unit from both top-level Planning and class context
+- the create flow collects only setup fields needed to establish the unit, not the full planning document
+- after create, the teacher lands directly in the dedicated unit route on `Strategy`
+- the route does not depend on hidden unit selection in a separate class tab
+- the newly created unit appears immediately in top-level yearly plans and class planning views
+- canceling or abandoning the create flow does not leave orphaned unit records
+- the create experience makes it obvious that deeper authoring happens after create inside the unit route
+
+## 8. Strategy tab
 
 Build is successful when:
 
@@ -491,7 +533,7 @@ Build is successful when:
 - collaboration is visible here through non-primary but believable surfaces like avatars, comments, history, or ownership markers
 - the strategy surface feels like the authoritative planning view for the unit rather than a summary card expanded into a page
 
-## 8. Unit content: Lessons
+## 9. Unit content: Lessons
 
 Build is successful when:
 
@@ -500,7 +542,7 @@ Build is successful when:
 - lessons display enough metadata to understand readiness and their role in the unit
 - lesson creation/editing does not trap the user in an uncloseable drawer or ambiguous route state
 
-## 9. Unit content: Assessments
+## 10. Unit content: Assessments
 
 Build is successful when:
 
@@ -509,7 +551,7 @@ Build is successful when:
 - teachers can create a new unit-linked assessment from this surface
 - linked assessment states such as draft, review-ready, and released are legible at a glance
 
-## 10. Unit content: Flow
+## 11. Unit content: Flow
 
 If implemented, build is successful when:
 
@@ -519,7 +561,7 @@ If implemented, build is successful when:
 
 If `Flow` remains out of scope for this wave, success means it is omitted cleanly rather than included as a weak placeholder.
 
-## 11. Unit performance: Overview
+## 12. Unit performance: Overview
 
 Build is successful when:
 
@@ -527,7 +569,7 @@ Build is successful when:
 - completion, release, grading, and standards signals are understandable without reading every underlying record
 - the overview feels unit-specific rather than like a copy of class-wide analytics with a unit title added
 
-## 12. Unit performance: Student matrix
+## 13. Unit performance: Student matrix
 
 Build is successful when:
 
@@ -536,7 +578,7 @@ Build is successful when:
 - clicking a specific student name opens the existing teacher student profile already filtered to the current unit
 - the drill-in target preserves the unit context clearly enough that the teacher understands why they are seeing filtered information
 
-## 13. Unit performance: Gradebook
+## 14. Unit performance: Gradebook
 
 Build is successful when:
 
@@ -545,7 +587,7 @@ Build is successful when:
 - the teacher can understand which assessments are contributing to the displayed outcomes
 - the gradebook updates coherently when linked assessment states change
 
-## 14. Unit performance: Standards & skills
+## 15. Unit performance: Standards & skills
 
 Build is successful when:
 
@@ -553,7 +595,7 @@ Build is successful when:
 - the surface communicates mastery or coverage in a way that is distinct from the raw gradebook
 - it does not duplicate the same exact table or copy as another planning/performance view
 
-## 15. Reflection
+## 16. Reflection
 
 Build is successful when:
 
@@ -562,7 +604,7 @@ Build is successful when:
 - contributions from collaborating teachers are visible enough to demonstrate shared teaching practice
 - the tab supports the sense of “what happened in this unit” rather than repeating strategy content
 
-## 16. Planning Hub to unit-route coherence
+## 17. Planning Hub to unit-route coherence
 
 Build is successful when:
 
@@ -570,7 +612,7 @@ Build is successful when:
 - clicking a unit from planning feels like entering the proper unit workspace, not changing hidden selection inside another page
 - planning entry points do not produce stale query-state bugs or sticky drawers
 
-## 17. Seed data: exemplar units
+## 18. Seed data: exemplar units
 
 Build is successful when:
 
@@ -578,7 +620,7 @@ Build is successful when:
 - each exemplar is deep enough to power planning, linked content, performance, and release flows
 - the demo does not rely on generic placeholder records that make all units feel interchangeable
 
-## 18. Seed data: assessment types and reports
+## 19. Seed data: assessment types and reports
 
 Build is successful when:
 
@@ -587,7 +629,7 @@ Build is successful when:
 - per-student assessment reports are varied enough to feel curated rather than cloned
 - release states across seeded students create believable review and bulk-release scenarios
 
-## 19. Off-platform mode reset behavior
+## 20. Off-platform mode reset behavior
 
 Build is successful when:
 
@@ -595,7 +637,7 @@ Build is successful when:
 - the UI does not leave behind misleading checked states for options that no longer apply
 - switching modes does not create contradictory submission settings in saved demo state
 
-## 20. Student portal downstream behavior
+## 21. Student portal downstream behavior
 
 Build is successful when:
 
@@ -603,7 +645,7 @@ Build is successful when:
 - unreleased grading and unreleased report content do not leak into student-facing views
 - released assessment reports still feel clearly tied to the assessment and, where relevant, the unit context
 
-## 21. Family portal downstream behavior
+## 22. Family portal downstream behavior
 
 Build is successful when:
 
@@ -611,7 +653,7 @@ Build is successful when:
 - no teacher-only planning, grading controls, or unit-performance surfaces leak into the family experience
 - family-facing visibility feels like a child learning update, not a copy of the teacher workspace
 
-## 22. Teacher visual refresh
+## 23. Teacher visual refresh
 
 Build is successful when:
 
@@ -619,7 +661,7 @@ Build is successful when:
 - the refresh is broad enough that the teacher portal feels consistently more mature, not like one redesigned page inside an older shell
 - the visual treatment stays native to Peach and does not drift into a different design language
 
-## 23. Completion gate
+## 24. Completion gate
 
 This update wave is only considered complete when:
 
