@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo, useEffect, useRef } from "react";
-import { useParams, useSearchParams } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useStore } from "@/stores";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { StatCard } from "@/components/shared/stat-card";
@@ -13,6 +13,10 @@ import { GradingSheet } from "@/components/shared/grading-sheet";
 import { OptionsWindow } from "@/components/shared/options-window";
 import { AssessmentAIReportPanel } from "@/components/assessments/assessment-ai-report-panel";
 import { AssessmentInsightsPanel } from "@/components/assessments/assessment-insights-panel";
+import { OffPlatformFields } from "@/components/assessment-types/off-platform-fields";
+import { QuizFields } from "@/components/assessment-types/quiz-fields";
+import { ChatFields } from "@/components/assessment-types/chat-fields";
+import { EssayFields } from "@/components/assessment-types/essay-fields";
 import type { GradingSheetState } from "@/components/shared/grading-sheet";
 import {
   Dialog,
@@ -89,6 +93,10 @@ import {
 import {
   getAssessmentIntentLabel,
   getAssessmentTypeLabel,
+  createDefaultChatConfig,
+  createDefaultEssayConfig,
+  createDefaultOffPlatformConfig,
+  createDefaultQuizConfig,
 } from "@/lib/assessment-labels";
 import type { TeacherReviewStatus } from "@/lib/grade-helpers";
 import { buildGradePayload } from "@/lib/grade-save";
@@ -96,12 +104,23 @@ import { computeAssessmentAverage, computeUnreleasedGradesCount } from "@/lib/se
 import { ChecklistBuilder } from "@/components/shared/checklist-builder";
 import { RubricTab } from "@/components/assessment-tabs/rubric-tab";
 import { RUBRIC_TEMPLATES } from "@/lib/constants";
-import type { ChecklistResponseStyle, ChecklistOutcomeModel } from "@/types/assessment";
+import type {
+  Assessment,
+  AssessmentIntent,
+  AssessmentType,
+  ChatAssessmentConfig,
+  ChecklistOutcomeModel,
+  ChecklistResponseStyle,
+  EssayAssessmentConfig,
+  OffPlatformAssessmentConfig,
+  QuizAssessmentConfig,
+} from "@/types/assessment";
 import { isSubmissionSubmitted } from "@/lib/submission-state";
 import {
   getAdminClassWorkspaceHref,
   getAdminStudentWorkspaceHref,
 } from "@/lib/admin-embed-routes";
+import { getDemoNow } from "@/lib/demo-time";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -122,6 +141,106 @@ const GOAL_CATEGORY_LABELS: Record<string, string> = {
   learner_profile: "Learner Profile",
 };
 
+function sentenceCase(value: string) {
+  return value.replace(/_/g, " ");
+}
+
+function buildReleasedAssessmentReportPayload({
+  assessment,
+  student,
+  grade,
+  existingReport,
+  now,
+}: {
+  assessment: Assessment;
+  student: Student;
+  grade?: GradeRecord;
+  existingReport?: {
+    id: string;
+    summary: string;
+    strengths: string[];
+    weaknesses: string[];
+    suggestions: string[];
+    rubricFeedback: {
+      criterionId?: string;
+      criterionLabel: string;
+      levelLabel?: string;
+      summary: string;
+    }[];
+    sourceAttribution: {
+      id: string;
+      sourceType: "submission" | "grade" | "rubric" | "checklist" | "standard" | "teacher_note";
+      label: string;
+      sourceId?: string;
+    }[];
+    generatedAt: string;
+  } | null;
+  now: string;
+}) {
+  const feedbackSentence =
+    grade?.feedback?.trim() ||
+    `${student.firstName} completed the ${getAssessmentTypeLabel(assessment.assessmentType).toLowerCase()} and the released review is ready to share.`;
+
+  const rubricFeedback =
+    existingReport?.rubricFeedback.length
+      ? existingReport.rubricFeedback
+      : grade?.rubricScores?.map((entry) => {
+          const criterion = assessment.rubric?.find((item) => item.id === entry.criterionId);
+          const level = criterion?.levels.find((item) => item.id === entry.levelId);
+          return {
+            criterionId: entry.criterionId,
+            criterionLabel: criterion?.title ?? "Rubric criterion",
+            levelLabel: level?.label,
+            summary: level?.description ?? "Teacher-reviewed rubric evidence released.",
+          };
+        }) ?? [];
+
+  const sourceAttribution =
+    existingReport?.sourceAttribution.length
+      ? existingReport.sourceAttribution
+      : [
+          {
+            id: generateId("asrep_src"),
+            sourceType: "grade" as const,
+            label: `${assessment.title} released grade`,
+            sourceId: grade?.id,
+          },
+          {
+            id: generateId("asrep_src"),
+            sourceType: "teacher_note" as const,
+            label: "Teacher review summary",
+          },
+        ];
+
+  return {
+    status: "released" as const,
+    summary:
+      existingReport?.summary ||
+      `${student.firstName} has a released ${getAssessmentIntentLabel(assessment.assessmentIntent)?.toLowerCase() ?? "assessment"} outcome for ${assessment.title}.`,
+    strengths:
+      existingReport?.strengths.length
+        ? existingReport.strengths
+        : [feedbackSentence],
+    weaknesses:
+      existingReport?.weaknesses.length
+        ? existingReport.weaknesses
+        : [
+            `Use the released ${getAssessmentTypeLabel(assessment.assessmentType).toLowerCase()} feedback to tighten the next draft or conference response.`,
+          ],
+    suggestions:
+      existingReport?.suggestions.length
+        ? existingReport.suggestions
+        : [
+            `Review the teacher feedback and rubric notes before the next ${sentenceCase(assessment.assessmentIntent ?? "assessment")}.`,
+          ],
+    rubricFeedback,
+    sourceAttribution,
+    generatedAt: existingReport?.generatedAt ?? now,
+    releasedAt: now,
+    updatedAt: now,
+  };
+}
+
 const STUDENT_FILTER_OPTIONS: { value: TeacherReviewStatus | "all"; label: string }[] = [
   { value: "all", label: "All" },
   { value: "pending", label: "Pending" },
@@ -138,8 +257,10 @@ const STUDENT_FILTER_OPTIONS: { value: TeacherReviewStatus | "all"; label: strin
 
 export default function AssessmentDetailPage() {
   const params = useParams();
+  const router = useRouter();
   const searchParams = useSearchParams();
   const urlStudentId = searchParams.get("studentId");
+  const requestedTab = searchParams.get("tab");
   const embedded = searchParams.get("embed") === "1";
   const assessmentId = params.assessmentId as string;
   const loading = useMockLoading([assessmentId]);
@@ -167,6 +288,7 @@ export default function AssessmentDetailPage() {
   const assessmentReports = useStore((s) => s.assessmentReports);
   const assessmentInsightSummaries = useStore((s) => s.assessmentInsightSummaries);
   const updateAssessmentReport = useStore((s) => s.updateAssessmentReport);
+  const addAssessmentReport = useStore((s) => s.addAssessmentReport);
   const addStudentNotification = useStore((s) => s.addStudentNotification);
   const closeAssessment = useStore((s) => s.closeAssessment);
   const reopenAssessment = useStore((s) => s.reopenAssessment);
@@ -206,6 +328,14 @@ export default function AssessmentDetailPage() {
     embedded
       ? getAdminStudentWorkspaceHref(studentId, { classId: assessment?.classId ?? null })
       : `/students/${studentId}?classId=${assessment?.classId}`;
+  const getMarkingWorkspaceHref = (studentId: string) =>
+    `/assessments/${assessmentId}/students/${studentId}${embedded ? "?embed=1" : ""}`;
+  const defaultTab =
+    requestedTab === "submissions" || requestedTab === "insights" || requestedTab === "overview"
+      ? requestedTab
+      : urlStudentId
+        ? "submissions"
+        : "overview";
 
   // Determine mode
   const isDraft = assessment?.status === "draft";
@@ -220,9 +350,24 @@ export default function AssessmentDetailPage() {
   const [draftDueDate, setDraftDueDate] = useState("");
   const [draftStudentInstructions, setDraftStudentInstructions] = useState("");
   const [draftClassId, setDraftClassId] = useState("");
+  const [draftUnitId, setDraftUnitId] = useState("none");
+  const [draftAssessmentType, setDraftAssessmentType] = useState<AssessmentType>("off_platform");
+  const [draftAssessmentIntent, setDraftAssessmentIntent] = useState<AssessmentIntent>("summative");
   const [draftGradingMode, setDraftGradingMode] = useState<GradingMode>("score");
   const [draftTotalPoints, setDraftTotalPoints] = useState("100");
   const [draftGoalIds, setDraftGoalIds] = useState<string[]>([]);
+  const [draftOffPlatformConfig, setDraftOffPlatformConfig] = useState<OffPlatformAssessmentConfig>(
+    createDefaultOffPlatformConfig()
+  );
+  const [draftQuizConfig, setDraftQuizConfig] = useState<QuizAssessmentConfig>(
+    createDefaultQuizConfig()
+  );
+  const [draftChatConfig, setDraftChatConfig] = useState<ChatAssessmentConfig>(
+    createDefaultChatConfig()
+  );
+  const [draftEssayConfig, setDraftEssayConfig] = useState<EssayAssessmentConfig>(
+    createDefaultEssayConfig()
+  );
   const [selectedRubricTemplateId, setSelectedRubricTemplateId] = useState("custom");
   const [draftChecklistResponseStyle, setDraftChecklistResponseStyle] = useState<ChecklistResponseStyle>("binary");
   const [draftChecklistOutcomeModel, setDraftChecklistOutcomeModel] = useState<ChecklistOutcomeModel>("feedback_only");
@@ -236,14 +381,46 @@ export default function AssessmentDetailPage() {
       setDraftDueDate(assessment.dueDate.split("T")[0]);
       setDraftStudentInstructions(assessment.studentInstructions ?? "");
       setDraftClassId(assessment.classId);
+      setDraftUnitId(assessment.unitId ?? "none");
+      setDraftAssessmentType(assessment.assessmentType ?? "off_platform");
+      setDraftAssessmentIntent(assessment.assessmentIntent ?? "summative");
       setDraftGradingMode(assessment.gradingMode);
       setDraftTotalPoints(assessment.totalPoints?.toString() ?? "100");
       setDraftGoalIds(assessment.learningGoalIds ?? []);
+      setDraftOffPlatformConfig(
+        assessment.offPlatformConfig ?? createDefaultOffPlatformConfig()
+      );
+      setDraftQuizConfig(assessment.quizConfig ?? createDefaultQuizConfig());
+      setDraftChatConfig(assessment.chatConfig ?? createDefaultChatConfig());
+      setDraftEssayConfig(assessment.essayConfig ?? createDefaultEssayConfig());
       setDraftChecklistResponseStyle(assessment.checklistResponseStyle ?? "binary");
       setDraftChecklistOutcomeModel(assessment.checklistOutcomeModel ?? "feedback_only");
       setDraftInitialized(true);
     }
   }, [assessment, isDraft, draftInitialized]);
+
+  const draftClassUnits = useMemo(() => {
+    if (!draftClassId) {
+      return [{ value: "none", label: "Leave standalone" }];
+    }
+
+    return [
+      { value: "none", label: "Leave standalone" },
+      ...unitPlans
+        .filter((entry) => entry.classId === draftClassId)
+        .map((entry) => ({ value: entry.id, label: entry.title })),
+    ];
+  }, [draftClassId, unitPlans]);
+
+  const handleDraftClassChange = (classId: string) => {
+    setDraftClassId(classId);
+    setDraftUnitId((current) => {
+      if (current === "none") return "none";
+      return unitPlans.some((entry) => entry.classId === classId && entry.id === current)
+        ? current
+        : "none";
+    });
+  };
 
   // ---------------------------------------------------------------------------
   // Published mode state
@@ -338,6 +515,37 @@ export default function AssessmentDetailPage() {
     assessment.offPlatformConfig?.submissionMode === "offline_mode"
       ? "Offline mode"
       : undefined;
+
+  const releaseAssessmentReportForStudent = (studentId: string, now: string) => {
+    if (!assessment) return;
+    const student = students.find((entry) => entry.id === studentId);
+    if (!student) return;
+    const existingReport =
+      allAssessmentReports.find((report) => report.studentId === studentId) ?? null;
+    const grade =
+      grades.find((entry) => entry.studentId === studentId && entry.assessmentId === assessment.id) ??
+      undefined;
+    const payload = buildReleasedAssessmentReportPayload({
+      assessment,
+      student,
+      grade,
+      existingReport,
+      now,
+    });
+
+    if (existingReport) {
+      updateAssessmentReport(existingReport.id, payload);
+      return;
+    }
+
+    addAssessmentReport({
+      id: generateId("asrep"),
+      assessmentId: assessment.id,
+      studentId,
+      classId: assessment.classId,
+      ...payload,
+    });
+  };
 
   const classAvg = useMemo(() => {
     if (!assessment) return "N/A";
@@ -521,7 +729,7 @@ export default function AssessmentDetailPage() {
 
   const handleReleaseGrade = () => {
     if (!assessment || !gradingStudent) return;
-    const now = new Date().toISOString();
+    const now = getDemoNow().toISOString();
     const existingGrade = grades.find((g) => g.studentId === gradingStudent.id);
     const payload = buildGradePayload(assessment, gradingStudent.id, {
       score: gradingScore,
@@ -553,6 +761,8 @@ export default function AssessmentDetailPage() {
         })
       );
     }
+
+    releaseAssessmentReportForStudent(gradingStudent.id, now);
 
     toast.success(
       `Grade released for ${gradingStudent.firstName} ${gradingStudent.lastName}`
@@ -606,7 +816,7 @@ export default function AssessmentDetailPage() {
       (g) => g.studentId === student.id && g.assessmentId === assessment.id
     );
     if (!existingGrade) return;
-    const now = new Date().toISOString();
+    const now = getDemoNow().toISOString();
     updateGrade(existingGrade.id, { releasedAt: now, reportStatus: "unseen", updatedAt: now });
     if (cls) {
       addStudentNotification(
@@ -619,6 +829,7 @@ export default function AssessmentDetailPage() {
         })
       );
     }
+    releaseAssessmentReportForStudent(student.id, now);
     toast.success(`Grade released for ${student.firstName} ${student.lastName}`);
     checkAutoClose([student.id]);
   };
@@ -626,7 +837,7 @@ export default function AssessmentDetailPage() {
   // Release all ready grades
   const handleReleaseAllReady = () => {
     if (!assessment || !cls) return;
-    const now = new Date().toISOString();
+    const now = getDemoNow().toISOString();
     let count = 0;
     const releasedStudentIds: string[] = [];
     for (const grade of grades) {
@@ -642,6 +853,7 @@ export default function AssessmentDetailPage() {
           })
         );
         releasedStudentIds.push(grade.studentId);
+        releaseAssessmentReportForStudent(grade.studentId, now);
         count++;
       }
     }
@@ -659,7 +871,7 @@ export default function AssessmentDetailPage() {
     if (!selectedReleaseReport) return;
     updateAssessmentReport(selectedReleaseReport.id, {
       ...updates,
-      updatedAt: new Date().toISOString(),
+      updatedAt: getDemoNow().toISOString(),
     });
   };
 
@@ -846,6 +1058,14 @@ export default function AssessmentDetailPage() {
       dueDate: draftDueDate ? new Date(draftDueDate).toISOString() : assessment.dueDate,
       studentInstructions: draftStudentInstructions.trim() || undefined,
       classId: draftClassId || assessment.classId,
+      unitId: draftUnitId !== "none" ? draftUnitId : undefined,
+      assessmentType: draftAssessmentType,
+      assessmentIntent: draftAssessmentIntent,
+      offPlatformConfig:
+        draftAssessmentType === "off_platform" ? draftOffPlatformConfig : undefined,
+      quizConfig: draftAssessmentType === "quiz" ? draftQuizConfig : undefined,
+      chatConfig: draftAssessmentType === "chat" ? draftChatConfig : undefined,
+      essayConfig: draftAssessmentType === "essay" ? draftEssayConfig : undefined,
       gradingMode: draftGradingMode,
       totalPoints: draftGradingMode === "score" ? parseInt(draftTotalPoints) || 100 : undefined,
       learningGoalIds: draftGoalIds,
@@ -995,8 +1215,16 @@ export default function AssessmentDetailPage() {
               {draftTitle || assessment.title}
             </h1>
             <p className="mt-1 text-[14px] text-muted-foreground">Draft — configure your assessment before publishing</p>
-            <div className="flex gap-2 mt-2">
+            <div className="mt-2 flex flex-wrap gap-2">
               <StatusBadge status="draft" />
+              <Badge variant="outline" className="text-[11px]">
+                {classes.find((entry) => entry.id === draftClassId)?.name ?? "Select class"}
+              </Badge>
+              <Badge variant="secondary" className="text-[11px]">
+                {draftUnitId !== "none"
+                  ? `Unit: ${unitPlans.find((entry) => entry.id === draftUnitId)?.title ?? "Linked unit"}`
+                  : "Standalone assessment"}
+              </Badge>
             </div>
           </div>
           <div className="flex items-center gap-2 shrink-0">
@@ -1035,10 +1263,10 @@ export default function AssessmentDetailPage() {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                 <div className="space-y-1.5">
                   <Label className="text-[13px]">Class</Label>
-                  <Select value={draftClassId} onValueChange={setDraftClassId}>
+                  <Select value={draftClassId} onValueChange={handleDraftClassChange}>
                     <SelectTrigger className="h-9 text-[13px]">
                       <SelectValue placeholder="Select class" />
                     </SelectTrigger>
@@ -1046,6 +1274,21 @@ export default function AssessmentDetailPage() {
                       {classes.map((c) => (
                         <SelectItem key={c.id} value={c.id}>
                           {c.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-[13px]">Linked unit</Label>
+                  <Select value={draftUnitId} onValueChange={setDraftUnitId} disabled={!draftClassId}>
+                    <SelectTrigger className="h-9 text-[13px]">
+                      <SelectValue placeholder="Leave standalone" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {draftClassUnits.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -1060,6 +1303,12 @@ export default function AssessmentDetailPage() {
                     className="h-9 text-[13px]"
                   />
                 </div>
+              </div>
+
+              <div className="rounded-xl border border-dashed border-border/70 bg-muted/10 px-3 py-2 text-[12px] text-muted-foreground">
+                {draftUnitId !== "none"
+                  ? `This assessment is currently linked to ${unitPlans.find((entry) => entry.id === draftUnitId)?.title ?? "the selected unit"}.`
+                  : "This assessment is standalone right now. Link it to a unit when you want it to appear inside unit planning and performance."}
               </div>
 
               <div className="space-y-1.5">
@@ -1128,6 +1377,88 @@ export default function AssessmentDetailPage() {
 
           {/* Right column — grading type config */}
           <div className="space-y-4">
+            <Card className="p-5 gap-0 space-y-4">
+              <div>
+                <p className="text-[14px] font-semibold">Assessment format</p>
+                <p className="mt-1 text-[12px] text-muted-foreground">
+                  Refine the typed assessment setup in the builder without recreating the draft.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <Label className="text-[13px]">Type</Label>
+                  <Select
+                    value={draftAssessmentType}
+                    onValueChange={(value) => setDraftAssessmentType(value as AssessmentType)}
+                  >
+                    <SelectTrigger className="h-9 text-[13px]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="off_platform">Off-platform</SelectItem>
+                      <SelectItem value="quiz">Quiz</SelectItem>
+                      <SelectItem value="chat">Chat</SelectItem>
+                      <SelectItem value="essay">Essay</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-[13px]">Intent</Label>
+                  <Select
+                    value={draftAssessmentIntent}
+                    onValueChange={(value) => setDraftAssessmentIntent(value as AssessmentIntent)}
+                  >
+                    <SelectTrigger className="h-9 text-[13px]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="formative">Formative</SelectItem>
+                      <SelectItem value="summative">Summative</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <p className="text-[13px] font-medium">
+                  {getAssessmentTypeLabel(draftAssessmentType)} setup
+                </p>
+                {draftAssessmentType === "off_platform" ? (
+                  <OffPlatformFields
+                    value={draftOffPlatformConfig}
+                    onChange={(updates) =>
+                      setDraftOffPlatformConfig((current) => ({ ...current, ...updates }))
+                    }
+                  />
+                ) : null}
+                {draftAssessmentType === "quiz" ? (
+                  <QuizFields
+                    value={draftQuizConfig}
+                    onChange={(updates) =>
+                      setDraftQuizConfig((current) => ({ ...current, ...updates }))
+                    }
+                  />
+                ) : null}
+                {draftAssessmentType === "chat" ? (
+                  <ChatFields
+                    value={draftChatConfig}
+                    onChange={(updates) =>
+                      setDraftChatConfig((current) => ({ ...current, ...updates }))
+                    }
+                  />
+                ) : null}
+                {draftAssessmentType === "essay" ? (
+                  <EssayFields
+                    value={draftEssayConfig}
+                    onChange={(updates) =>
+                      setDraftEssayConfig((current) => ({ ...current, ...updates }))
+                    }
+                  />
+                ) : null}
+              </div>
+            </Card>
+
             <Card className="p-5 gap-0 space-y-4">
               <div className="space-y-1.5">
                 <Label className="text-[13px] font-medium">Grading type</Label>
@@ -1452,12 +1783,11 @@ export default function AssessmentDetailPage() {
         </div>
       </div>
 
-      <Tabs defaultValue={urlStudentId ? "submissions" : "overview"} className="w-full">
+      <Tabs defaultValue={defaultTab} className="w-full">
         <TabsList className="mb-6">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="submissions">Submissions</TabsTrigger>
           <TabsTrigger value="insights">Insights</TabsTrigger>
-          <TabsTrigger value="release">Release</TabsTrigger>
         </TabsList>
 
         {/* ============ Overview Tab ============ */}
@@ -1812,9 +2142,9 @@ export default function AssessmentDetailPage() {
                                     variant="outline"
                                     size="sm"
                                     className="h-7 text-[12px]"
-                                    onClick={() => openGradingSheet(student)}
+                                    onClick={() => router.push(getMarkingWorkspaceHref(student.id))}
                                   >
-                                    Grade
+                                    Open marking workspace
                                   </Button>
                                 )}
 
@@ -1825,18 +2155,9 @@ export default function AssessmentDetailPage() {
                                       variant="outline"
                                       size="sm"
                                       className="h-7 text-[12px]"
-                                      onClick={() => openGradingSheet(student)}
+                                      onClick={() => router.push(getMarkingWorkspaceHref(student.id))}
                                     >
-                                      Grade
-                                    </Button>
-                                    <Button
-                                      size="sm"
-                                      className="h-7 text-[12px]"
-                                      onClick={() =>
-                                        handleReleaseIndividualGrade(student)
-                                      }
-                                    >
-                                      Release
+                                      Open marking workspace
                                     </Button>
                                   </>
                                 )}
@@ -1847,9 +2168,9 @@ export default function AssessmentDetailPage() {
                                     variant="outline"
                                     size="sm"
                                     className="h-7 text-[12px]"
-                                    onClick={() => openGradingSheet(student, true)}
+                                    onClick={() => router.push(getMarkingWorkspaceHref(student.id))}
                                   >
-                                    Amend
+                                    Open marking workspace
                                   </Button>
                                 )}
                               </div>
@@ -2011,14 +2332,7 @@ export default function AssessmentDetailPage() {
           submissionPreviewStudent && submissionPreviewCanOpenGrading && assessment
             ? () => {
                 setSubmissionPreviewOpen(false);
-                const previewGrade = grades.find(
-                  (grade) => grade.studentId === submissionPreviewStudent.id
-                );
-                const previewStatus = getTeacherReviewStatus(previewGrade, assessment);
-                openGradingSheet(
-                  submissionPreviewStudent,
-                  previewStatus === "released"
-                );
+                router.push(getMarkingWorkspaceHref(submissionPreviewStudent.id));
               }
             : undefined
         }

@@ -43,6 +43,7 @@ import {
   getAssessmentIntentLabel,
   getAssessmentTypeLabel,
 } from "@/lib/assessment-labels";
+import { getDemoNow } from "@/lib/demo-time";
 import { ClipboardCheck, Eye, Hourglass, Plus, Send, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { isGradeComplete, GRADING_MODE_LABELS } from "@/lib/grade-helpers";
@@ -122,6 +123,7 @@ export default function AssessmentsPage() {
   const [createOpen, setCreateOpen] = useState(Boolean(createForClassId));
   const [newTitle, setNewTitle] = useState("");
   const [newClassId, setNewClassId] = useState(createForClassId ?? "");
+  const [newUnitId, setNewUnitId] = useState(createForUnitId ?? "none");
   const [newAssessmentType, setNewAssessmentType] = useState<AssessmentType>("off_platform");
   const [newAssessmentIntent, setNewAssessmentIntent] = useState<AssessmentIntent>("summative");
   const [newGradingMode, setNewGradingMode] = useState<GradingMode>("score");
@@ -164,6 +166,29 @@ export default function AssessmentsPage() {
     [classes]
   );
 
+  const createUnitOptions = useMemo(() => {
+    if (!newClassId) {
+      return [{ value: "none", label: "Leave standalone" }];
+    }
+
+    return [
+      { value: "none", label: "Leave standalone" },
+      ...unitPlans
+        .filter((entry) => entry.classId === newClassId)
+        .map((entry) => ({ value: entry.id, label: entry.title })),
+    ];
+  }, [newClassId, unitPlans]);
+
+  const handleCreateClassChange = (classId: string) => {
+    setNewClassId(classId);
+    setNewUnitId((current) => {
+      if (current === "none") return "none";
+      return unitPlans.some((entry) => entry.classId === classId && entry.id === current)
+        ? current
+        : "none";
+    });
+  };
+
   const filtered = useMemo(() => {
     let result = assessments;
     if (classFilter !== "all") {
@@ -194,7 +219,7 @@ export default function AssessmentsPage() {
       }
     }
     if (dueFilter !== "all") {
-      const now = new Date();
+      const now = getDemoNow();
       result = result.filter((a) => {
         const due = new Date(a.dueDate);
         return dueFilter === "upcoming" ? due > now : due <= now;
@@ -233,7 +258,7 @@ export default function AssessmentsPage() {
   }, [assessments, assessmentReports, classes, grades]);
 
   const queueGroups = useMemo(() => {
-    const now = new Date();
+    const now = getDemoNow();
     const groups = [
       {
         key: "attention",
@@ -289,7 +314,8 @@ export default function AssessmentsPage() {
 
   const resetCreateForm = () => {
     setNewTitle("");
-    setNewClassId("");
+    setNewClassId(createForClassId ?? "");
+    setNewUnitId(createForUnitId ?? "none");
     setNewAssessmentType("off_platform");
     setNewAssessmentIntent("summative");
     setNewGradingMode("score");
@@ -300,13 +326,19 @@ export default function AssessmentsPage() {
     setNewEssayConfig(createDefaultEssayConfig());
   };
 
+  const handleOpenCreate = () => {
+    setNewClassId(createForClassId ?? (classFilter !== "all" ? classFilter : ""));
+    setNewUnitId(createForUnitId ?? "none");
+    setCreateOpen(true);
+  };
+
   const handleCreate = () => {
     if (!newTitle.trim() || !newClassId || !newDueDate) {
       toast.error("Please fill in all required fields");
       return;
     }
 
-    const now = new Date().toISOString();
+    const now = getDemoNow().toISOString();
     const newAssessmentId = generateId("asmt");
     const selectedClass = getClassById(newClassId);
 
@@ -328,12 +360,11 @@ export default function AssessmentsPage() {
       createdAt: now,
       totalPoints: newGradingMode === "score" ? 100 : undefined,
       learningGoalIds: [],
-      unitId: createForUnitId || undefined,
+      unitId: newUnitId !== "none" ? newUnitId : undefined,
     });
 
-    // If created from a unit context, link the assessment to the unit
-    if (createForUnitId) {
-      linkAssessmentToUnit(newAssessmentId, createForUnitId);
+    if (newUnitId !== "none") {
+      linkAssessmentToUnit(newAssessmentId, newUnitId);
     }
 
     addCalendarEvent({
@@ -369,7 +400,7 @@ export default function AssessmentsPage() {
         description="Manage typed and off-platform assessments across every linked class"
         primaryAction={{
           label: "Create assessment",
-          onClick: () => setCreateOpen(true),
+          onClick: handleOpenCreate,
           icon: Plus,
         }}
       />
@@ -462,7 +493,7 @@ export default function AssessmentsPage() {
           }
           action={
             assessments.length === 0
-              ? { label: "Create assessment", onClick: () => setCreateOpen(true) }
+              ? { label: "Create assessment", onClick: handleOpenCreate }
               : undefined
           }
         />
@@ -510,17 +541,18 @@ export default function AssessmentsPage() {
 
       {/* Simplified Create Assessment Dialog */}
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent className="sm:max-w-[440px]">
-          <DialogHeader>
+        <DialogContent className="sm:max-w-[440px] max-h-[min(92vh,820px)] overflow-hidden p-0">
+          <div className="flex max-h-[min(92vh,820px)] flex-col">
+          <DialogHeader className="px-6 pt-6">
             <DialogTitle>Create assessment</DialogTitle>
             <DialogDescription>
               Create a draft assessment. You can configure all details on the builder page.
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4 py-2">
-            {createForUnitId && (() => {
-              const linkedUnit = unitPlans.find((u) => u.id === createForUnitId);
+          <div className="flex-1 space-y-4 overflow-y-auto px-6 py-3">
+            {newUnitId !== "none" && (() => {
+              const linkedUnit = unitPlans.find((u) => u.id === newUnitId);
               return linkedUnit ? (
                 <div className="rounded-lg border bg-muted/30 p-2.5 text-[12px] text-muted-foreground">
                   Creating for unit: <span className="font-medium text-foreground">{linkedUnit.title}</span>
@@ -541,7 +573,7 @@ export default function AssessmentsPage() {
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1.5">
                 <Label className="text-[13px]">Class *</Label>
-                <Select value={newClassId} onValueChange={setNewClassId}>
+                <Select value={newClassId} onValueChange={handleCreateClassChange}>
                   <SelectTrigger className="h-9 text-[13px]">
                     <SelectValue placeholder="Select class" />
                   </SelectTrigger>
@@ -553,6 +585,25 @@ export default function AssessmentsPage() {
                     ))}
                   </SelectContent>
                 </Select>
+              </div>
+
+              <div className="space-y-1.5 col-span-2">
+                <Label className="text-[13px]">Linked unit</Label>
+                <Select value={newUnitId} onValueChange={setNewUnitId} disabled={!newClassId}>
+                  <SelectTrigger className="h-9 text-[13px]">
+                    <SelectValue placeholder="Leave standalone" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {createUnitOptions.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-[12px] text-muted-foreground">
+                  Link this draft to a unit now, or leave it standalone and connect it later.
+                </p>
               </div>
 
               <div className="space-y-1.5">
@@ -662,7 +713,7 @@ export default function AssessmentsPage() {
               )}
               <div className="rounded-xl border border-dashed border-border/70 bg-muted/10 px-3 py-2 text-[12px] text-muted-foreground">
                 This draft will open in the builder next, where you can refine
-                the {` ${getAssessmentTypeLabel(newAssessmentType).toLowerCase()}`} setup and attach it to a unit or lesson.
+                the {` ${getAssessmentTypeLabel(newAssessmentType).toLowerCase()}`} setup and confirm whether it stays standalone or belongs inside a unit.
                 {getAssessmentIntentLabel(newAssessmentIntent)
                   ? ` ${getAssessmentIntentLabel(newAssessmentIntent)} intent is saved with the draft.`
                   : ""}
@@ -670,7 +721,7 @@ export default function AssessmentsPage() {
             </div>
           </div>
 
-          <DialogFooter className="gap-2 sm:gap-0">
+          <DialogFooter className="border-t border-border/60 px-6 py-4 gap-2 sm:gap-0">
             <Button
               variant="outline"
               onClick={() => {
@@ -682,6 +733,7 @@ export default function AssessmentsPage() {
             </Button>
             <Button onClick={handleCreate}>Create &amp; open builder</Button>
           </DialogFooter>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

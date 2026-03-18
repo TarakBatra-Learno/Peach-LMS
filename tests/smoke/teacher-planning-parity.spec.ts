@@ -76,6 +76,9 @@ test("class planning opens the same dedicated unit route instead of hidden unit 
   await expect(page.getByRole("tab", { name: "Unit content" })).toBeVisible();
   await expect(page.getByRole("tab", { name: "Performance" })).toBeVisible();
   await expect(page.getByRole("tab", { name: "Reflection" })).toBeVisible();
+  await expect(page.getByText("Strategy workspace")).toHaveCount(0);
+  await expect(page.getByRole("tab", { name: "Inquiry & action" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Inquiry & action" })).toHaveCount(1);
 });
 
 test("planning insights and curriculum maps show distinct seeded views", async ({ page }) => {
@@ -115,7 +118,7 @@ test("lesson authoring shows trusted save feedback, avoids dead helper copy, and
   await page.getByRole("button", { name: /^Add$/ }).click();
   await page.getByRole("button", { name: "Save Changes" }).click();
   await expect(page.getByText("Lesson plan updated")).toBeVisible();
-  await page.getByRole("button", { name: "Close" }).click();
+  await page.getByRole("button", { name: "Done" }).click();
 
   const savedLessonRow = page.getByRole("button", { name: /Food Web Seminar/i });
   await expect(savedLessonRow).toContainText("1 objective");

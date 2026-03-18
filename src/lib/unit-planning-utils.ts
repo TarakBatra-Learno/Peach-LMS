@@ -1,11 +1,8 @@
 import { TimetableSlot } from "@/types/class";
 import { Assessment } from "@/types/assessment";
 import { LessonPlan, MaterializedOccurrence } from "@/types/unit-planning";
-import { addDays, format, getDay, parseISO, isAfter, isBefore } from "date-fns";
+import { addDays, format, getDay, parseISO, isAfter } from "date-fns";
 
-const DAY_MAP: Record<string, number> = {
-  sun: 0, mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6,
-};
 const NUM_TO_DAY: Record<number, "mon" | "tue" | "wed" | "thu" | "fri"> = {
   1: "mon", 2: "tue", 3: "wed", 4: "thu", 5: "fri",
 };
@@ -144,4 +141,14 @@ export function getLessonStatusVariant(status: LessonPlan["status"]): string {
     cancelled: "destructive",
   };
   return variants[status];
+}
+
+export function getLessonSummaryMetadata(lesson: LessonPlan) {
+  return {
+    objectiveCount: lesson.objectives?.length ?? 0,
+    activityCount: lesson.activities.length,
+    standardCount: lesson.linkedStandardIds.length,
+    statusLabel: getLessonStatusLabel(lesson.status),
+    assignmentState: lesson.status === "assigned" ? "Scheduled" : undefined,
+  };
 }
