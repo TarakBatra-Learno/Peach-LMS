@@ -59,6 +59,7 @@ export default function StudentReportDetailPage() {
             learningGoals,
             unitPlans,
             assessmentReports,
+            releasedOnlyAssessmentSources: true,
             releasedOnlySuggestions: true,
           })
         : null,
@@ -182,7 +183,7 @@ export default function StudentReportDetailPage() {
                 <SectionIcon type={section.type} />
                 {section.label}
               </h3>
-              <ReportSectionContent section={section} />
+              <ReportSectionContent section={section} reportPrefillContext={reportPrefillContext} />
             </Card>
           ))}
       </div>
@@ -237,7 +238,13 @@ function SectionIcon({ type }: { type: string }) {
   }
 }
 
-function ReportSectionContent({ section }: { section: import("@/types/report").ReportSection }) {
+function ReportSectionContent({
+  section,
+  reportPrefillContext,
+}: {
+  section: import("@/types/report").ReportSection;
+  reportPrefillContext: ReturnType<typeof buildReportPrefillContext> | null;
+}) {
   const content = section.content;
 
   // Render based on section type
@@ -264,7 +271,7 @@ function ReportSectionContent({ section }: { section: import("@/types/report").R
     );
   }
 
-  if (section.type === "grades" || section.type === "standards_skills") {
+  if (section.type === "grades") {
     const items = (content as Record<string, unknown>).items as Array<Record<string, unknown>> | undefined;
     if (!items?.length) {
       return <p className="text-[13px] text-muted-foreground">No grade data available.</p>;
@@ -279,6 +286,45 @@ function ReportSectionContent({ section }: { section: import("@/types/report").R
             </Badge>
           </div>
         ))}
+      </div>
+    );
+  }
+
+  if (section.type === "standards_skills") {
+    const skillsFromContent = (content as Record<string, unknown>).skills as Array<Record<string, unknown>> | undefined;
+    const derivedSkills = reportPrefillContext
+      ? Array.from(
+          new Map(
+            reportPrefillContext.assessmentSources
+              .flatMap((source) => source.standards)
+              .map((skill) => [skill.goalId, skill])
+          ).values()
+        )
+      : [];
+    const skills = skillsFromContent?.length ? skillsFromContent : derivedSkills;
+    if (!skills?.length) {
+      return <p className="text-[13px] text-muted-foreground">No standards or skills data available.</p>;
+    }
+
+    return (
+      <div className="space-y-2">
+        {skills.map((skill, i) => {
+          const skillRecord = skill as Record<string, unknown>;
+          return (
+          <div key={i} className="flex items-center justify-between gap-3 py-1">
+            <div>
+              <p className="text-[13px] font-medium">
+                {String(skillRecord.title ?? skillRecord.label ?? "Learning target")}
+              </p>
+              <p className="text-[11px] text-muted-foreground">
+                {[skillRecord.code, skillRecord.category].filter(Boolean).join(" · ")}
+              </p>
+            </div>
+            <Badge variant="secondary" className="text-[12px]">
+              {String(skillRecord.level ?? "Not assessed")}
+            </Badge>
+          </div>
+        )})}
       </div>
     );
   }

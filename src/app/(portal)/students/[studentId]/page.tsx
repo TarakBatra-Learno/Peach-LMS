@@ -84,6 +84,7 @@ export default function StudentProfilePage() {
   const router = useRouter();
   const studentId = params.studentId as string;
   const urlClassId = searchParams.get("classId");
+  const urlUnitId = searchParams.get("unitId");
   const loading = useMockLoading([studentId]);
   const embedded = searchParams.get("embed") === "1";
   const adminPreview = searchParams.get("admin") === "1";
@@ -142,7 +143,7 @@ export default function StudentProfilePage() {
   const [detailArtifact, setDetailArtifact] = useState<PortfolioArtifact | null>(null);
   const [detailGrade, setDetailGrade] = useState<GradeRecord | null>(null);
   const [classFilter, setClassFilter] = useState<string | null>(urlClassId);
-  const [unitFilter, setUnitFilter] = useState<string | null>(null);
+  const [unitFilter, setUnitFilter] = useState<string | null>(urlUnitId);
   const [teacherComment, setTeacherComment] = useState("");
   const [studentReflectionText, setStudentReflectionText] = useState("");
 
@@ -231,12 +232,21 @@ export default function StudentProfilePage() {
   const handleUnitFilterChange = (value: string) => {
     const newUnitId = value === "all" ? null : value;
     setUnitFilter(newUnitId);
+    const newParams = new URLSearchParams(searchParams.toString());
+    if (newUnitId) {
+      newParams.set("unitId", newUnitId);
+    } else {
+      newParams.delete("unitId");
+    }
+    const qs = newParams.toString();
+    router.replace(`/students/${studentId}${qs ? `?${qs}` : ""}`, { scroll: false });
   };
 
   // Units available for the selected class
   const classUnits = validClassFilter
     ? unitPlans.filter((u) => u.classId === validClassFilter)
     : [];
+  const activeUnit = unitFilter ? classUnits.find((unit) => unit.id === unitFilter) ?? null : null;
 
   const getClassHref = (classId: string, tab?: string | null) => {
     if (embedded) {
@@ -446,6 +456,28 @@ export default function StudentProfilePage() {
           ))}
         </div>
       </PageHeader>
+
+      {activeUnit ? (
+        <Card className="mb-4 border-[#d8e6ff] bg-[#f7faff] p-4 shadow-1">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-[12px] font-medium uppercase tracking-[0.12em] text-[#3b5998]">
+                Unit-scoped view
+              </p>
+              <p className="mt-1 text-[13px] leading-6 text-muted-foreground">
+                Showing performance, evidence, and reports linked to{" "}
+                <span className="font-medium text-foreground">{activeUnit.title}</span>
+                {validClassFilter
+                  ? ` in ${studentClasses.find((cls) => cls.id === validClassFilter)?.name ?? "this class"}`
+                  : ""}.
+              </p>
+            </div>
+            <Button variant="outline" size="sm" onClick={() => handleUnitFilterChange("all")}>
+              Clear unit filter
+            </Button>
+          </div>
+        </Card>
+      ) : null}
 
       {(studentClasses.length > 1 || classUnits.length > 0) && (
         <div className="flex items-center gap-2 mb-4">

@@ -50,6 +50,21 @@ test("teacher report detail shows source attribution for assessments and AI sugg
   await expect(page.getByText("Teacher-authored sections")).toBeVisible();
 });
 
+test("teacher unit performance drills into the filtered student profile", async ({ page }) => {
+  await enterTeacher(page);
+
+  await page.goto("/planning/units/unit_01");
+  await expect(page.getByRole("tab", { name: "Performance" })).toBeVisible();
+  await page.getByRole("tab", { name: "Performance" }).click();
+  await expect(page.getByRole("tab", { name: "Student matrix" })).toBeVisible();
+  await page.getByRole("tab", { name: "Student matrix" }).click();
+
+  await page.getByRole("link", { name: "Aarav Patel" }).click();
+  await expect(page).toHaveURL(/\/students\/stu_01\?classId=cls_myp_sci&unitId=unit_01$/);
+  await expect(page.getByRole("heading", { name: "Aarav Patel" })).toBeVisible();
+  await expect(page.getByText("Unit-scoped view")).toBeVisible();
+});
+
 test("student progress and report detail show released mastery and assessment context", async ({ page }) => {
   await enterStudent(page, /^Aarav Patel/);
 
@@ -60,8 +75,10 @@ test("student progress and report detail show released mastery and assessment co
   await expect(page.getByText("Assessment insights")).toBeVisible();
 
   await page.getByRole("tab", { name: "Reports" }).click();
-  await page.locator('a[href*="/student/progress/reports/"]').first().click();
-  await expect(page).toHaveURL(/\/student\/progress\/reports\/rpt_/);
+  await page.goto("/student/progress/reports/rpt_046");
   await expect(page.getByText("Assessment signals feeding this report")).toBeVisible();
   await expect(page.getByText("Suggested from released assessment feedback")).toBeVisible();
+  await expect(page.getByText("Standards & Skills")).toBeVisible();
+  await expect(page.getByText("Scientific inquiry and experimental design")).toBeVisible();
+  await expect(page.getByText("Systems Check Quiz")).toHaveCount(0);
 });

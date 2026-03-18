@@ -258,7 +258,7 @@ export function SubmissionPreviewDrawer({
           <div className="space-y-3">
             {onGradeStudent && (
               <Button size="sm" onClick={onGradeStudent}>
-                Open grading sheet
+                Open marking workspace
               </Button>
             )}
           </div>

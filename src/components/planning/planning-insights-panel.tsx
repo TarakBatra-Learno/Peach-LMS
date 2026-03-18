@@ -4,7 +4,7 @@ import { Download, Sparkles } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import type { CurriculumMapRow, PlanningInsightSummary } from "@/lib/planning-selectors";
+import type { PlanningInsightSummary, PlanningInsightTable } from "@/lib/planning-selectors";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
@@ -12,14 +12,14 @@ interface PlanningInsightsPanelProps {
   insights: PlanningInsightSummary[];
   selectedInsightId: PlanningInsightSummary["id"];
   onSelectInsightId: (id: PlanningInsightSummary["id"]) => void;
-  rows: CurriculumMapRow[];
+  table: PlanningInsightTable;
 }
 
 export function PlanningInsightsPanel({
   insights,
   selectedInsightId,
   onSelectInsightId,
-  rows,
+  table,
 }: PlanningInsightsPanelProps) {
   const selectedInsight =
     insights.find((insight) => insight.id === selectedInsightId) ?? insights[0];
@@ -59,9 +59,9 @@ export function PlanningInsightsPanel({
       <Card className="p-5">
         <div className="flex items-center justify-between gap-4">
           <div>
-            <p className="text-[16px] font-semibold">{selectedInsight.title}</p>
+            <p className="text-[16px] font-semibold">{table.title}</p>
             <p className="mt-1 text-[13px] text-muted-foreground">
-              Seeded read-only projection for the current prototype dataset.
+              {table.subtitle}
             </p>
           </div>
           <Button
@@ -82,32 +82,30 @@ export function PlanningInsightsPanel({
           <table className="w-full text-left text-[13px]">
             <thead className="bg-muted/30">
               <tr>
-                <th className="px-4 py-3 font-medium text-muted-foreground">Class</th>
-                <th className="px-4 py-3 font-medium text-muted-foreground">Unit</th>
-                <th className="px-4 py-3 font-medium text-muted-foreground">Duration</th>
-                <th className="px-4 py-3 font-medium text-muted-foreground">Coverage signal</th>
+                {table.columns.map((column) => (
+                  <th
+                    key={column}
+                    className="px-4 py-3 font-medium text-muted-foreground"
+                  >
+                    {column}
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody>
-              {rows.map((row) => (
-                <tr key={`${selectedInsight.id}-${row.unitId}`} className="border-t border-border/60">
-                  <td className="px-4 py-3">
-                    <div>
-                      <p className="font-medium">{row.className}</p>
-                      <p className="text-[12px] text-muted-foreground">{row.programme}</p>
-                    </div>
-                  </td>
-                  <td className="px-4 py-3 font-medium">{row.unitTitle}</td>
-                  <td className="px-4 py-3 text-muted-foreground">{row.durationLabel}</td>
-                  <td className="px-4 py-3">
-                    <div className="flex flex-wrap gap-2">
-                      {row.keySignals.map((signal) => (
-                        <Badge key={signal} variant="outline">
-                          {signal}
-                        </Badge>
-                      ))}
-                    </div>
-                  </td>
+              {table.rows.map((row) => (
+                <tr key={`${selectedInsight.id}-${row.id}`} className="border-t border-border/60">
+                  {row.cells.map((cell, index) => (
+                    <td
+                      key={`${row.id}-${table.columns[index]}`}
+                      className={cn(
+                        "px-4 py-3",
+                        index <= 1 ? "font-medium" : "text-muted-foreground"
+                      )}
+                    >
+                      {cell}
+                    </td>
+                  ))}
                 </tr>
               ))}
             </tbody>

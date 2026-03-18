@@ -10,12 +10,15 @@ import { generateId } from "@/services/mock-service";
 import type { Assessment } from "@/types/assessment";
 import type { Submission } from "@/types/submission";
 import { toast } from "sonner";
+import { getDemoNow } from "@/lib/demo-time";
+import { isSubmissionSubmitted } from "@/lib/submission-state";
 
 interface EssayRunnerProps {
   assessment: Assessment;
   submission?: Submission;
   studentId: string;
   classId: string;
+  isOpen: boolean;
   isPastDue?: boolean;
 }
 
@@ -24,6 +27,7 @@ export function EssayRunner({
   submission,
   studentId,
   classId,
+  isOpen,
   isPastDue = false,
 }: EssayRunnerProps) {
   const addSubmission = useStore((s) => s.addSubmission);
@@ -31,9 +35,12 @@ export function EssayRunner({
   const [body, setBody] = useState(
     submission?.typedPayload?.essay?.body ?? submission?.content ?? ""
   );
+  const alreadySubmitted = isSubmissionSubmitted(submission);
+  const canSubmit = isOpen && !alreadySubmitted;
 
   const handleSubmit = () => {
-    const now = new Date().toISOString();
+    if (!canSubmit) return;
+    const now = getDemoNow().toISOString();
     const payload = {
       essay: {
         prompt: assessment.essayConfig?.prompt,
@@ -92,7 +99,9 @@ export function EssayRunner({
       />
       <div className="mt-4 flex justify-between text-[12px] text-muted-foreground">
         <span>{body.trim().split(/\s+/).filter(Boolean).length} words</span>
-        <Button onClick={handleSubmit}>Submit essay</Button>
+        <Button onClick={handleSubmit} disabled={!canSubmit}>
+          {alreadySubmitted ? "Essay submitted" : isOpen ? "Submit essay" : "Submissions closed"}
+        </Button>
       </div>
     </Card>
   );

@@ -19,7 +19,7 @@ export function TeacherShellLayout({ children }: { children: React.ReactNode }) 
     <StoreInitializer>
       <PersonaShellGuard role={["teacher", "admin"]}>
         {embedded ? (
-          <main className="min-h-screen bg-background">
+          <main className="min-h-screen bg-[#f7f8fa]">
             <div className="mx-auto max-w-[1320px] px-6 py-6">
               <ErrorBanner />
               {children}
@@ -31,7 +31,7 @@ export function TeacherShellLayout({ children }: { children: React.ReactNode }) 
             <Sidebar />
             <main
               className={cn(
-                "pt-[56px] transition-all duration-200 transition-shell min-h-screen",
+                "min-h-screen bg-[#f7f8fa] pt-[56px] transition-all duration-200 transition-shell",
                 collapsed ? "pl-[72px]" : "pl-[280px]"
               )}
             >

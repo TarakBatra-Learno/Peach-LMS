@@ -11,12 +11,15 @@ import { generateId } from "@/services/mock-service";
 import type { Assessment } from "@/types/assessment";
 import type { Submission } from "@/types/submission";
 import { toast } from "sonner";
+import { getDemoNow } from "@/lib/demo-time";
+import { isSubmissionSubmitted } from "@/lib/submission-state";
 
 interface QuizRunnerProps {
   assessment: Assessment;
   submission?: Submission;
   studentId: string;
   classId: string;
+  isOpen: boolean;
   isPastDue?: boolean;
 }
 
@@ -25,6 +28,7 @@ export function QuizRunner({
   submission,
   studentId,
   classId,
+  isOpen,
   isPastDue = false,
 }: QuizRunnerProps) {
   const addSubmission = useStore((s) => s.addSubmission);
@@ -36,9 +40,12 @@ export function QuizRunner({
     ) as Record<string, string | string[]>;
   }, [submission?.typedPayload?.quiz]);
   const [responses, setResponses] = useState<Record<string, string | string[]>>(initialResponses);
+  const alreadySubmitted = isSubmissionSubmitted(submission);
+  const canSubmit = isOpen && !alreadySubmitted;
 
   const handleSubmit = () => {
-    const now = new Date().toISOString();
+    if (!canSubmit) return;
+    const now = getDemoNow().toISOString();
     const payload = {
       quiz: {
         questionCount: assessment.quizConfig?.questions.length ?? 0,
@@ -105,7 +112,9 @@ export function QuizRunner({
         ))}
       </div>
       <div className="mt-4 flex justify-end">
-        <Button onClick={handleSubmit}>Submit quiz</Button>
+        <Button onClick={handleSubmit} disabled={!canSubmit}>
+          {alreadySubmitted ? "Quiz submitted" : isOpen ? "Submit quiz" : "Submissions closed"}
+        </Button>
       </div>
     </Card>
   );

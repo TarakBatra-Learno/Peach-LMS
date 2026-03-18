@@ -47,6 +47,7 @@ interface BuildReportPrefillContextParams {
   learningGoals: LearningGoal[];
   unitPlans: UnitPlan[];
   assessmentReports: AssessmentReport[];
+  releasedOnlyAssessmentSources?: boolean;
   releasedOnlySuggestions?: boolean;
 }
 
@@ -68,10 +69,14 @@ export function buildReportPrefillContext({
   learningGoals,
   unitPlans,
   assessmentReports,
+  releasedOnlyAssessmentSources = false,
   releasedOnlySuggestions = false,
 }: BuildReportPrefillContextParams): ReportPrefillContext {
   const studentGrades = grades.filter(
-    (grade) => grade.studentId === report.studentId && grade.classId === report.classId,
+    (grade) =>
+      grade.studentId === report.studentId &&
+      grade.classId === report.classId &&
+      (!releasedOnlyAssessmentSources || Boolean(grade.releasedAt)),
   );
 
   const assessmentSources = studentGrades

@@ -322,6 +322,7 @@ export default function StudentAssessmentDetailPage() {
               submission={submission}
               studentId={studentId}
               classId={classId}
+              isOpen={isOpen}
               isPastDue={isPastDue}
             />
           ) : rawAssessment.assessmentType === "chat" ? (
@@ -330,6 +331,8 @@ export default function StudentAssessmentDetailPage() {
               submission={submission}
               studentId={studentId}
               classId={classId}
+              isOpen={isOpen}
+              isPastDue={isPastDue}
             />
           ) : rawAssessment.assessmentType === "essay" ? (
             <EssayRunner
@@ -337,6 +340,7 @@ export default function StudentAssessmentDetailPage() {
               submission={submission}
               studentId={studentId}
               classId={classId}
+              isOpen={isOpen}
               isPastDue={isPastDue}
             />
           ) : rawAssessment.assessmentType === "off_platform" ? (

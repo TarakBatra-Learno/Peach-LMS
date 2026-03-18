@@ -1,3 +1,4 @@
+import { getDemoNow } from "@/lib/demo-time";
 import type { Assessment } from "@/types/assessment";
 import type { Class } from "@/types/class";
 import type { LessonPlan, UnitPlan } from "@/types/unit-planning";
@@ -28,12 +29,29 @@ export interface PlanningClassTimelineGroup {
   units: PlanningUnitCardSummary[];
 }
 
+export interface PlanningTimelinePeriod {
+  id: string;
+  label: string;
+  startDate: string;
+  endDate: string;
+}
+
 export interface PlanningInsightSummary {
   id: "standards_skills" | "concepts_inquiry" | "timeline_pacing";
   title: string;
   description: string;
   populatedCount: number;
   gapCount: number;
+}
+
+export interface PlanningInsightTable {
+  title: string;
+  subtitle: string;
+  columns: string[];
+  rows: Array<{
+    id: string;
+    cells: string[];
+  }>;
 }
 
 export interface CurriculumMapRow {
@@ -43,7 +61,10 @@ export interface CurriculumMapRow {
   programme: string;
   unitTitle: string;
   durationLabel: string;
-  keySignals: string[];
+  approachesToLearning: string[];
+  learnerProfileAttributes: string[];
+  relatedConcepts: string[];
+  objectives: string[];
 }
 
 function getClassName(classes: Class[], classId: string) {
@@ -94,6 +115,81 @@ function getStandardsCoverageSignal(linkedStandardCount: number) {
   if (linkedStandardCount >= 4) return "strong" as const;
   if (linkedStandardCount >= 2) return "partial" as const;
   return "light" as const;
+}
+
+function formatDurationLabel(summary: PlanningUnitCardSummary) {
+  if (summary.durationWeeks != null) {
+    return `${summary.durationWeeks} wk${summary.durationWeeks === 1 ? "" : "s"}`;
+  }
+
+  if (summary.durationHours != null) {
+    return `${summary.durationHours} hr${summary.durationHours === 1 ? "" : "s"}`;
+  }
+
+  return "Duration not set";
+}
+
+function getObjectiveLabels(unit: UnitPlan) {
+  return unit.strategy.learningFocus?.objectiveLabels ?? [];
+}
+
+function getAtlSignals(unit: UnitPlan) {
+  return [
+    ...(unit.strategy.conceptualFraming?.atlFocus ?? []),
+    ...((unit.strategy.learningFocus?.atlSkillIds ?? []).map((id) =>
+      id.replaceAll("_", " ")
+    )),
+  ];
+}
+
+function getLearnerProfileSignals(unit: UnitPlan) {
+  return (unit.strategy.learningFocus?.learnerProfileIds ?? []).map((id) =>
+    id.replaceAll("_", " ")
+  );
+}
+
+function getRelatedConcepts(unit: UnitPlan) {
+  return unit.strategy.conceptualFraming?.relatedConcepts ?? [];
+}
+
+function getTimelineSequencingSignal(summary: PlanningUnitCardSummary) {
+  if (summary.assessmentCount >= 3 && summary.lessonCount >= 4) {
+    return "Assessment-rich sequence";
+  }
+  if (summary.assessmentCount === 0) {
+    return "Assessment load pending";
+  }
+  if (summary.lessonCount <= 1) {
+    return "Lesson sequence needs depth";
+  }
+  return "Balanced sequence";
+}
+
+function toIsoDate(date: Date) {
+  return date.toISOString().slice(0, 10);
+}
+
+function endOfMonth(year: number, monthIndex: number) {
+  return new Date(year, monthIndex + 1, 0);
+}
+
+export function buildPlanningTimelinePeriods(referenceDate = getDemoNow()): PlanningTimelinePeriod[] {
+  const startYear = referenceDate.getMonth() >= 6 ? referenceDate.getFullYear() : referenceDate.getFullYear() - 1;
+  const periodStarts = [6, 8, 10, 0, 2, 4];
+
+  return periodStarts.map((monthIndex) => {
+    const year = monthIndex >= 6 ? startYear : startYear + 1;
+    const start = new Date(year, monthIndex, 1);
+    const end = endOfMonth(year, monthIndex + 1);
+    const label = `${start.toLocaleString("en-US", { month: "short" })} - ${end.toLocaleString("en-US", { month: "short" })} ${String(year).slice(2)}`;
+
+    return {
+      id: `${year}-${monthIndex}`,
+      label,
+      startDate: toIsoDate(start),
+      endDate: toIsoDate(end),
+    };
+  });
 }
 
 export function buildPlanningUnitCardSummaries(
@@ -194,18 +290,94 @@ export function buildPlanningInsightSummaries(
     {
       id: "concepts_inquiry",
       title: "Concepts & inquiry coverage",
-      description: "Read-only projection over inquiry statements, key concepts, and inquiry-question structure.",
+      description: "Read-only projection over inquiry statements, concepts, and question structure.",
       populatedCount: inquiryPopulated,
       gapCount: units.length - inquiryPopulated,
     },
     {
       id: "timeline_pacing",
       title: "Timeline & pacing",
-      description: "Read-only view of pacing, sequencing, and linked lesson/assessment density.",
+      description: "Read-only view of pacing, sequencing, and lesson/assessment density.",
       populatedCount: timelinePopulated,
       gapCount: units.length - timelinePopulated,
     },
   ];
+}
+
+export function buildPlanningInsightTable(
+  insightId: PlanningInsightSummary["id"],
+  classes: Class[],
+  units: UnitPlan[],
+  lessons: LessonPlan[],
+  assessments: Assessment[]
+): PlanningInsightTable {
+  const summaries = buildPlanningUnitCardSummaries(classes, units, lessons, assessments);
+  const unitLookup = new Map(units.map((unit) => [unit.id, unit]));
+
+  if (insightId === "concepts_inquiry") {
+    return {
+      title: "Concepts & inquiry coverage",
+      subtitle: "Check whether units have enough inquiry framing and conceptual anchors to support a strong IB planning story.",
+      columns: ["Class", "Unit", "Statement of inquiry", "Key concept", "Inquiry prompts", "Global context"],
+      rows: summaries.map((summary) => {
+        const unit = unitLookup.get(summary.unitId)!;
+        return {
+          id: summary.unitId,
+          cells: [
+            summary.className,
+            summary.title,
+            unit.strategy.conceptualFraming?.statementOfInquiry ?? unit.strategy.inquiry?.statement ?? "Needs inquiry statement",
+            unit.strategy.conceptualFraming?.keyConcept ?? "Not tagged",
+            `${summary.inquiryQuestionCount} prompts`,
+            unit.strategy.conceptualFraming?.globalContext ?? "Not tagged",
+          ],
+        };
+      }),
+    };
+  }
+
+  if (insightId === "timeline_pacing") {
+    return {
+      title: "Timeline & pacing",
+      subtitle: "Read-only pacing view across duration, lesson density, and assessment pressure.",
+      columns: ["Class", "Unit", "Time window", "Lesson density", "Assessment load", "Sequencing"],
+      rows: summaries.map((summary) => {
+        return {
+          id: summary.unitId,
+          cells: [
+            summary.className,
+            summary.title,
+            `${summary.startDate} -> ${summary.endDate}`,
+            `${summary.lessonCount} lesson${summary.lessonCount === 1 ? "" : "s"}`,
+            `${summary.assessmentCount} assessment${summary.assessmentCount === 1 ? "" : "s"}`,
+            getTimelineSequencingSignal(summary),
+          ],
+        };
+      }),
+    };
+  }
+
+  return {
+    title: "Standards & skills coverage",
+    subtitle: "Read-only coverage view across standards, ATL signals, and evidence-linked skills for each unit.",
+    columns: ["Class", "Unit", "Standards tagged", "ATL focus", "Evidence focus", "Coverage status"],
+    rows: summaries.map((summary) => {
+      const unit = unitLookup.get(summary.unitId)!;
+      const atlSignals = getAtlSignals(unit);
+      const evidenceSignals = unit.strategy.evidence?.standardsFocusIds ?? [];
+      return {
+        id: summary.unitId,
+        cells: [
+          summary.className,
+          summary.title,
+          `${summary.linkedStandardCount} tagged`,
+          atlSignals.length > 0 ? atlSignals.slice(0, 2).join(", ") : "Needs ATL focus",
+          evidenceSignals.length > 0 ? `${evidenceSignals.length} evidence links` : "Evidence focus pending",
+          summary.standardsCoverageSignal,
+        ],
+      };
+    }),
+  };
 }
 
 export function buildCurriculumMapRows(
@@ -214,28 +386,22 @@ export function buildCurriculumMapRows(
   lessons: LessonPlan[],
   assessments: Assessment[]
 ): CurriculumMapRow[] {
-  return buildPlanningUnitCardSummaries(classes, units, lessons, assessments).map((summary) => {
-    const keySignals = [
-      summary.lessonCount > 0 ? `${summary.lessonCount} lessons` : "Lessons not linked",
-      summary.assessmentCount > 0 ? `${summary.assessmentCount} linked assessments` : "Assessments not linked",
-      summary.inquiryQuestionCount > 0
-        ? `${summary.inquiryQuestionCount} inquiry prompts`
-        : "Inquiry prompts not added",
-    ];
+  const summaries = buildPlanningUnitCardSummaries(classes, units, lessons, assessments);
+  const unitLookup = new Map(units.map((unit) => [unit.id, unit]));
 
+  return summaries.map((summary) => {
+    const unit = unitLookup.get(summary.unitId)!;
     return {
       unitId: summary.unitId,
       classId: summary.classId,
       className: summary.className,
       programme: summary.programme,
       unitTitle: summary.title,
-      durationLabel:
-        summary.durationWeeks != null
-          ? `${summary.durationWeeks} wk${summary.durationWeeks === 1 ? "" : "s"}`
-          : summary.durationHours != null
-            ? `${summary.durationHours} hr${summary.durationHours === 1 ? "" : "s"}`
-            : "Duration not set",
-      keySignals,
+      durationLabel: formatDurationLabel(summary),
+      approachesToLearning: getAtlSignals(unit),
+      learnerProfileAttributes: getLearnerProfileSignals(unit),
+      relatedConcepts: getRelatedConcepts(unit),
+      objectives: getObjectiveLabels(unit),
     };
   });
 }

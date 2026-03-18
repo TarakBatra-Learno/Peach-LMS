@@ -78,7 +78,7 @@ export function TopBar() {
 
   return (
     <>
-      <header className="fixed top-0 left-0 right-0 z-50 h-[56px] bg-background border-b border-border flex items-center justify-between px-4">
+      <header className="fixed top-0 left-0 right-0 z-50 flex h-[56px] items-center justify-between border-b border-border bg-background/95 px-4 backdrop-blur">
         <div className="flex items-center gap-3">
           <span className="text-[18px] font-bold text-[#c24e3f] tracking-tight">
             Peach

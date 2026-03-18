@@ -9,12 +9,17 @@ import { useStore } from "@/stores";
 import { generateId } from "@/services/mock-service";
 import type { Assessment } from "@/types/assessment";
 import type { ChatTranscriptTurn, Submission } from "@/types/submission";
+import { toast } from "sonner";
+import { getDemoNow } from "@/lib/demo-time";
+import { isSubmissionSubmitted } from "@/lib/submission-state";
 
 interface ChatRunnerProps {
   assessment: Assessment;
   submission?: Submission;
   studentId: string;
   classId: string;
+  isOpen: boolean;
+  isPastDue?: boolean;
 }
 
 export function ChatRunner({
@@ -22,6 +27,8 @@ export function ChatRunner({
   submission,
   studentId,
   classId,
+  isOpen,
+  isPastDue = false,
 }: ChatRunnerProps) {
   const addSubmission = useStore((s) => s.addSubmission);
   const updateSubmission = useStore((s) => s.updateSubmission);
@@ -39,9 +46,12 @@ export function ChatRunner({
   }, [assessment.chatConfig?.starterPrompt, submission?.typedPayload?.chat?.transcript]);
   const [transcript, setTranscript] = useState<ChatTranscriptTurn[]>(initialTranscript);
   const [message, setMessage] = useState("");
+  const alreadySubmitted = isSubmissionSubmitted(submission);
+  const canContinue = isOpen && !alreadySubmitted;
+  const studentTurnCount = transcript.filter((turn) => turn.role === "student").length;
 
   const handleSend = () => {
-    if (!message.trim()) return;
+    if (!message.trim() || !canContinue) return;
 
     const nextTranscript = [
       ...transcript,
@@ -53,7 +63,7 @@ export function ChatRunner({
       },
     ];
 
-    const now = new Date().toISOString();
+    const now = getDemoNow().toISOString();
     const payload = {
       chat: {
         transcript: nextTranscript,
@@ -91,6 +101,53 @@ export function ChatRunner({
     setMessage("");
   };
 
+  const handleSubmitConversation = () => {
+    if (!canContinue || studentTurnCount === 0) return;
+    const now = getDemoNow().toISOString();
+    const payload = {
+      chat: {
+        transcript,
+        completionSummary:
+          assessment.chatConfig?.successCriteria?.length
+            ? `Student addressed ${Math.min(
+                assessment.chatConfig.successCriteria.length,
+                studentTurnCount
+              )} success criteria in the conversation.`
+            : "Conversation submitted for review.",
+      },
+    };
+
+    if (submission) {
+      updateSubmission(submission.id, {
+        assessmentType: "chat",
+        content: "Conversation submitted for review.",
+        typedPayload: payload,
+        status: "submitted",
+        submittedAt: now,
+        isLate: isPastDue,
+        updatedAt: now,
+      });
+    } else {
+      addSubmission({
+        id: generateId("sub"),
+        assessmentId: assessment.id,
+        studentId,
+        classId,
+        assessmentType: "chat",
+        status: "submitted",
+        content: "Conversation submitted for review.",
+        attachments: [],
+        typedPayload: payload,
+        submittedAt: now,
+        isLate: isPastDue,
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+
+    toast.success(isPastDue ? "Conversation submitted late" : "Conversation submitted");
+  };
+
   return (
     <Card className="p-5 gap-0">
       <div className="flex items-center gap-2">
@@ -119,8 +176,19 @@ export function ChatRunner({
           value={message}
           onChange={(event) => setMessage(event.target.value)}
           placeholder="Continue the conversation"
+          disabled={!canContinue}
         />
-        <Button onClick={handleSend}>Send response</Button>
+        <Button onClick={handleSend} disabled={!canContinue}>
+          Send response
+        </Button>
+      </div>
+      <div className="mt-3 flex justify-end">
+        <Button
+          onClick={handleSubmitConversation}
+          disabled={!canContinue || studentTurnCount === 0}
+        >
+          {alreadySubmitted ? "Conversation submitted" : isOpen ? "Submit conversation" : "Submissions closed"}
+        </Button>
       </div>
     </Card>
   );
