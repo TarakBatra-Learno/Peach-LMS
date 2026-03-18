@@ -99,6 +99,13 @@ test("teacher shell reset control reseeds the demo safely", async ({ page }) => 
   await expect(page.getByText("Demo data reset to defaults")).toBeVisible();
   await expect(page).toHaveURL(/\/dashboard$/);
   await expect(page.getByRole("heading", { name: "Right Now" })).toBeVisible();
+
+  await page.getByRole("combobox").nth(1).click();
+  await page.getByRole("option", { name: /MYP 5 Sciences/i }).click();
+  await page.goto("/planning");
+  await expect(page.getByText("2 units", { exact: true })).toBeVisible();
+  await expect(page.getByText("9 lessons", { exact: true })).toBeVisible();
+  await expect(page.getByText("3 linked assessments", { exact: true })).toBeVisible();
 });
 
 test("teacher report publish flow updates immediately without a refresh", async ({ page }) => {
