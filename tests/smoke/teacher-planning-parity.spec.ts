@@ -93,3 +93,36 @@ test("planning insights and curriculum maps show distinct seeded views", async (
   ).toBeVisible();
   await expect(page.getByText("Assessment load")).toHaveCount(0);
 });
+
+test("lesson authoring shows trusted save feedback, avoids dead helper copy, and summarizes saved content", async ({
+  page,
+}) => {
+  await enterTeacher(page);
+
+  await page.goto("/planning/units/unit_01");
+  await expect(page.getByRole("heading", { name: "Ecosystems & Interdependence" })).toBeVisible();
+
+  await page.getByRole("tab", { name: "Unit content" }).click();
+  await page.getByRole("button", { name: "Add lesson" }).click();
+
+  await expect(page.getByRole("heading", { name: "Lesson Plan" })).toBeVisible();
+  await expect(page.getByText(/Timetable sub-tab/i)).toHaveCount(0);
+
+  await page.getByLabel("Title").fill("Food Web Seminar");
+  await page.getByPlaceholder("Add an objective...").fill("Explain how ecosystem changes affect energy flow");
+  await page.getByPlaceholder("Add an objective...").press("Enter");
+
+  await page.getByRole("button", { name: /^Add$/ }).click();
+  await page.getByRole("button", { name: "Save Changes" }).click();
+  await expect(page.getByText("Lesson plan updated")).toBeVisible();
+  await page.getByRole("button", { name: "Close" }).click();
+
+  const savedLessonRow = page.getByRole("button", { name: /Food Web Seminar/i });
+  await expect(savedLessonRow).toContainText("1 objective");
+  await expect(savedLessonRow).toContainText("1 activity");
+
+  await savedLessonRow.click();
+  await expect(
+    page.getByText("Explain how ecosystem changes affect energy flow")
+  ).toBeVisible();
+});
