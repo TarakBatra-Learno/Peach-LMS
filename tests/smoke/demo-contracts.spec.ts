@@ -100,12 +100,15 @@ test("teacher shell reset control reseeds the demo safely", async ({ page }) => 
   await expect(page).toHaveURL(/\/dashboard$/);
   await expect(page.getByRole("heading", { name: "Right Now" })).toBeVisible();
 
-  await page.getByRole("combobox").nth(1).click();
+  const classScope = page.locator("header").getByRole("combobox").nth(1);
+  await classScope.click();
   await page.getByRole("option", { name: /MYP 5 Sciences/i }).click();
-  await page.goto("/planning");
+  await expect(classScope).toContainText("MYP 5 Sciences");
+  await page.getByRole("link", { name: "Planning" }).click();
+  await expect(page).toHaveURL(/\/planning$/);
   await expect(page.getByText("2 units", { exact: true })).toBeVisible();
-  await expect(page.getByText("9 lessons", { exact: true })).toBeVisible();
-  await expect(page.getByText("3 linked assessments", { exact: true })).toBeVisible();
+  await expect(page.getByText("6 lessons", { exact: true })).toBeVisible();
+  await expect(page.getByText("8 linked assessments", { exact: true })).toBeVisible();
 });
 
 test("teacher report publish flow updates immediately without a refresh", async ({ page }) => {

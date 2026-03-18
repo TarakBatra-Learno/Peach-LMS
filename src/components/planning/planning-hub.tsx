@@ -21,18 +21,24 @@ import type { LessonPlan, UnitPlan } from "@/types/unit-planning";
 import {
   buildCurriculumMapRows,
   buildPlanningInsightSummaries,
+  buildPlanningInsightTable,
   buildPlanningUnitCardSummaries,
   groupPlanningTimelineByClass,
 } from "@/lib/planning-selectors";
-import { PlanningCreateDialog, type PlanningCreateInput } from "@/components/planning/planning-create-dialog";
+import {
+  PlanningCreateDialog,
+  type PlanningCreateInput,
+} from "@/components/planning/planning-create-dialog";
 import { PlanningTimelineView } from "@/components/planning/planning-timeline-view";
 import { PlanningInsightsPanel } from "@/components/planning/planning-insights-panel";
+import { CurriculumMapTable } from "@/components/planning/curriculum-map-table";
 
 interface PlanningHubProps {
   classes: Class[];
   units: UnitPlan[];
   lessons: LessonPlan[];
   assessments: Assessment[];
+  activeClassId?: string | null;
   onCreatePlan: (input: PlanningCreateInput) => void;
 }
 
@@ -41,15 +47,22 @@ export function PlanningHub({
   units,
   lessons,
   assessments,
+  activeClassId,
   onCreatePlan,
 }: PlanningHubProps) {
   const [activeTab, setActiveTab] = useState("yearly");
   const [yearlyView, setYearlyView] = useState<"cards" | "timeline">("cards");
-  const [classFilter, setClassFilter] = useState("all");
+  const [classFilterOverride, setClassFilterOverride] = useState<string | null>(null);
   const [selectedInsightId, setSelectedInsightId] = useState<
     "standards_skills" | "concepts_inquiry" | "timeline_pacing"
   >("standards_skills");
   const [createOpen, setCreateOpen] = useState(false);
+
+  const classFilter =
+    classFilterOverride ??
+    (activeClassId && classes.some((cls) => cls.id === activeClassId)
+      ? activeClassId
+      : "all");
 
   const planningCards = useMemo(
     () => buildPlanningUnitCardSummaries(classes, units, lessons, assessments),
@@ -67,6 +80,11 @@ export function PlanningHub({
     () => buildCurriculumMapRows(classes, units, lessons, assessments),
     [assessments, classes, lessons, units]
   );
+  const insightTable = useMemo(
+    () =>
+      buildPlanningInsightTable(selectedInsightId, classes, units, lessons, assessments),
+    [assessments, classes, lessons, selectedInsightId, units]
+  );
 
   const filteredCards = useMemo(
     () =>
@@ -82,6 +100,22 @@ export function PlanningHub({
     () => curriculumMapRows.filter((row) => classFilter === "all" || row.classId === classFilter),
     [classFilter, curriculumMapRows]
   );
+  const filteredUnits = useMemo(
+    () => units.filter((unit) => classFilter === "all" || unit.classId === classFilter),
+    [classFilter, units]
+  );
+  const filteredLessons = useMemo(
+    () => lessons.filter((lesson) => classFilter === "all" || lesson.classId === classFilter),
+    [classFilter, lessons]
+  );
+  const filteredAssessments = useMemo(
+    () =>
+      assessments.filter(
+        (assessment) =>
+          (classFilter === "all" || assessment.classId === classFilter) && assessment.unitId
+      ),
+    [assessments, classFilter]
+  );
 
   return (
     <>
@@ -95,9 +129,9 @@ export function PlanningHub({
         }}
       >
         <div className="mt-3 flex flex-wrap gap-2">
-          <Badge variant="outline">{units.length} units</Badge>
-          <Badge variant="outline">{lessons.length} lessons</Badge>
-          <Badge variant="outline">{assessments.filter((assessment) => assessment.unitId).length} linked assessments</Badge>
+          <Badge variant="outline">{filteredUnits.length} units</Badge>
+          <Badge variant="outline">{filteredLessons.length} lessons</Badge>
+          <Badge variant="outline">{filteredAssessments.length} linked assessments</Badge>
         </div>
       </PageHeader>
 
@@ -110,7 +144,7 @@ export function PlanningHub({
           </TabsList>
 
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-            <Select value={classFilter} onValueChange={setClassFilter}>
+            <Select value={classFilter} onValueChange={setClassFilterOverride}>
               <SelectTrigger aria-label="Planning class filter" className="w-[220px]">
                 <SelectValue placeholder="All classes" />
               </SelectTrigger>
@@ -161,7 +195,12 @@ export function PlanningHub({
                       <p className="text-[12px] uppercase tracking-[0.12em] text-muted-foreground">
                         {card.className}
                       </p>
-                      <h3 className="mt-2 text-[18px] font-semibold">{card.title}</h3>
+                      <Link
+                        href={`/planning/units/${card.unitId}`}
+                        className="mt-2 inline-flex text-[18px] font-semibold hover:text-[#c24e3f]"
+                      >
+                        {card.title}
+                      </Link>
                     </div>
                     <Badge variant="secondary">{card.status}</Badge>
                   </div>
@@ -190,7 +229,11 @@ export function PlanningHub({
                   <div className="mt-4 flex flex-wrap gap-2">
                     <Badge variant="outline">{card.programme}</Badge>
                     <Badge variant="outline">
-                      {card.durationWeeks ? `${card.durationWeeks} weeks` : card.durationHours ? `${card.durationHours} hours` : "Duration pending"}
+                      {card.durationWeeks
+                        ? `${card.durationWeeks} weeks`
+                        : card.durationHours
+                          ? `${card.durationHours} hours`
+                          : "Duration pending"}
                     </Badge>
                     <Badge variant="outline">{card.inquiryQuestionCount} inquiry prompts</Badge>
                     <Badge variant="outline">{card.standardsCoverageSignal} coverage</Badge>
@@ -201,10 +244,10 @@ export function PlanningHub({
                       {card.startDate} to {card.endDate}
                     </p>
                     <Link
-                      href={`/classes/${card.classId}?tab=units`}
+                      href={`/planning/units/${card.unitId}`}
                       className="inline-flex items-center gap-2 text-[13px] font-medium text-[#c24e3f]"
                     >
-                      Open class planning
+                      Open workspace
                       <CalendarRange className="h-3.5 w-3.5" />
                     </Link>
                   </div>
@@ -221,17 +264,17 @@ export function PlanningHub({
             insights={insightSummaries}
             selectedInsightId={selectedInsightId}
             onSelectInsightId={setSelectedInsightId}
-            rows={filteredMapRows}
+            table={insightTable}
           />
         </TabsContent>
 
         <TabsContent value="maps" className="mt-0">
-          <Card className="p-5">
+          <div className="space-y-4">
             <div className="flex items-center justify-between gap-4">
               <div>
                 <p className="text-[16px] font-semibold">Curriculum maps</p>
                 <p className="mt-1 text-[13px] text-muted-foreground">
-                  Read-only curriculum map rows derived from linked units, standards, lessons, and assessments.
+                  Subject-view matrix for approaches to learning, learner profile, related concepts, and objectives across linked units.
                 </p>
               </div>
               <Button variant="outline" size="sm">
@@ -239,41 +282,8 @@ export function PlanningHub({
                 Download
               </Button>
             </div>
-
-            <div className="mt-4 overflow-x-auto rounded-xl border border-border/70">
-              <table className="w-full text-left text-[13px]">
-                <thead className="bg-muted/30">
-                  <tr>
-                    <th className="px-4 py-3 font-medium text-muted-foreground">Class</th>
-                    <th className="px-4 py-3 font-medium text-muted-foreground">Unit</th>
-                    <th className="px-4 py-3 font-medium text-muted-foreground">Duration</th>
-                    <th className="px-4 py-3 font-medium text-muted-foreground">Signals</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredMapRows.map((row) => (
-                    <tr key={row.unitId} className="border-t border-border/60">
-                      <td className="px-4 py-3">
-                        <p className="font-medium">{row.className}</p>
-                        <p className="text-[12px] text-muted-foreground">{row.programme}</p>
-                      </td>
-                      <td className="px-4 py-3 font-medium">{row.unitTitle}</td>
-                      <td className="px-4 py-3 text-muted-foreground">{row.durationLabel}</td>
-                      <td className="px-4 py-3">
-                        <div className="flex flex-wrap gap-2">
-                          {row.keySignals.map((signal) => (
-                            <Badge key={signal} variant="outline">
-                              {signal}
-                            </Badge>
-                          ))}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </Card>
+            <CurriculumMapTable rows={filteredMapRows} />
+          </div>
         </TabsContent>
       </Tabs>
 
@@ -282,6 +292,7 @@ export function PlanningHub({
         onOpenChange={setCreateOpen}
         classes={classes}
         units={units}
+        defaultClassId={classFilter === "all" ? activeClassId : classFilter}
         onCreate={onCreatePlan}
       />
     </>

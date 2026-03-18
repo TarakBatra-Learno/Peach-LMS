@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { Class } from "@/types/class";
 import type { UnitPlan } from "@/types/unit-planning";
 import { Button } from "@/components/ui/button";
@@ -37,6 +37,7 @@ interface PlanningCreateDialogProps {
   onOpenChange: (open: boolean) => void;
   classes: Class[];
   units: UnitPlan[];
+  defaultClassId?: string | null;
   onCreate: (input: PlanningCreateInput) => void;
 }
 
@@ -45,6 +46,7 @@ export function PlanningCreateDialog({
   onOpenChange,
   classes,
   units,
+  defaultClassId,
   onCreate,
 }: PlanningCreateDialogProps) {
   const [kind, setKind] = useState<PlanningCreateKind>("unit");
@@ -57,15 +59,22 @@ export function PlanningCreateDialog({
     [classId, units]
   );
 
-  const canCreate = classId.length > 0;
+  const canCreate =
+    classId.length > 0 && (kind === "unit" || (kind === "lesson" && unitId !== "none"));
+
+  useEffect(() => {
+    if (!open) return;
+    setKind("unit");
+    setClassId(defaultClassId ?? "");
+    setUnitId("none");
+    setTitle("");
+  }, [defaultClassId, open]);
 
   const handleClose = (nextOpen: boolean) => {
-    if (!nextOpen) {
-      setKind("unit");
-      setClassId("");
-      setUnitId("none");
-      setTitle("");
-    }
+    setKind("unit");
+    setClassId(defaultClassId ?? "");
+    setUnitId("none");
+    setTitle("");
     onOpenChange(nextOpen);
   };
 
@@ -174,7 +183,7 @@ export function PlanningCreateDialog({
                 </SelectContent>
               </Select>
               <p className="text-[12px] text-muted-foreground">
-                If you leave this empty, Peach creates a draft lesson sequence for the chosen class and places the lesson there.
+                Pick the unit this lesson belongs to. Teachers can still create class-wide lessons from the class workspace later.
               </p>
             </div>
           ) : null}

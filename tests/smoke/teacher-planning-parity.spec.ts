@@ -16,9 +16,12 @@ test("planning hub exposes yearly plans, insights, curriculum maps, and a class-
 }) => {
   await enterTeacher(page);
 
-  await page.getByRole("combobox").nth(1).click();
+  const classScope = page.locator("header").getByRole("combobox").nth(1);
+  await classScope.click();
   await page.getByRole("option", { name: /MYP 5 Sciences/i }).click();
-  await page.goto("/planning");
+  await expect(classScope).toContainText("MYP 5 Sciences");
+  await page.getByRole("link", { name: "Planning" }).click();
+  await expect(page).toHaveURL(/\/planning$/);
   await expect(page.getByRole("heading", { name: "Planning" })).toBeVisible();
   await expect(page.getByRole("tab", { name: "Yearly plans" })).toBeVisible();
   await expect(page.getByRole("tab", { name: "Planning insights" })).toBeVisible();
@@ -26,8 +29,8 @@ test("planning hub exposes yearly plans, insights, curriculum maps, and a class-
   await expect(page.getByText("MYP 5 Sciences").first()).toBeVisible();
   await expect(page.getByText("DP 1 English").first()).toHaveCount(0);
   await expect(page.getByText("2 units", { exact: true })).toBeVisible();
-  await expect(page.getByText("9 lessons", { exact: true })).toBeVisible();
-  await expect(page.getByText("3 linked assessments", { exact: true })).toBeVisible();
+  await expect(page.getByText("6 lessons", { exact: true })).toBeVisible();
+  await expect(page.getByText("8 linked assessments", { exact: true })).toBeVisible();
 
   await page.getByRole("button", { name: /Create/i }).click();
   await expect(page.getByRole("dialog", { name: /Create plan/i })).toBeVisible();
