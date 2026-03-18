@@ -9,6 +9,15 @@
  */
 
 import type { Assessment } from "@/types/assessment";
+import type {
+  AssessmentIntent,
+  AssessmentType,
+  ChatAssessmentConfig,
+  EssayAssessmentConfig,
+  OffPlatformAssessmentConfig,
+  QuizAssessmentConfig,
+} from "@/types/assessment";
+import type { AssessmentReport } from "@/types/assessment-report";
 import type { UnitPlan, LessonPlan, LessonSlotAssignment } from "@/types/unit-planning";
 import type { GradeRecord } from "@/types/gradebook";
 import type { Report } from "@/types/report";
@@ -29,6 +38,12 @@ export interface StudentAssessmentView {
   title: string;
   description: string;
   classId: string;
+  assessmentType?: AssessmentType;
+  assessmentIntent?: AssessmentIntent;
+  offPlatformConfig?: OffPlatformAssessmentConfig;
+  quizConfig?: QuizAssessmentConfig;
+  chatConfig?: ChatAssessmentConfig;
+  essayConfig?: EssayAssessmentConfig;
   gradingMode: string;
   dueDate: string;
   totalPoints?: number;
@@ -96,6 +111,12 @@ export function projectStudentAssessment(
     title: assessment.title,
     description: assessment.description,
     classId: assessment.classId,
+    assessmentType: assessment.assessmentType,
+    assessmentIntent: assessment.assessmentIntent,
+    offPlatformConfig: assessment.offPlatformConfig,
+    quizConfig: assessment.quizConfig,
+    chatConfig: assessment.chatConfig,
+    essayConfig: assessment.essayConfig,
     gradingMode: assessment.gradingMode,
     dueDate: assessment.dueDate,
     totalPoints: assessment.totalPoints,
@@ -208,6 +229,10 @@ export interface StudentAssessmentStateProjection {
  */
 export function canStudentViewGrade(assessment: Assessment, grade?: GradeRecord): boolean {
   return isGradeReleasedToLearner(grade);
+}
+
+export function canStudentViewAssessmentReport(report?: AssessmentReport): boolean {
+  return Boolean(report?.releasedAt);
 }
 
 /** Can student view this report? (requires distributed status) */

@@ -852,6 +852,8 @@ export default function ClassHubPage() {
             assessments={assessments}
             grades={grades}
             learningGoals={learningGoals}
+            unitPlans={unitPlans}
+            lessonPlans={unitLessonPlans}
           />
         </TabsContent>
 

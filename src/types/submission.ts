@@ -1,4 +1,5 @@
 import { ID } from "./common";
+import type { AssessmentType, OffPlatformSubmissionMode } from "./assessment";
 
 /**
  * Student-owned submission lifecycle status.
@@ -23,6 +24,51 @@ export interface SubmissionAttachment {
   sourceType?: "manual" | "drive_import" | "onedrive_import";
 }
 
+export interface OffPlatformSubmissionPayload {
+  mode: OffPlatformSubmissionMode;
+  responseText?: string;
+  evidenceSummary?: string;
+  observedByTeacher?: boolean;
+}
+
+export interface QuizSubmissionResponse {
+  questionId: ID;
+  response: string | string[];
+  isCorrect?: boolean;
+}
+
+export interface QuizSubmissionPayload {
+  questionCount: number;
+  responses: QuizSubmissionResponse[];
+  autoScore?: number;
+}
+
+export interface ChatTranscriptTurn {
+  id: ID;
+  role: "system" | "teacher" | "student" | "assistant";
+  content: string;
+  createdAt: string;
+}
+
+export interface ChatSubmissionPayload {
+  transcript: ChatTranscriptTurn[];
+  completionSummary?: string;
+}
+
+export interface EssaySubmissionPayload {
+  prompt?: string;
+  body: string;
+  wordCount?: number;
+  outline?: string[];
+}
+
+export interface SubmissionTypedPayload {
+  offPlatform?: OffPlatformSubmissionPayload;
+  quiz?: QuizSubmissionPayload;
+  chat?: ChatSubmissionPayload;
+  essay?: EssaySubmissionPayload;
+}
+
 /**
  * Submission — student-owned entity representing submitted work for an assessment.
  *
@@ -37,10 +83,12 @@ export interface Submission {
   assessmentId: ID;
   studentId: ID;
   classId: ID;
+  assessmentType?: AssessmentType;
   /** Student-owned lifecycle. See `SubmissionLifecycleStatus` for state descriptions. */
   status: SubmissionLifecycleStatus;
   content: string;
   attachments: SubmissionAttachment[];
+  typedPayload?: SubmissionTypedPayload;
   /** When the student last saved a draft */
   draftSavedAt?: string;
   /** When the student submitted */

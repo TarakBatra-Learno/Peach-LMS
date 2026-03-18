@@ -46,6 +46,8 @@ const emptyState: Omit<AppState, 'ui'> = {
   // Student Portal
   currentUser: null,
   submissions: [],
+  assessmentReports: [],
+  assessmentInsightSummaries: [],
   studentGoals: [],
   goalEvidenceLinks: [],
   studentNotifications: [],
@@ -434,6 +436,33 @@ export const useStore = create<AppStore>()(
       getSubmissionsByAssessment: (assessmentId) => get().submissions.filter((s) => s.assessmentId === assessmentId),
       getSubmissionsByStudent: (studentId) => get().submissions.filter((s) => s.studentId === studentId),
 
+      // Assessment Reports
+      addAssessmentReport: (report) => set((s) => ({ assessmentReports: [...s.assessmentReports, report] })),
+      updateAssessmentReport: (id, updates) => set((s) => ({
+        assessmentReports: s.assessmentReports.map((report) =>
+          report.id === id ? { ...report, ...updates } : report
+        ),
+      })),
+      getAssessmentReport: (assessmentId, studentId) =>
+        get().assessmentReports.find(
+          (report) => report.assessmentId === assessmentId && report.studentId === studentId
+        ),
+      getAssessmentReportsByAssessment: (assessmentId) =>
+        get().assessmentReports.filter((report) => report.assessmentId === assessmentId),
+      upsertAssessmentInsightSummary: (summary) => set((s) => {
+        const existing = s.assessmentInsightSummaries.find((item) => item.assessmentId === summary.assessmentId);
+        if (!existing) {
+          return { assessmentInsightSummaries: [...s.assessmentInsightSummaries, summary] };
+        }
+        return {
+          assessmentInsightSummaries: s.assessmentInsightSummaries.map((item) =>
+            item.assessmentId === summary.assessmentId ? { ...item, ...summary } : item
+          ),
+        };
+      }),
+      getAssessmentInsightSummary: (assessmentId) =>
+        get().assessmentInsightSummaries.find((summary) => summary.assessmentId === assessmentId),
+
       // Student Goals
       addStudentGoal: (goal) => set((s) => ({ studentGoals: [...s.studentGoals, goal] })),
       updateStudentGoal: (id, updates) => set((s) => ({
@@ -649,7 +678,10 @@ export const useStore = create<AppStore>()(
       },
 
       // Reset
-      resetAllData: (data) => set({ ...data }),
+      resetAllData: (data) => set((s) => ({
+        ...data,
+        currentUser: s.currentUser ?? data.currentUser,
+      })),
     }),
     {
       name: STORAGE_KEY,

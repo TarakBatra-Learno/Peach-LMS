@@ -1,4 +1,4 @@
-import { Class, TimetableSlot } from "@/types/class";
+import { Class } from "@/types/class";
 import { Student } from "@/types/student";
 import { Assessment, LearningGoal } from "@/types/assessment";
 import { GradeRecord } from "@/types/gradebook";
@@ -11,6 +11,7 @@ import { CalendarEvent } from "@/types/calendar";
 import { UnitPlan, LessonPlan, LessonSlotAssignment } from "@/types/unit-planning";
 import { CurrentUser } from "@/types/auth";
 import { Submission } from "@/types/submission";
+import { AssessmentReport, AssessmentInsightSummary } from "@/types/assessment-report";
 import { StudentGoal } from "@/types/student-goal";
 import { GoalEvidenceLink } from "@/types/goal-evidence";
 import { StudentNotification } from "@/types/notification";
@@ -66,6 +67,8 @@ export interface AppState {
   // Student Portal Data
   currentUser: CurrentUser | null;
   submissions: Submission[];
+  assessmentReports: AssessmentReport[];
+  assessmentInsightSummaries: AssessmentInsightSummary[];
   studentGoals: StudentGoal[];
   goalEvidenceLinks: GoalEvidenceLink[];
   studentNotifications: StudentNotification[];
@@ -195,6 +198,14 @@ export interface AppActions {
   updateSubmission: (id: string, updates: Partial<Submission>) => void;
   getSubmissionsByAssessment: (assessmentId: string) => Submission[];
   getSubmissionsByStudent: (studentId: string) => Submission[];
+
+  // Assessment Reports
+  addAssessmentReport: (report: AssessmentReport) => void;
+  updateAssessmentReport: (id: string, updates: Partial<AssessmentReport>) => void;
+  getAssessmentReport: (assessmentId: string, studentId: string) => AssessmentReport | undefined;
+  getAssessmentReportsByAssessment: (assessmentId: string) => AssessmentReport[];
+  upsertAssessmentInsightSummary: (summary: AssessmentInsightSummary) => void;
+  getAssessmentInsightSummary: (assessmentId: string) => AssessmentInsightSummary | undefined;
 
   // Student Goals
   addStudentGoal: (goal: StudentGoal) => void;

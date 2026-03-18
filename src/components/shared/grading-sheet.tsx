@@ -93,7 +93,7 @@ type GradingSheetProps = NewGradingSheetProps | LegacyGradingSheetProps;
 // Grading body — shared rendering logic
 // ---------------------------------------------------------------------------
 
-function GradingBody({
+export function GradingBody({
   assessment,
   state,
   isExcused,

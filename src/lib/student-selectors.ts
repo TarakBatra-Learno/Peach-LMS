@@ -12,6 +12,7 @@ import type { AppState } from "@/stores/types";
 import type { Class } from "@/types/class";
 import type { Submission } from "@/types/submission";
 import type { Assessment } from "@/types/assessment";
+import type { AssessmentReport } from "@/types/assessment-report";
 import type { GradeRecord } from "@/types/gradebook";
 import type { Report } from "@/types/report";
 import type { PortfolioArtifact } from "@/types/portfolio";
@@ -26,6 +27,7 @@ import {
   projectStudentThreadReply,
   projectStudentGradeRecord,
   canStudentViewGrade,
+  canStudentViewAssessmentReport,
   canStudentViewReport,
   isAnnouncementVisibleToStudent,
   isAssessmentOpenForSubmission,
@@ -116,6 +118,17 @@ export function getStudentReleasedGrades(
     if (!assessment) return false;
     return canStudentViewGrade(assessment, g);
   }).map(projectStudentGradeRecord);
+}
+
+export function getStudentReleasedAssessmentReport(
+  state: AppState,
+  studentId: string,
+  assessmentId: string
+): AssessmentReport | undefined {
+  const report = state.assessmentReports.find(
+    (entry) => entry.studentId === studentId && entry.assessmentId === assessmentId
+  );
+  return canStudentViewAssessmentReport(report) ? report : undefined;
 }
 
 // ─── Student Submission Status ──────────────────────────────────────────────

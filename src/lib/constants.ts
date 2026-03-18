@@ -2,6 +2,7 @@ import {
   LayoutDashboard,
   Users,
   ClipboardCheck,
+  BookOpen,
   FolderOpen,
   FileText,
   MessageSquare,
@@ -11,6 +12,7 @@ import {
 
 export const NAV_ITEMS = [
   { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
+  { label: "Planning", href: "/planning", icon: BookOpen },
   { label: "Classes", href: "/classes", icon: Users },
   { label: "Assessments", href: "/assessments", icon: ClipboardCheck },
   { label: "Portfolio", href: "/portfolio", icon: FolderOpen },

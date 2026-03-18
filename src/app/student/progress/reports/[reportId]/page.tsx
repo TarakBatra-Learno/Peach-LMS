@@ -10,8 +10,8 @@ import { DetailSkeleton } from "@/components/shared/skeleton-loader";
 import { useMockLoading } from "@/lib/hooks/use-mock-loading";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
 import { getStudentReports } from "@/lib/student-selectors";
+import { buildReportPrefillContext } from "@/lib/report-prefill";
 import { AddToGoalDialog } from "@/components/student/add-to-goal-dialog";
 import { Button } from "@/components/ui/button";
 import {
@@ -33,6 +33,11 @@ export default function StudentReportDetailPage() {
   const loading = useMockLoading([reportId]);
   const state = useStore((s) => s);
   const updateReport = useStore((s) => s.updateReport);
+  const assessments = useStore((s) => s.assessments);
+  const grades = useStore((s) => s.grades);
+  const learningGoals = useStore((s) => s.learningGoals);
+  const unitPlans = useStore((s) => s.unitPlans);
+  const assessmentReports = useStore((s) => s.assessmentReports);
 
   const reports = useMemo(
     () => (studentId ? getStudentReports(state, studentId) : []),
@@ -44,6 +49,22 @@ export default function StudentReportDetailPage() {
   const report = reports.find((r) => r.id === reportId);
   const cls = report ? state.classes.find((c) => c.id === report.classId) : null;
   const cycle = report ? state.reportCycles.find((c) => c.id === report.cycleId) : null;
+  const reportPrefillContext = useMemo(
+    () =>
+      report
+        ? buildReportPrefillContext({
+            report,
+            assessments,
+            grades,
+            learningGoals,
+            unitPlans,
+            assessmentReports,
+            releasedOnlyAssessmentSources: true,
+            releasedOnlySuggestions: true,
+          })
+        : null,
+    [report, assessments, grades, learningGoals, unitPlans, assessmentReports],
+  );
 
   // Record viewedByStudentAt on first view
   useEffect(() => {
@@ -97,6 +118,63 @@ export default function StudentReportDetailPage() {
       </PageHeader>
 
       <div className="space-y-4">
+        {reportPrefillContext ? (
+          <div className="grid gap-4 lg:grid-cols-2">
+            <Card className="p-4 gap-0">
+              <h3 className="text-[14px] font-semibold">Assessment signals feeding this report</h3>
+              <p className="mt-1 text-[12px] text-muted-foreground">
+                Released assessments and standards evidence that shaped the academic summary for this report.
+              </p>
+              <div className="mt-4 space-y-3">
+                {reportPrefillContext.assessmentSources.length === 0 ? (
+                  <p className="text-[13px] text-muted-foreground">
+                    Your released assessment signals will appear here once teachers publish them into the report.
+                  </p>
+                ) : (
+                  reportPrefillContext.assessmentSources.slice(0, 3).map((source) => (
+                    <Link
+                      key={source.assessmentId}
+                      href={`/student/classes/${report.classId}/assessments/${source.assessmentId}`}
+                      className="block rounded-xl border border-border/60 p-3 hover:bg-muted/30"
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="text-[13px] font-medium">{source.assessmentTitle}</p>
+                        <Badge variant="outline" className="text-[10px]">
+                          {source.gradeLabel}
+                        </Badge>
+                      </div>
+                      <p className="mt-1 text-[11px] text-muted-foreground">
+                        {source.typeLabel} · {source.intentLabel}
+                      </p>
+                    </Link>
+                  ))
+                )}
+              </div>
+            </Card>
+
+            <Card className="p-4 gap-0">
+              <h3 className="text-[14px] font-semibold">Suggested from released assessment feedback</h3>
+              <p className="mt-1 text-[12px] text-muted-foreground">
+                These highlights come from assessment reports that have already been released to you.
+              </p>
+              <div className="mt-4 space-y-3">
+                {reportPrefillContext.aiSuggestionSources.length === 0 ? (
+                  <p className="text-[13px] text-muted-foreground">
+                    No released assessment feedback has been linked into this report yet.
+                  </p>
+                ) : (
+                  reportPrefillContext.aiSuggestionSources.slice(0, 3).map((source) => (
+                    <div key={source.reportId} className="rounded-xl border border-border/60 p-3">
+                      <p className="text-[13px] font-medium">{source.assessmentTitle}</p>
+                      <p className="mt-2 text-[12px] text-muted-foreground line-clamp-2">{source.summary}</p>
+                    </div>
+                  ))
+                )}
+              </div>
+            </Card>
+          </div>
+        ) : null}
+
         {report.sections
           .sort((a, b) => a.order - b.order)
           .map((section) => (
@@ -105,7 +183,7 @@ export default function StudentReportDetailPage() {
                 <SectionIcon type={section.type} />
                 {section.label}
               </h3>
-              <ReportSectionContent section={section} />
+              <ReportSectionContent section={section} reportPrefillContext={reportPrefillContext} />
             </Card>
           ))}
       </div>
@@ -160,7 +238,13 @@ function SectionIcon({ type }: { type: string }) {
   }
 }
 
-function ReportSectionContent({ section }: { section: import("@/types/report").ReportSection }) {
+function ReportSectionContent({
+  section,
+  reportPrefillContext,
+}: {
+  section: import("@/types/report").ReportSection;
+  reportPrefillContext: ReturnType<typeof buildReportPrefillContext> | null;
+}) {
   const content = section.content;
 
   // Render based on section type
@@ -187,7 +271,7 @@ function ReportSectionContent({ section }: { section: import("@/types/report").R
     );
   }
 
-  if (section.type === "grades" || section.type === "standards_skills") {
+  if (section.type === "grades") {
     const items = (content as Record<string, unknown>).items as Array<Record<string, unknown>> | undefined;
     if (!items?.length) {
       return <p className="text-[13px] text-muted-foreground">No grade data available.</p>;
@@ -202,6 +286,45 @@ function ReportSectionContent({ section }: { section: import("@/types/report").R
             </Badge>
           </div>
         ))}
+      </div>
+    );
+  }
+
+  if (section.type === "standards_skills") {
+    const skillsFromContent = (content as Record<string, unknown>).skills as Array<Record<string, unknown>> | undefined;
+    const derivedSkills = reportPrefillContext
+      ? Array.from(
+          new Map(
+            reportPrefillContext.assessmentSources
+              .flatMap((source) => source.standards)
+              .map((skill) => [skill.goalId, skill])
+          ).values()
+        )
+      : [];
+    const skills = skillsFromContent?.length ? skillsFromContent : derivedSkills;
+    if (!skills?.length) {
+      return <p className="text-[13px] text-muted-foreground">No standards or skills data available.</p>;
+    }
+
+    return (
+      <div className="space-y-2">
+        {skills.map((skill, i) => {
+          const skillRecord = skill as Record<string, unknown>;
+          return (
+          <div key={i} className="flex items-center justify-between gap-3 py-1">
+            <div>
+              <p className="text-[13px] font-medium">
+                {String(skillRecord.title ?? skillRecord.label ?? "Learning target")}
+              </p>
+              <p className="text-[11px] text-muted-foreground">
+                {[skillRecord.code, skillRecord.category].filter(Boolean).join(" · ")}
+              </p>
+            </div>
+            <Badge variant="secondary" className="text-[12px]">
+              {String(skillRecord.level ?? "Not assessed")}
+            </Badge>
+          </div>
+        )})}
       </div>
     );
   }

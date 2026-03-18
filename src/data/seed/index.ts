@@ -269,8 +269,48 @@ export function generateSeedData() {
     { id: "ces_form", title: "Structure & Formatting", itemIds: ["cle_6", "cle_7", "cle_8"] },
   ];
 
+  const typedInvestigationRubric: RubricCriterion[] = [
+    {
+      id: "typed_rubric_01",
+      title: "Investigation design",
+      weight: 1,
+      levels: [
+        { id: "typed_rubric_01_l1", label: "Emerging", points: 2, description: "Method is incomplete and variables are loosely controlled." },
+        { id: "typed_rubric_01_l2", label: "Developing", points: 4, description: "Method is mostly clear and links to the question with some guidance." },
+        { id: "typed_rubric_01_l3", label: "Secure", points: 6, description: "Method is clear, valid, and suitable for the investigation question." },
+      ],
+    },
+    {
+      id: "typed_rubric_02",
+      title: "Analysis and interpretation",
+      weight: 1,
+      levels: [
+        { id: "typed_rubric_02_l1", label: "Emerging", points: 2, description: "Analysis is mostly descriptive and misses patterns in the evidence." },
+        { id: "typed_rubric_02_l2", label: "Developing", points: 4, description: "Analysis identifies relevant patterns but needs stronger interpretation." },
+        { id: "typed_rubric_02_l3", label: "Strong", points: 6, description: "Analysis interprets evidence clearly and connects it to the claim." },
+      ],
+    },
+    {
+      id: "typed_rubric_03",
+      title: "Scientific communication",
+      weight: 1,
+      levels: [
+        { id: "typed_rubric_03_l1", label: "Emerging", points: 2, description: "Scientific language is inconsistent and structure is hard to follow." },
+        { id: "typed_rubric_03_l2", label: "Developing", points: 4, description: "Communication is mostly clear with some appropriate scientific language." },
+        { id: "typed_rubric_03_l3", label: "Strong", points: 6, description: "Communication is precise, well-structured, and uses scientific language effectively." },
+      ],
+    },
+  ];
+
+  const typedObservationChecklist: ChecklistItem[] = [
+    { id: "typed_chk_01", label: "Explains method clearly", required: true },
+    { id: "typed_chk_02", label: "Responds to follow-up questions with evidence", required: true },
+    { id: "typed_chk_03", label: "Uses scientific vocabulary accurately", required: true },
+    { id: "typed_chk_04", label: "Identifies one limitation of the investigation", required: false },
+  ];
+
   // -----------------------------------------------------------------------
-  // Assessments (34)
+  // Assessments
   // -----------------------------------------------------------------------
   const assessmentConfigs: {
     title: string; desc: string; classId: string; mode: Assessment["gradingMode"];
@@ -324,7 +364,7 @@ export function generateSeedData() {
   ];
 
   let publishedAsmtCount = 0;
-  const assessments: Assessment[] = assessmentConfigs.map((cfg, idx) => {
+  const baseAssessments: Assessment[] = assessmentConfigs.map((cfg, idx) => {
     const i = idx + 1;
     const dueDate = iso(subDays(TODAY, cfg.dueDaysAgo));
     const isPublished = cfg.status === "live" || cfg.status === "published";
@@ -334,6 +374,12 @@ export function generateSeedData() {
       title: cfg.title,
       description: cfg.desc,
       classId: cfg.classId,
+      assessmentType: "off_platform",
+      offPlatformConfig: {
+        submissionMode: "digital_submission",
+        allowTextResponse: true,
+        allowAttachments: true,
+      },
       gradingMode: cfg.mode,
       status: cfg.status,
       dueDate,
@@ -351,6 +397,178 @@ export function generateSeedData() {
       mypCriteria: cfg.mypCriteria,
     };
   });
+
+  const typedAssessments: Assessment[] = [
+    {
+      id: "asmt_typed_offplatform",
+      title: "Field Investigation Report",
+      description: "Submit a structured field investigation report from the wetland biodiversity survey.",
+      classId: CLS_MYP_SCI,
+      assessmentType: "off_platform",
+      assessmentIntent: "summative",
+      offPlatformConfig: {
+        submissionMode: "digital_submission",
+        allowTextResponse: true,
+        allowAttachments: true,
+        evidencePrompt: "Upload your final field report and any annotated observation records.",
+      },
+      gradingMode: "rubric",
+      status: "closed",
+      dueDate: iso(addDays(TODAY, -6)),
+      createdAt: isoTime(addDays(TODAY, -14)),
+      rubric: typedInvestigationRubric,
+      learningGoalIds: [lgId(1), lgId(2), lgId(10)],
+      standardIds: [lgId(1), lgId(2)],
+      distributedAt: isoTime(addDays(TODAY, -11)),
+      unitId: "unit_01",
+      linkedLessonId: "lp_03",
+      studentInstructions:
+        "Use your field notes, biodiversity counts, and final reflection to produce a scientific report that explains the ecosystem pattern you investigated.",
+      studentResources: [
+        { label: "Wetland field guide", url: "https://mock.example.com/wetland-field-guide" },
+        { label: "Report structure template", url: "https://mock.example.com/field-report-template" },
+      ],
+    },
+    {
+      id: "asmt_typed_offline",
+      title: "Practical Observation Conference",
+      description: "Teacher-observed conference on fieldwork decisions and practical reasoning.",
+      classId: CLS_MYP_SCI,
+      assessmentType: "off_platform",
+      assessmentIntent: "formative",
+      offPlatformConfig: {
+        submissionMode: "offline_mode",
+        allowTextResponse: false,
+        allowAttachments: false,
+        evidencePrompt: "Observation is captured during the practical conference.",
+      },
+      gradingMode: "checklist",
+      status: "closed",
+      dueDate: iso(addDays(TODAY, -3)),
+      createdAt: isoTime(addDays(TODAY, -9)),
+      checklist: typedObservationChecklist,
+      checklistResponseStyle: "binary",
+      checklistOutcomeModel: "feedback_only",
+      learningGoalIds: [lgId(1), lgId(6), lgId(10)],
+      standardIds: [lgId(1)],
+      distributedAt: isoTime(addDays(TODAY, -7)),
+      unitId: "unit_01",
+      linkedLessonId: "lp_04",
+      studentInstructions:
+        "Come prepared to explain your method, justify your observations, and respond to one follow-up question during the practical conference.",
+    },
+    {
+      id: "asmt_typed_quiz",
+      title: "Systems Check Quiz",
+      description: "Short formative check on ecosystem systems, trophic levels, and matter cycling.",
+      classId: CLS_MYP_SCI,
+      assessmentType: "quiz",
+      assessmentIntent: "formative",
+      quizConfig: {
+        durationMinutes: 20,
+        passingScore: 12,
+        showCorrectAnswersOnRelease: true,
+        questions: [
+          {
+            id: "quiz_q_01",
+            prompt: "Which sequence best represents a simple food chain?",
+            type: "multiple_choice",
+            options: ["Producer -> herbivore -> carnivore", "Carnivore -> herbivore -> producer", "Decomposer -> producer -> carnivore"],
+            answerKey: ["Producer -> herbivore -> carnivore"],
+            maxPoints: 4,
+          },
+          {
+            id: "quiz_q_02",
+            prompt: "Select the two ideas that cycle through an ecosystem.",
+            type: "multi_select",
+            options: ["Energy", "Matter", "Latitude", "Rainfall"],
+            answerKey: ["Energy", "Matter"],
+            maxPoints: 4,
+          },
+          {
+            id: "quiz_q_03",
+            prompt: "Explain why decomposers are important in an ecosystem.",
+            type: "short_answer",
+            answerKey: ["They recycle nutrients and break down dead material."],
+            maxPoints: 6,
+          },
+        ],
+      },
+      gradingMode: "score",
+      status: "live",
+      dueDate: iso(addDays(TODAY, 3)),
+      createdAt: isoTime(addDays(TODAY, -1)),
+      totalPoints: 14,
+      learningGoalIds: [lgId(1), lgId(2)],
+      standardIds: [lgId(1), lgId(2)],
+      distributedAt: isoTime(TODAY),
+      unitId: "unit_01",
+      linkedLessonId: "lp_02",
+      studentInstructions:
+        "Complete the short systems check independently. Use it to identify any gaps before the summative field report is released.",
+    },
+    {
+      id: "asmt_typed_chat",
+      title: "Ecosystem Reasoning Chat",
+      description: "A structured conversation that probes ecological reasoning and causal explanations.",
+      classId: CLS_MYP_SCI,
+      assessmentType: "chat",
+      assessmentIntent: "formative",
+      chatConfig: {
+        starterPrompt: "Explain how an ecosystem responds when one species becomes invasive.",
+        minimumTurns: 4,
+        successCriteria: [
+          "Uses evidence from the wetland case study",
+          "Explains at least one causal chain",
+          "Connects the explanation to system balance",
+        ],
+      },
+      gradingMode: "standards",
+      status: "live",
+      dueDate: iso(addDays(TODAY, 4)),
+      createdAt: isoTime(addDays(TODAY, -1)),
+      learningGoalIds: [lgId(2), lgId(10), lgId(14)],
+      standardIds: [lgId(2), lgId(10)],
+      distributedAt: isoTime(TODAY),
+      unitId: "unit_01",
+      linkedLessonId: "lp_04",
+      studentInstructions:
+        "Respond in complete ideas and build on the prompt as the conversation unfolds. You may revisit the case-study notes while you answer.",
+    },
+    {
+      id: "asmt_typed_essay",
+      title: "Scientific Argument Essay",
+      description: "Write a scientific argument about how human activity shifts ecosystem balance.",
+      classId: CLS_MYP_SCI,
+      assessmentType: "essay",
+      assessmentIntent: "summative",
+      essayConfig: {
+        prompt: "Argue which human activity has the greatest impact on ecosystem balance, using evidence from the class case studies.",
+        minimumWords: 500,
+        recommendedWords: 700,
+        maximumWords: 900,
+        scaffoldPrompts: [
+          "State a clear claim about ecosystem balance.",
+          "Use evidence from at least two case studies.",
+          "Address one counter-argument before concluding.",
+        ],
+      },
+      gradingMode: "rubric",
+      status: "live",
+      dueDate: iso(addDays(TODAY, 6)),
+      createdAt: isoTime(TODAY),
+      rubric: typedInvestigationRubric,
+      learningGoalIds: [lgId(2), lgId(4), lgId(10)],
+      standardIds: [lgId(2), lgId(10)],
+      distributedAt: isoTime(TODAY),
+      unitId: "unit_02",
+      linkedLessonId: "lp_06",
+      studentInstructions:
+        "Draft a structured scientific argument using the planning scaffold, evidence from case studies, and one clear counter-argument.",
+    },
+  ];
+
+  const assessments: Assessment[] = [...baseAssessments, ...typedAssessments];
 
   // -----------------------------------------------------------------------
   // Student-to-class mapping helpers
@@ -385,6 +603,7 @@ export function generateSeedData() {
   ];
 
   assessments.forEach((asmt, aIdx) => {
+    if (asmt.id.startsWith("asmt_typed_")) return;
     if (asmt.status === "draft") return; // no grades for draft assessments
     const sIds = studentsForClass(asmt.classId);
     sIds.forEach((sid, sIdx) => {
@@ -1450,6 +1669,8 @@ export function generateSeedData() {
       ),
       ...studentAssessmentDemoState.submissions,
     ],
+    assessmentReports: studentAssessmentDemoState.assessmentReports,
+    assessmentInsightSummaries: studentAssessmentDemoState.assessmentInsightSummaries,
     studentGoals: generateSeedStudentGoals(),
     goalEvidenceLinks: generateSeedGoalEvidenceLinks(),
     studentNotifications: generateSeedNotifications(assessments),

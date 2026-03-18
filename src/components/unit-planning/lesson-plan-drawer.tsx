@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState } from "react";
 import {
   Sheet,
   SheetContent,
@@ -40,6 +40,7 @@ import type {
   LessonActivity,
   LessonSlotAssignment,
 } from "@/types/unit-planning";
+import { getDemoNow } from "@/lib/demo-time";
 
 interface LessonPlanDrawerProps {
   open: boolean;
@@ -67,31 +68,39 @@ export function LessonPlanDrawer({
   learningGoals,
   assignment,
 }: LessonPlanDrawerProps) {
+  const titleFieldId = "lesson-plan-title";
+  const objectiveFieldId = "lesson-plan-objective";
+  const teachingNotesFieldId = "lesson-plan-notes";
+  const reflectionFieldId = "lesson-plan-reflection";
   const updateLessonPlan = useStore((s) => s.updateLessonPlan);
   const unassignLessonFromSlot = useStore((s) => s.unassignLessonFromSlot);
 
-  const [title, setTitle] = useState("");
-  const [objectives, setObjectives] = useState<string[]>([]);
+  const [title, setTitle] = useState(() => lessonPlan?.title ?? "");
+  const [objectives, setObjectives] = useState<string[]>(() => [
+    ...(lessonPlan?.objectives || []),
+  ]);
   const [newObjective, setNewObjective] = useState("");
-  const [activities, setActivities] = useState<LessonActivity[]>([]);
-  const [teachingNotes, setTeachingNotes] = useState("");
-  const [linkedStandardIds, setLinkedStandardIds] = useState<string[]>([]);
-  const [reflection, setReflection] = useState("");
-
-  useEffect(() => {
-    if (open && lessonPlan) {
-      setTitle(lessonPlan.title);
-      setObjectives([...(lessonPlan.objectives || [])]);
-      setActivities([...lessonPlan.activities]);
-      setTeachingNotes(lessonPlan.teachingNotes || "");
-      setLinkedStandardIds([...lessonPlan.linkedStandardIds]);
-      setReflection(lessonPlan.teacherReflection || "");
-    }
-  }, [open, lessonPlan]);
+  const [activities, setActivities] = useState<LessonActivity[]>(() => [
+    ...(lessonPlan?.activities ?? []),
+  ]);
+  const [teachingNotes, setTeachingNotes] = useState(
+    () => lessonPlan?.teachingNotes || ""
+  );
+  const [linkedStandardIds, setLinkedStandardIds] = useState<string[]>(() => [
+    ...(lessonPlan?.linkedStandardIds ?? []),
+  ]);
+  const [reflection, setReflection] = useState(
+    () => lessonPlan?.teacherReflection || ""
+  );
+  const [lastSavedAt, setLastSavedAt] = useState<string | null>(() => lessonPlan?.updatedAt ?? null);
 
   if (!lessonPlan) return null;
 
+  const canMarkReady =
+    title.trim().length > 0 && (objectives.length > 0 || activities.length > 0);
+
   const handleSave = () => {
+    const savedAt = getDemoNow().toISOString();
     updateLessonPlan(lessonPlan.id, {
       title,
       objectives,
@@ -99,8 +108,9 @@ export function LessonPlanDrawer({
       teachingNotes: teachingNotes || undefined,
       linkedStandardIds,
       teacherReflection: reflection || undefined,
-      updatedAt: new Date().toISOString(),
+      updatedAt: savedAt,
     });
+    setLastSavedAt(savedAt);
     toast.success("Lesson plan updated");
   };
 
@@ -111,7 +121,7 @@ export function LessonPlanDrawer({
     } else {
       updateLessonPlan(lessonPlan.id, {
         status: newStatus,
-        updatedAt: new Date().toISOString(),
+        updatedAt: getDemoNow().toISOString(),
       });
       const labels: Record<string, string> = {
         ready: "Marked as Ready",
@@ -193,8 +203,11 @@ export function LessonPlanDrawer({
           <div className="space-y-5 pb-6">
             {/* Title */}
             <div className="space-y-1.5">
-              <Label className="text-[13px]">Title</Label>
+              <Label htmlFor={titleFieldId} className="text-[13px]">
+                Title
+              </Label>
               <Input
+                id={titleFieldId}
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 className="text-[13px]"
@@ -208,6 +221,7 @@ export function LessonPlanDrawer({
                   size="sm"
                   variant="outline"
                   onClick={() => handleStatusChange("ready")}
+                  disabled={!canMarkReady}
                 >
                   Mark as Ready
                 </Button>
@@ -242,6 +256,21 @@ export function LessonPlanDrawer({
                   </Button>
                 )}
             </div>
+            {lessonPlan.status === "draft" && !canMarkReady ? (
+              <p className="text-[12px] text-muted-foreground">
+                Add at least one objective or activity before marking this lesson ready.
+              </p>
+            ) : null}
+            {lastSavedAt ? (
+              <p className="text-[12px] text-muted-foreground">
+                Saved {new Date(lastSavedAt).toLocaleString(undefined, {
+                  month: "short",
+                  day: "numeric",
+                  hour: "numeric",
+                  minute: "2-digit",
+                })}
+              </p>
+            ) : null}
 
             {/* Assignment info */}
             {assignment && (
@@ -260,8 +289,8 @@ export function LessonPlanDrawer({
               lessonPlan.status !== "assigned" &&
               lessonPlan.status !== "taught" && (
                 <p className="text-[12px] text-muted-foreground italic">
-                  Assign this lesson to a timetable slot from the Timetable
-                  sub-tab.
+                  This lesson is not scheduled yet. Keep refining it here, then place it into a
+                  teaching slot once it is ready.
                 </p>
               )}
 
@@ -269,7 +298,9 @@ export function LessonPlanDrawer({
 
             {/* Objectives */}
             <div className="space-y-2">
-              <Label className="text-[13px]">Objectives</Label>
+              <Label htmlFor={objectiveFieldId} className="text-[13px]">
+                Objectives
+              </Label>
               <div className="space-y-1.5">
                 {objectives.map((obj, i) => (
                   <div
@@ -292,6 +323,7 @@ export function LessonPlanDrawer({
               </div>
               <div className="flex gap-2">
                 <Input
+                  id={objectiveFieldId}
                   placeholder="Add an objective..."
                   value={newObjective}
                   onChange={(e) => setNewObjective(e.target.value)}
@@ -436,8 +468,11 @@ export function LessonPlanDrawer({
 
             {/* Teaching Notes */}
             <div className="space-y-1.5">
-              <Label className="text-[13px]">Teaching Notes</Label>
+              <Label htmlFor={teachingNotesFieldId} className="text-[13px]">
+                Teaching Notes
+              </Label>
               <Textarea
+                id={teachingNotesFieldId}
                 value={teachingNotes}
                 onChange={(e) => setTeachingNotes(e.target.value)}
                 placeholder="Private notes for this lesson..."
@@ -470,8 +505,11 @@ export function LessonPlanDrawer({
               <>
                 <Separator />
                 <div className="space-y-1.5">
-                  <Label className="text-[13px]">Teacher Reflection</Label>
+                  <Label htmlFor={reflectionFieldId} className="text-[13px]">
+                    Teacher Reflection
+                  </Label>
                   <Textarea
+                    id={reflectionFieldId}
                     value={reflection}
                     onChange={(e) => setReflection(e.target.value)}
                     placeholder="How did the lesson go? What would you change?"
@@ -485,7 +523,7 @@ export function LessonPlanDrawer({
 
         <SheetFooter className="px-6 py-4 border-t">
           <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Close
+            Done
           </Button>
           <Button onClick={handleSave}>Save Changes</Button>
         </SheetFooter>

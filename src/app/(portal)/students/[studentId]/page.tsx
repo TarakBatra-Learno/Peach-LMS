@@ -76,6 +76,7 @@ import {
   getAdminStudentAssessmentHref,
   getAdminStudentReportHref,
 } from "@/lib/admin-embed-routes";
+import { buildTeacherStudentMasterySummary } from "@/lib/mastery-selectors";
 
 export default function StudentProfilePage() {
   const params = useParams();
@@ -83,6 +84,7 @@ export default function StudentProfilePage() {
   const router = useRouter();
   const studentId = params.studentId as string;
   const urlClassId = searchParams.get("classId");
+  const urlUnitId = searchParams.get("unitId");
   const loading = useMockLoading([studentId]);
   const embedded = searchParams.get("embed") === "1";
   const adminPreview = searchParams.get("admin") === "1";
@@ -95,6 +97,7 @@ export default function StudentProfilePage() {
   const allArtifacts = useStore((s) => s.artifacts);
   const allSessions = useStore((s) => s.attendanceSessions);
   const allReports = useStore((s) => s.reports);
+  const assessmentReports = useStore((s) => s.assessmentReports);
   const reportCycles = useStore((s) => s.reportCycles);
   const allIncidents = useStore((s) => s.incidents);
   const allSupportPlans = useStore((s) => s.supportPlans);
@@ -140,7 +143,7 @@ export default function StudentProfilePage() {
   const [detailArtifact, setDetailArtifact] = useState<PortfolioArtifact | null>(null);
   const [detailGrade, setDetailGrade] = useState<GradeRecord | null>(null);
   const [classFilter, setClassFilter] = useState<string | null>(urlClassId);
-  const [unitFilter, setUnitFilter] = useState<string | null>(null);
+  const [unitFilter, setUnitFilter] = useState<string | null>(urlUnitId);
   const [teacherComment, setTeacherComment] = useState("");
   const [studentReflectionText, setStudentReflectionText] = useState("");
 
@@ -171,6 +174,31 @@ export default function StudentProfilePage() {
       setDetailArtifact({ ...detailArtifact, ...updates });
     }
   });
+  const validClassFilter =
+    student && classFilter && student.classIds.includes(classFilter) ? classFilter : null;
+  const masterySummary = useMemo(
+    () =>
+      buildTeacherStudentMasterySummary({
+        studentId,
+        classId: validClassFilter,
+        grades: allGrades,
+        assessments,
+        assessmentReports,
+        reports: allReports,
+        learningGoals,
+        classes,
+      }),
+    [
+      studentId,
+      validClassFilter,
+      allGrades,
+      assessments,
+      assessmentReports,
+      allReports,
+      learningGoals,
+      classes,
+    ],
+  );
 
   if (loading) return <DetailSkeleton />;
   if (!student)
@@ -185,9 +213,6 @@ export default function StudentProfilePage() {
   const studentClasses = classes.filter((c) =>
     student.classIds.includes(c.id)
   );
-
-  // Validate classFilter against the student's actual classes
-  const validClassFilter = classFilter && student.classIds.includes(classFilter) ? classFilter : null;
 
   const handleClassFilterChange = (value: string) => {
     const newClassId = value === "all" ? null : value;
@@ -207,12 +232,21 @@ export default function StudentProfilePage() {
   const handleUnitFilterChange = (value: string) => {
     const newUnitId = value === "all" ? null : value;
     setUnitFilter(newUnitId);
+    const newParams = new URLSearchParams(searchParams.toString());
+    if (newUnitId) {
+      newParams.set("unitId", newUnitId);
+    } else {
+      newParams.delete("unitId");
+    }
+    const qs = newParams.toString();
+    router.replace(`/students/${studentId}${qs ? `?${qs}` : ""}`, { scroll: false });
   };
 
   // Units available for the selected class
   const classUnits = validClassFilter
     ? unitPlans.filter((u) => u.classId === validClassFilter)
     : [];
+  const activeUnit = unitFilter ? classUnits.find((unit) => unit.id === unitFilter) ?? null : null;
 
   const getClassHref = (classId: string, tab?: string | null) => {
     if (embedded) {
@@ -423,6 +457,28 @@ export default function StudentProfilePage() {
         </div>
       </PageHeader>
 
+      {activeUnit ? (
+        <Card className="mb-4 border-[#d8e6ff] bg-[#f7faff] p-4 shadow-1">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-[12px] font-medium uppercase tracking-[0.12em] text-[#3b5998]">
+                Unit-scoped view
+              </p>
+              <p className="mt-1 text-[13px] leading-6 text-muted-foreground">
+                Showing performance, evidence, and reports linked to{" "}
+                <span className="font-medium text-foreground">{activeUnit.title}</span>
+                {validClassFilter
+                  ? ` in ${studentClasses.find((cls) => cls.id === validClassFilter)?.name ?? "this class"}`
+                  : ""}.
+              </p>
+            </div>
+            <Button variant="outline" size="sm" onClick={() => handleUnitFilterChange("all")}>
+              Clear unit filter
+            </Button>
+          </div>
+        </Card>
+      ) : null}
+
       {(studentClasses.length > 1 || classUnits.length > 0) && (
         <div className="flex items-center gap-2 mb-4">
           <span className="text-[13px] text-muted-foreground">Viewing:</span>
@@ -486,6 +542,90 @@ export default function StudentProfilePage() {
               value={openIncidents}
               icon={Shield}
             />
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-3 mb-6">
+            <Card className="p-5 gap-0">
+              <h3 className="text-[16px] font-semibold mb-3">Mastery overview</h3>
+              {masterySummary.categorySummaries.length === 0 ? (
+                <p className="text-[13px] text-muted-foreground">
+                  Mastery signals will appear once this student has graded standards and skills evidence.
+                </p>
+              ) : (
+                <div className="space-y-3">
+                  {masterySummary.categorySummaries.map((summary) => (
+                    <div key={summary.category} className="flex items-center justify-between gap-3">
+                      <div>
+                        <p className="text-[13px] font-medium">{summary.label}</p>
+                        <p className="text-[11px] text-muted-foreground">
+                          {summary.trackedGoals} tracked goal{summary.trackedGoals !== 1 ? "s" : ""}
+                        </p>
+                      </div>
+                      <Badge variant="outline" className="text-[11px] capitalize">
+                        {summary.strongestLevel
+                          ? summary.strongestLevel.replace(/_/g, " ")
+                          : "Not assessed"}
+                      </Badge>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </Card>
+
+            <Card className="p-5 gap-0">
+              <h3 className="text-[16px] font-semibold mb-3">Latest AI assessment highlights</h3>
+              {masterySummary.latestAssessmentHighlights.length === 0 ? (
+                <p className="text-[13px] text-muted-foreground">
+                  Assessment highlight summaries will appear once typed assessment reports are generated.
+                </p>
+              ) : (
+                <div className="space-y-3">
+                  {masterySummary.latestAssessmentHighlights.map((highlight) => (
+                    <Link
+                      key={highlight.reportId}
+                      href={getAssessmentHref(highlight.assessmentId, validClassFilter)}
+                      target={embedded ? "_top" : undefined}
+                      className="block rounded-xl border border-border/60 p-3 hover:bg-muted/30 transition-colors"
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="text-[13px] font-medium">{highlight.assessmentTitle}</p>
+                        <Badge variant="secondary" className="text-[10px] capitalize">
+                          {highlight.status}
+                        </Badge>
+                      </div>
+                      <p className="mt-1 text-[11px] text-muted-foreground">{highlight.className}</p>
+                      <p className="mt-2 text-[12px] text-muted-foreground line-clamp-2">
+                        {highlight.summary}
+                      </p>
+                    </Link>
+                  ))}
+                </div>
+              )}
+            </Card>
+
+            <Card className="p-5 gap-0">
+              <h3 className="text-[16px] font-semibold mb-3">Report readiness</h3>
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-[13px] text-muted-foreground">Ready reports</span>
+                  <span className="text-[14px] font-semibold">{masterySummary.reportReadiness.readyReports}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-[13px] text-muted-foreground">Published reports</span>
+                  <span className="text-[14px] font-semibold">{masterySummary.reportReadiness.publishedReports}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-[13px] text-muted-foreground">Distributed reports</span>
+                  <span className="text-[14px] font-semibold">{masterySummary.reportReadiness.distributedReports}</span>
+                </div>
+                <div className="pt-2 border-t border-border/60">
+                  <p className="text-[12px] text-muted-foreground">
+                    {masterySummary.reportReadiness.assessmentSignals} assessment signal
+                    {masterySummary.reportReadiness.assessmentSignals !== 1 ? "s" : ""} currently feeding teacher review.
+                  </p>
+                </div>
+              </div>
+            </Card>
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">

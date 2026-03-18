@@ -1,5 +1,47 @@
 import { ID, GradingMode, AssessmentStatus } from "./common";
 
+export type AssessmentType = "off_platform" | "quiz" | "chat" | "essay";
+export type AssessmentIntent = "formative" | "summative";
+export type OffPlatformSubmissionMode = "digital_submission" | "offline_mode";
+
+export interface OffPlatformAssessmentConfig {
+  submissionMode: OffPlatformSubmissionMode;
+  allowTextResponse?: boolean;
+  allowAttachments?: boolean;
+  evidencePrompt?: string;
+}
+
+export interface QuizQuestion {
+  id: ID;
+  prompt: string;
+  type: "multiple_choice" | "multi_select" | "short_answer";
+  options?: string[];
+  answerKey?: string[];
+  maxPoints?: number;
+}
+
+export interface QuizAssessmentConfig {
+  durationMinutes?: number;
+  passingScore?: number;
+  questions: QuizQuestion[];
+  showCorrectAnswersOnRelease?: boolean;
+}
+
+export interface ChatAssessmentConfig {
+  starterPrompt: string;
+  minimumTurns?: number;
+  successCriteria?: string[];
+}
+
+export interface EssayAssessmentConfig {
+  prompt: string;
+  minimumWords?: number;
+  recommendedWords?: number;
+  maximumWords?: number;
+  scaffoldPrompts?: string[];
+  allowAttachments?: boolean;
+}
+
 /**
  * Assessment — teacher-owned entity that serves as grading configuration,
  * student work item, calendar trigger, and announcement trigger.
@@ -20,6 +62,12 @@ export interface Assessment {
   title: string;
   description: string;
   classId: ID;
+  assessmentType?: AssessmentType;
+  assessmentIntent?: AssessmentIntent;
+  offPlatformConfig?: OffPlatformAssessmentConfig;
+  quizConfig?: QuizAssessmentConfig;
+  chatConfig?: ChatAssessmentConfig;
+  essayConfig?: EssayAssessmentConfig;
   /** Determines grade data shape, grading UI, and display format. Set at creation, do not change after grading begins. */
   gradingMode: GradingMode;
   /** Teacher-owned lifecycle: draft → live → closed. "live" = student-visible and open for submission. */
@@ -50,6 +98,8 @@ export interface Assessment {
   mypCriteria?: MYPCriterion[];
   /** Optional unit grouping. ⚠️ Can reference draft UnitPlan — student projections should filter. */
   unitId?: ID;
+  /** Optional lesson linkage when the assessment is created from or associated with a lesson. */
+  linkedLessonId?: ID;
   /** Student-facing instructions (teacher sets when publishing). */
   studentInstructions?: string;
   /** Student-facing resource links (teacher sets when publishing). */
